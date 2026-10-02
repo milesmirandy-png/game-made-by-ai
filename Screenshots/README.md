@@ -42,3 +42,10 @@ Evening / Night) lets you pick the time of day for any mission.
 | 12 | Civilian rescue | Find a civilian, press **E** (*Rescue Civilian*), and capture while they follow you toward the green safe zone. |
 | 13 | Mission debriefing | Finish or fail a mission (training is quickest) and capture the debriefing once the result stamp has faded into the report. |
 | 14 | Lighting and materials showcase | A representative interior with light pools, contact shading and textured floors, e.g. the Glass Desk lobby (Day) or the warehouse floor at night with the flashlight on. |
+
+Also worth capturing (not in the required list):
+
+- **Level Select** with the ten-level grid (main menu -> Level Select).
+- **Level Creator** with the example level open (main menu -> Level Creator).
+- A custom level being played (Level Creator -> Play level).
+- One of the new levels, e.g. Level 5 (bank) or Level 8 (nightclub).

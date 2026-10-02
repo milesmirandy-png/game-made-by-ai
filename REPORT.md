@@ -1,15 +1,82 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has two parts: the **quality-of-life,
-graphics, lighting and polish update** (first), and the original build
-(below it, updated where the polish update changed something).
+and what is still unverified. It has three parts: the **ten levels, main
+menu and Level Creator** (newest, first), the **quality-of-life, graphics,
+lighting and polish update**, and the original build (updated where later
+work changed something).
 
 The short version: everything is implemented in C# (plus four small shaders),
 compiles in three configurations and the shaders pass a syntax check, but
 **the game has not been run inside the Unity editor yet**. No play-testing, no
 profiling or performance measurements, and no screenshots exist. Treat
 everything below as "implemented in code" unless it says otherwise.
+
+# Part 0: Levels, main menu and Level Creator
+
+## What was added
+
+- **Ten numbered levels plus Training.** Six new maps built with the existing
+  `LevelBuilder` (Brightwater Corner Mart, Seaview Motor Inn, Sterling Mutual
+  Bank, Harbor Street Clinic, Club Halcyon, Riverside Steelworks) and six new
+  missions on them; the four existing operations became Levels 2, 4, 6 and 9.
+  `MissionData.levelNumber` drives the "LEVEL n" labels. Unlocks ramp from 0
+  to 8 completed levels; a level stays available once it has been completed
+  (so older saves never lose access), and training and custom levels are
+  always open. Each new map has room-tagged spawn pools, cameras, consoles,
+  alarm panels, evidence spots and escape routes like the originals. New room
+  kinds (medical, club, vault, shop floor) give the new interiors their own
+  lighting, floors and sound.
+- **Main menu hub** (`MainMenuController`): Play/Continue to the next level,
+  Level Select, Training, Level Creator, Officers, Equipment, Settings,
+  Credits, Quit, a ten-segment campaign bar and a "next up" card. (A main menu
+  already existed; it was reworked around the level campaign.)
+- **Level Select** (`MissionSelectionUI`): a two-column grid that fits Training
+  plus ten levels, thumbnails for every map, status and best score, details
+  panel, and a shortcut into the Level Creator.
+- **Level Creator** (`LevelEditorUI` plus `Scripts/LevelEditor/`):
+  - Grid editor (1 m cells, map sizes 24x18 to 64x48) with tools for rooms (15
+    types), doors (5 types), people (team start, 6 suspect kinds, 4 civilian
+    kinds), objectives (extraction, safe zone, evidence, console, camera,
+    alarm panel) and 10 kinds of props; select/move, erase, rotate, undo (40
+    steps), pan and zoom.
+  - Walls are generated from the rooms (`CustomLevelGeometry`) wherever a room
+    meets another room or the outside; the editor draws exactly the segments
+    the game builds.
+  - Validation (`CustomLevelValidator`) blocks playing until the level has a
+    team start outside the building with space for the van and squad, at
+    least one room, something to do, every room connected to the outside
+    through doors, at most one leader, and sensible counts; it also warns
+    about props near doors, missing consoles for electronic doors, etc.
+  - `CustomLevelBuilder` builds the level with the same `LevelBuilder` as the
+    built-in maps (so lighting, dressing, NavMesh, AI, tactical map and
+    minimap all work the same) and generates a `MissionData` with objectives
+    from what was placed.
+  - `CustomLevelStore` saves levels as JSON in
+    `<persistentDataPath>/CustomLevels/` (written to a temp file, then moved),
+    lists, copies and deletes them, and creates an example level on first use.
+  - Play goes through the normal briefing, officer selection and loadout
+    screens; the briefing, pause menu and debriefing lead back to the creator.
+    Custom levels record a best score but don't count toward campaign unlocks.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings).
+- **Unit tests for the Level Creator's logic**, compiled with `mcs` and run
+  with Mono against small stand-ins for the Unity types it uses: the example
+  level validates; each of its doors fits a wall and lands in exactly one
+  wall segment; the generated segments cover every wall edge exactly once;
+  doors are rejected at corners, at junctions and in open ground and accepted
+  on straight walls; unreachable rooms are reported until doors connect them;
+  a team start whose van path runs into the building is reported. All passed.
+- **A script check of the five hand-written new maps** (the motel is generated
+  in loops and was checked by hand): every suspect and civilian spawn point
+  lies inside the room it is tagged with, evidence and consoles are inside
+  rooms, and no rooms overlap. No problems found.
+- Not done: running any of this in Unity. The new maps and the Level Creator
+  have never been seen or played; expect layout, balance and UI issues that
+  only show in Play Mode (props placed awkwardly, AI getting stuck on new
+  furniture, editor controls that need tuning).
 
 # Part 1: Polish update
 
@@ -196,7 +263,7 @@ post-processing pass.
 | Audio properly mixed | Categories and routing implemented; levels not tuned by ear. |
 | Remains performant | Designed for it; **not measured**. |
 | No critical Unity Console errors | **Unknown** - the project was never opened in Unity. |
-| Existing missions remain playable | Mission code unchanged except fixes; **not played**. |
+| Existing missions remain playable | Mission code unchanged except fixes and new level numbers/unlock thresholds; **not played**. |
 | Actual gameplay screenshots captured | **No.** Not possible without Unity. [Screenshots/README.md](Screenshots/README.md) lists the 14 shots and how to take them. |
 
 ## Polish features simplified or deferred
@@ -285,7 +352,7 @@ These exist in code and compile. None has been exercised in Play Mode.
 - **Suspects:** unarmed, armed hostile, guard, nervous, armored, leader (+ training dummy); state machine Idle, Patrol, Suspicious, Investigating, Alert, Chasing, Attacking, TakingCover, Searching, Fleeing, Hiding, Stunned, Surrendering, Restrained, Dead; hearing, sight with FOV/darkness/smoke/crouch, last known position, search, callouts, alarms, cover, surrender, leader escape, guards raising the alarm, questioning unarmed suspects reveals others.
 - **Civilians:** office worker, security guard, visitor, injured, hiding, hostage, resident; idle, wander, panic, flee, hide, follow, wait, injured, captive, evacuated; tracked encountered/rescued/evacuated/injured/killed.
 - **Doors and rooms:** Closed, Open, Locked, Wedged, Breached, Disabled; open/close, pick lock, unlock from console, kick, breach, wedge; status shown in the prompt; rooms Undiscovered -> Discovered -> Investigated -> Secured -> Complete, updated a few times per second (no physics triggers).
-- **Maps:** Office Complex, Warehouse, Apartment Building (ground floor, second floor and roof linked by stairs), Training Ground, HQ with parked van; van arrival sequence on deployment.
+- **Maps:** Office Complex, Warehouse, Apartment Building (ground floor, second floor and roof linked by stairs), Training Ground, HQ with parked van; van arrival sequence on deployment. (Six more maps were added with the ten-level update.)
 - **Missions:** data-driven `MissionData` (training + four operations), mandatory and optional objectives, extraction, failure (team leader down, abort), consistent scoring with rating, briefing text built from the rolled variation.
 - **Randomization:** seeded per deployment (shown, rerollable, keepable): spawn points from tagged pools, patrol routes, randomly locked doors (always breachable and pickable), optional objectives (only valid ones), alarm/camera state, power outage.
 - **Tactical map and planning:** walls, doors by state, rooms by state, team, visible and last-known threats, discovered civilians, evidence, consoles, active cameras, zones, objective rooms, player markers, floor tabs; planning mode pauses or slows time, selects officers, places waypoints and markers, quick orders.
@@ -305,7 +372,7 @@ These exist in code and compile. None has been exercised in Play Mode.
   scene and prefab YAML is error-prone. The Boot scene is created by the editor
   script on first open. Separate scenes per map (`Mission_Office.unity`, etc.)
   were replaced by building each map into the one scene.
-- **No bank map.** It appears only in the spec's suggested folder structure; three playable maps plus training were built.
+- **Bank map:** added later as Level 5 (Sterling Mutual Bank).
 - **Portraits and mission thumbnails** are drawn from flat shapes, not rendered images.
 - **Animations** are procedural (pose blending, recoil, crouch, reload, fall) on primitive-based characters; no rigged models or animation clips. No weapon inspection animation.
 - **Audio** is procedural placeholder sound. Radio and squad acknowledgments are text subtitles with a radio chirp and a short voice-like blip; there is no voice acting.

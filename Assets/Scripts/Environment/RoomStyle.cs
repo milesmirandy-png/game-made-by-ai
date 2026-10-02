@@ -6,6 +6,7 @@ namespace Swat
     {
         Exterior, Lobby, Office, Conference, Hallway, Storage, Security, Restroom, Breakroom,
         Utility, Warehouse, Residential, Stairwell, Range, Training, Garage, Roof,
+        Medical, Club, Vault, Retail,
     }
 
     // What kind of space a room is, worked out from its id and name, and what
@@ -28,20 +29,24 @@ namespace Swat
         {
             string key = ((id ?? "") + " " + (name ?? "")).ToLowerInvariant();
             if (!indoor) return key.Contains("roof") ? RoomKind.Roof : RoomKind.Exterior;
-            if (Has(key, "lobby", "reception")) return RoomKind.Lobby;
-            if (Has(key, "hall", "corridor")) return RoomKind.Hallway;
+            if (Has(key, "vault", "safe deposit")) return RoomKind.Vault;
+            if (Has(key, "ward", "exam", "clinic", "pharmacy", "triage", "treatment")) return RoomKind.Medical;
+            if (Has(key, "dance", "club", "vip", "stage")) return RoomKind.Club;
+            if (Has(key, "shop floor", "sales floor", "showroom")) return RoomKind.Retail;
+            if (Has(key, "lobby", "reception", "waiting", "banking hall", "coat check")) return RoomKind.Lobby;
+            if (Has(key, "hall", "corridor", "walkway")) return RoomKind.Hallway;
             if (Has(key, "stair", "roofaccess", "roof access")) return RoomKind.Stairwell;
-            if (Has(key, "security", "booth")) return RoomKind.Security;
-            if (Has(key, "restroom", "toilet", "lockers")) return RoomKind.Restroom;
+            if (Has(key, "security", "booth", "control room")) return RoomKind.Security;
+            if (Has(key, "restroom", "toilet", "lockers", "locker room", "bathroom")) return RoomKind.Restroom;
             if (Has(key, "conference", "briefing", "meeting")) return RoomKind.Conference;
-            if (Has(key, "break")) return RoomKind.Breakroom;
-            if (Has(key, "maintenance", "laundry", "utility")) return RoomKind.Utility;
-            if (Has(key, "bays", "aisles")) return RoomKind.Warehouse;
-            if (Has(key, "storage", "restricted", "armory")) return RoomKind.Storage;
-            if (Has(key, "unit", "apartment")) return RoomKind.Residential;
+            if (Has(key, "break", "lounge", "kitchen", "bar")) return RoomKind.Breakroom;
+            if (Has(key, "maintenance", "laundry", "utility", "boiler", "electrical")) return RoomKind.Utility;
+            if (Has(key, "bays", "aisles", "assembly", "production", "loading dock", "tool shop")) return RoomKind.Warehouse;
+            if (Has(key, "storage", "restricted", "armory", "stock room", "cooler", "freezer")) return RoomKind.Storage;
+            if (Has(key, "unit", "apartment", "motel", "guest room")) return RoomKind.Residential;
             if (Has(key, "range")) return RoomKind.Range;
             if (Has(key, "garage")) return RoomKind.Garage;
-            if (Has(key, "office", "manager")) return RoomKind.Office;
+            if (Has(key, "office", "manager", "records", "loan", "foreman")) return RoomKind.Office;
             return RoomKind.Training;
         }
 
@@ -126,6 +131,22 @@ namespace Swat
                     break;
                 case RoomKind.Garage:
                     style.floor = SurfaceKind.DirtyConcrete; style.reverb = AudioReverbPreset.Hangar;
+                    break;
+                case RoomKind.Medical:
+                    style.floor = SurfaceKind.Tile; style.footsteps = Surface.Tile; style.light = new Color(0.9f, 0.97f, 1f);
+                    style.lightStrength = 1.15f; style.reverb = AudioReverbPreset.Room; style.flickerChance = 0.06f;
+                    break;
+                case RoomKind.Club:
+                    style.floor = SurfaceKind.Wood; style.footsteps = Surface.Wood; style.light = new Color(0.75f, 0.45f, 1f);
+                    style.lightStrength = 0.6f; style.reverb = AudioReverbPreset.Auditorium; style.hum = false; style.flickerChance = 0.12f;
+                    break;
+                case RoomKind.Vault:
+                    style.floor = SurfaceKind.Metal; style.footsteps = Surface.Metal; style.light = new Color(0.85f, 0.92f, 1f);
+                    style.lightStrength = 0.8f; style.reverb = AudioReverbPreset.Stoneroom; style.flickerChance = 0f;
+                    break;
+                case RoomKind.Retail:
+                    style.floor = SurfaceKind.Tile; style.footsteps = Surface.Tile; style.light = new Color(0.96f, 1f, 1f);
+                    style.lightStrength = 1.25f; style.reverb = AudioReverbPreset.Room; style.flickerChance = 0.04f;
                     break;
             }
             return style;

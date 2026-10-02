@@ -343,7 +343,8 @@ namespace Swat
             training.camerasActiveChance = 0f;
             training.randomLockChance = 0f;
 
-            var clearance = Mission("m01_clearance", "Operation Glass Desk", "Halvorsen Logistics Offices", MissionType.BuildingClearance, "office", 1, 3, 480f, 0, 1, new Color(0.2f, 0.32f, 0.5f));
+            var clearance = Mission("m01_clearance", "Operation Glass Desk", "Halvorsen Logistics Offices", MissionType.BuildingClearance, "office", 1, 3, 480f, 0, 2, new Color(0.2f, 0.32f, 0.5f));
+            clearance.levelNumber = 2;
             clearance.description = "Armed suspects have occupied an office building. Clear it room by room.";
             clearance.briefing = "0612 hours. Port Avalon PD received reports of armed individuals entering the Halvorsen Logistics offices before opening time. "
                 + "Several staff are believed to be inside. Enter the building, locate and protect the civilians, secure every suspect and clear the security and storage rooms. "
@@ -370,7 +371,8 @@ namespace Swat
             clearance.camerasActiveChance = 0.8f;
             clearance.timeOfDay = TimeOfDay.Day;
 
-            var rescue = Mission("m02_rescue", "Operation Lantern", "Halvorsen Logistics Offices (night)", MissionType.CivilianRescue, "office", 2, 3, 540f, 0, 2, new Color(0.3f, 0.25f, 0.45f));
+            var rescue = Mission("m02_rescue", "Operation Lantern", "Halvorsen Logistics Offices (night)", MissionType.CivilianRescue, "office", 2, 3, 540f, 2, 4, new Color(0.3f, 0.25f, 0.45f));
+            rescue.levelNumber = 4;
             rescue.night = true;
             rescue.timeOfDay = TimeOfDay.Night;
             rescue.powerOutageChance = 0.6f;
@@ -402,7 +404,8 @@ namespace Swat
             rescue.camerasActiveChance = 0.5f;
             rescue.bonusEquipment.Add(new EquipmentCount("portable_light", 1));
 
-            var warehouse = Mission("m03_warehouse", "Operation Cold Storage", "Kestrel Freight Warehouse", MissionType.Investigation, "warehouse", 2, 3, 600f, 1, 3, new Color(0.4f, 0.32f, 0.2f));
+            var warehouse = Mission("m03_warehouse", "Operation Cold Storage", "Kestrel Freight Warehouse", MissionType.Investigation, "warehouse", 2, 3, 600f, 4, 6, new Color(0.4f, 0.32f, 0.2f));
+            warehouse.levelNumber = 6;
             warehouse.description = "A silent alarm at a freight warehouse. Find out what's going on.";
             warehouse.briefing = "0230 hours. Kestrel Freight's silent alarm tripped and the night guards stopped answering. Intelligence suggests a smuggling crew is moving goods through the building. "
                 + "Reach the security booth and review the camera footage to locate the evidence, secure it, and detain the crew. Their leader may try to slip out the back.";
@@ -426,7 +429,8 @@ namespace Swat
             warehouse.enemies.AddRange(new[] { new EnemyGroup("guard", 3), new EnemyGroup("hostile", 4), new EnemyGroup("armored", 1), new EnemyGroup("leader", 1, "office") });
             warehouse.civilians.AddRange(new[] { new CivilianGroup(CivilianType.SecurityGuard, 1), new CivilianGroup(CivilianType.OfficeWorker, 1), new CivilianGroup(CivilianType.Hostage, 1, "restricted") });
 
-            var apartment = Mission("m04_apartment", "Operation Stairwell", "Marlow Court Apartments", MissionType.Emergency, "apartment", 3, 3, 660f, 2, 4, new Color(0.45f, 0.2f, 0.2f));
+            var apartment = Mission("m04_apartment", "Operation Stairwell", "Marlow Court Apartments", MissionType.Emergency, "apartment", 3, 3, 660f, 7, 9, new Color(0.45f, 0.2f, 0.2f));
+            apartment.levelNumber = 9;
             apartment.timeOfDay = TimeOfDay.Evening;
             apartment.description = "A dangerous suspect is barricaded in an apartment block full of residents.";
             apartment.briefing = "1950 hours. Shots were reported at Marlow Court. A wanted suspect and armed associates are moving between the second floor and the roof. "
@@ -452,7 +456,203 @@ namespace Swat
             apartment.camerasActiveChance = 0.3f;
             apartment.alarmArmedChance = 0.4f;
 
-            return new List<MissionData> { training, clearance, rescue, warehouse, apartment };
+            var list = new List<MissionData> { training, clearance, rescue, warehouse, apartment };
+            list.AddRange(NewLevels());
+            return list;
+        }
+
+        // Levels 1, 3, 5, 7, 8 and 10, each on its own map.
+        static IEnumerable<MissionData> NewLevels()
+        {
+            var store = Mission("m05_store", "Operation Late Shift", "Brightwater Corner Mart", MissionType.BuildingClearance, "store", 1, 3, 300f, 0, 1, new Color(0.25f, 0.42f, 0.42f));
+            store.levelNumber = 1;
+            store.timeOfDay = TimeOfDay.Evening;
+            store.description = "A robbery in progress at a corner store. A small, quick first job.";
+            store.briefing = "1915 hours. A clerk at the Brightwater Corner Mart triggered a hold-up alarm. Several suspects are inside with the clerk and a few customers. "
+                + "Go in through the front, shout before you shoot, get the civilians out to the safe zone and secure everyone else. Check the back office: the store's CCTV terminal is there.";
+            store.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.EnterBuilding, "Enter the store", 100),
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.RescueCivilians, "Evacuate all civilians to the safe zone", 300),
+                O(ObjectiveType.SecureRoom, "Secure the Office", 150, "office"),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            store.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 150),
+                O(ObjectiveType.ArrestSuspects, "Arrest at least 2 suspects", 150, null, 2),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 100),
+                O(ObjectiveType.TimeLimit, "Finish within 5 minutes", 100, null, 300),
+            });
+            store.enemies.AddRange(new[] { new EnemyGroup("hostile", 2), new EnemyGroup("nervous", 1), new EnemyGroup("suspect_unarmed", 1) });
+            store.civilians.AddRange(new[] { new CivilianGroup(CivilianType.OfficeWorker, 1, "shop"), new CivilianGroup(CivilianType.Visitor, 2), new CivilianGroup(CivilianType.Hiding, 1) });
+            store.alarmArmedChance = 0.6f;
+            store.camerasActiveChance = 0.8f;
+            store.randomLockChance = 0.25f;
+            store.optionalCount = 2;
+
+            var motel = Mission("m06_motel", "Operation Vacancy", "Seaview Motor Inn", MissionType.Emergency, "motel", 2, 3, 480f, 1, 3, new Color(0.45f, 0.35f, 0.22f));
+            motel.levelNumber = 3;
+            motel.timeOfDay = TimeOfDay.Evening;
+            motel.description = "A wanted suspect and his crew are holed up in a roadside motel full of guests.";
+            motel.briefing = "2010 hours. A wanted suspect was seen entering the Seaview Motor Inn with armed associates, and guests report a hostage in one of the rooms. "
+                + "Each guest room opens onto the parking lot, so stack up on every door. Search room 5, where the suspect was registered, evacuate the guests and take the suspect alive if you can.";
+            motel.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.ApprehendLeader, "Secure the wanted suspect", 250),
+                O(ObjectiveType.RescueCivilians, "Evacuate all guests to the safe zone", 300),
+                O(ObjectiveType.InvestigateRoom, "Search Room 5", 150, "unit5"),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            motel.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 150),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 150),
+                O(ObjectiveType.ArrestSuspects, "Arrest at least 3 suspects", 150, null, 3),
+                O(ObjectiveType.TreatInjured, "Treat every injured guest", 100),
+                O(ObjectiveType.DisableCameras, "Disable the security cameras", 100),
+            });
+            motel.enemies.AddRange(new[] { new EnemyGroup("hostile", 3), new EnemyGroup("nervous", 2), new EnemyGroup("suspect_unarmed", 1), new EnemyGroup("leader", 1, "unit5") });
+            motel.civilians.AddRange(new[] { new CivilianGroup(CivilianType.Resident, 4), new CivilianGroup(CivilianType.Injured, 1), new CivilianGroup(CivilianType.Hostage, 1, "unit2") });
+            motel.randomLockChance = 0.45f;
+            motel.alarmArmedChance = 0.5f;
+            motel.camerasActiveChance = 0.7f;
+
+            var bank = Mission("m07_bank", "Operation Safe Deposit", "Sterling Mutual Bank", MissionType.CivilianRescue, "bank", 2, 3, 600f, 3, 5, new Color(0.22f, 0.38f, 0.3f));
+            bank.levelNumber = 5;
+            bank.timeOfDay = TimeOfDay.Day;
+            bank.description = "An armed robbery has turned into a hostage situation at a bank branch.";
+            bank.briefing = "1130 hours. An armed crew entered Sterling Mutual Bank minutes before a cash delivery. Staff and customers are being held in the banking hall while the crew works on the vault. "
+                + "Get the hostages out, secure the vault and arrest the crew's leader. The vault and security room have electronic locks: use the teller terminal or the security console, or breach them.";
+            bank.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.RescueCivilians, "Evacuate all hostages and staff", 400),
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.ApprehendLeader, "Arrest the crew leader", 250),
+                O(ObjectiveType.SecureRoom, "Secure the Vault", 200, "vault"),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            bank.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 200),
+                O(ObjectiveType.AlarmNotTriggered, "Don't let the alarm go off", 150),
+                O(ObjectiveType.DisableCameras, "Disable the security cameras", 100),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 150),
+                O(ObjectiveType.TimeLimit, "Finish within 9 minutes", 150, null, 540),
+            });
+            bank.enemies.AddRange(new[] { new EnemyGroup("hostile", 5), new EnemyGroup("armored", 1), new EnemyGroup("nervous", 1), new EnemyGroup("leader", 1, "vault") });
+            bank.civilians.AddRange(new[]
+            {
+                new CivilianGroup(CivilianType.OfficeWorker, 3), new CivilianGroup(CivilianType.Visitor, 3),
+                new CivilianGroup(CivilianType.Hostage, 2, "hall"), new CivilianGroup(CivilianType.Hiding, 1),
+            });
+            bank.alarmArmedChance = 0.8f;
+            bank.randomLockChance = 0.35f;
+
+            var clinic = Mission("m08_clinic", "Operation Triage", "Harbor Street Clinic", MissionType.CivilianRescue, "clinic", 2, 3, 600f, 5, 7, new Color(0.3f, 0.45f, 0.5f));
+            clinic.levelNumber = 7;
+            clinic.timeOfDay = TimeOfDay.Evening;
+            clinic.powerOutageChance = 0.3f;
+            clinic.description = "Armed robbers are after the clinic's pharmacy. Patients and staff are caught in the middle.";
+            clinic.briefing = "1840 hours. A group forced its way into the Harbor Street Clinic looking for the pharmacy stock. Several patients were hurt in the panic and staff are hiding in the wards. "
+                + "Treat the injured, get everyone out and secure the pharmacy. Medical kits will be in short supply: plan who carries them.";
+            clinic.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.RescueCivilians, "Evacuate all patients and staff", 350),
+                O(ObjectiveType.TreatInjured, "Treat every injured patient", 250),
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.SecureRoom, "Secure the Pharmacy", 200, "pharmacy"),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            clinic.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 200),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 150),
+                O(ObjectiveType.ArrestSuspects, "Arrest at least 4 suspects", 150, null, 4),
+                O(ObjectiveType.AlarmNotTriggered, "Don't let the alarm go off", 100),
+                O(ObjectiveType.TimeLimit, "Finish within 10 minutes", 150, null, 600),
+            });
+            clinic.enemies.AddRange(new[] { new EnemyGroup("hostile", 4), new EnemyGroup("nervous", 2), new EnemyGroup("guard", 1), new EnemyGroup("armored", 1) });
+            clinic.civilians.AddRange(new[]
+            {
+                new CivilianGroup(CivilianType.Injured, 3), new CivilianGroup(CivilianType.OfficeWorker, 2),
+                new CivilianGroup(CivilianType.Visitor, 2), new CivilianGroup(CivilianType.Hiding, 1),
+            });
+            clinic.bonusEquipment.Add(new EquipmentCount("medkit", 2));
+            clinic.alarmArmedChance = 0.6f;
+            clinic.camerasActiveChance = 0.6f;
+
+            var club = Mission("m09_nightclub", "Operation Last Call", "Club Halcyon", MissionType.Investigation, "nightclub", 3, 3, 660f, 6, 8, new Color(0.42f, 0.18f, 0.45f));
+            club.levelNumber = 8;
+            club.night = true;
+            club.timeOfDay = TimeOfDay.Night;
+            club.powerOutageChance = 0.5f;
+            club.description = "A crowded nightclub is the front for an armed crew. Find the evidence and get the crowd out.";
+            club.briefing = "0110 hours. Club Halcyon's manager is suspected of running an armed crew from the back office. A fight broke out and shots were fired; the crowd is trapped inside and the lights may go out. "
+                + "Evacuate the patrons, secure two pieces of evidence and arrest the manager. Bring flashlights and expect people everywhere: check your targets.";
+            club.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.RescueCivilians, "Evacuate all patrons and staff", 400),
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.ApprehendLeader, "Arrest the club manager", 250),
+                O(ObjectiveType.SecureEvidence, "Secure 2 pieces of evidence", 200, null, 2),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            club.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 200),
+                O(ObjectiveType.TreatInjured, "Treat every injured patron", 150),
+                O(ObjectiveType.AlarmNotTriggered, "Don't let the alarm go off", 150),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 150),
+                O(ObjectiveType.DisableCameras, "Disable the security cameras", 100),
+            });
+            club.enemies.AddRange(new[] { new EnemyGroup("hostile", 4), new EnemyGroup("guard", 2), new EnemyGroup("armored", 1), new EnemyGroup("nervous", 1), new EnemyGroup("leader", 1, "office") });
+            club.civilians.AddRange(new[]
+            {
+                new CivilianGroup(CivilianType.Visitor, 5, "dance"), new CivilianGroup(CivilianType.Hiding, 2),
+                new CivilianGroup(CivilianType.Injured, 1), new CivilianGroup(CivilianType.OfficeWorker, 1),
+            });
+            club.bonusEquipment.Add(new EquipmentCount("portable_light", 1));
+            club.alarmArmedChance = 0.7f;
+
+            var factory = Mission("m10_factory", "Operation Iron Gate", "Riverside Steelworks", MissionType.Investigation, "factory", 3, 3, 900f, 8, 10, new Color(0.38f, 0.3f, 0.26f));
+            factory.levelNumber = 10;
+            factory.night = true;
+            factory.timeOfDay = TimeOfDay.Night;
+            factory.powerOutageChance = 0.35f;
+            factory.description = "The final operation: take down a heavily armed smuggling crew in a closed steelworks.";
+            factory.briefing = "0300 hours. The crew behind the Kestrel Freight shipments is using the closed Riverside Steelworks as a base. Expect armored suspects, guards on patrol and a night watchman held in the boiler room. "
+                + "Get into the control room, access the plant console, secure three pieces of evidence and arrest the crew's leader. The control room door is electronic: the foreman's terminal can open it.";
+            factory.objectives.AddRange(new[]
+            {
+                O(ObjectiveType.UseConsole, "Access the plant control console", 200, "plant_console"),
+                O(ObjectiveType.SecureEvidence, "Secure 3 pieces of evidence", 300, null, 3),
+                O(ObjectiveType.ApprehendLeader, "Arrest the crew leader", 300),
+                O(ObjectiveType.SecureSuspects, "Secure all suspects", 300),
+                O(ObjectiveType.RescueCivilians, "Evacuate all civilians", 250),
+                O(ObjectiveType.ReachExtraction, "Return to the SWAT van", 150),
+            });
+            factory.optionalPool.AddRange(new[]
+            {
+                O(ObjectiveType.AlarmNotTriggered, "Don't let the alarm go off", 200),
+                O(ObjectiveType.DisableCameras, "Disable the security cameras", 100),
+                O(ObjectiveType.NoOfficerDown, "No officer goes down", 200),
+                O(ObjectiveType.NoCivilianCasualties, "No civilian casualties", 150),
+                O(ObjectiveType.ArrestSuspects, "Arrest at least 5 suspects", 200, null, 5),
+            });
+            factory.enemies.AddRange(new[]
+            {
+                new EnemyGroup("hostile", 6), new EnemyGroup("guard", 3), new EnemyGroup("armored", 2),
+                new EnemyGroup("nervous", 1), new EnemyGroup("leader", 1, "control"),
+            });
+            factory.civilians.AddRange(new[] { new CivilianGroup(CivilianType.SecurityGuard, 1), new CivilianGroup(CivilianType.OfficeWorker, 2), new CivilianGroup(CivilianType.Hostage, 1, "boiler") });
+            factory.bonusEquipment.Add(new EquipmentCount("breach_charge", 1));
+            factory.alarmArmedChance = 0.9f;
+            factory.randomLockChance = 0.4f;
+
+            return new[] { store, motel, bank, clinic, club, factory };
         }
     }
 }

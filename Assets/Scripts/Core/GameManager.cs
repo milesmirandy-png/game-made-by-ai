@@ -4,7 +4,7 @@ using UnityEngine.AI;
 
 namespace Swat
 {
-    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Loading, Deploying, Playing, Paused, Debrief }
+    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Loading, Deploying, Playing, Paused, Debrief, LevelEditor }
 
     // Owns the game's lifecycle. Everything lives in one scene that is built
     // at runtime: the headquarters diorama behind the menus and, while
@@ -208,9 +208,34 @@ namespace Swat
             if (Level != null) ClearMission();
             SelectMission(mission);
             ShowHeadquarters(Headquarters.missionsCamera, Headquarters.missionsTarget, false);
-            SaveManager.Progress.lastMissionId = mission.id;
+            if (!mission.isCustom) SaveManager.Progress.lastMissionId = mission.id;
             AudioManager.RadioChirp();
             SetState(GameState.Briefing);
+        }
+
+        // ---- Level creator ----
+
+        public void OpenLevelEditor()
+        {
+            if (Level != null) ClearMission();
+            ShowHeadquarters(Headquarters.menuCamera, Headquarters.menuTarget, false);
+            BrowseMode = false;
+            SetState(GameState.LevelEditor);
+        }
+
+        // Plays a level from the level creator through the normal briefing, squad and loadout screens.
+        public void PlayCustomLevel(CustomLevel level)
+        {
+            CustomLevelStore.Remember(level);
+            OpenBriefing(CustomLevelBuilder.ToMission(level));
+        }
+
+        // The "back" target for screens shown before or after a mission.
+        public void LeaveMissionScreens()
+        {
+            var mission = OfficerSelectionManager.Mission;
+            if (mission != null && mission.isCustom) OpenLevelEditor();
+            else GoToHeadquarters();
         }
 
         // Back to the briefing from officer selection, keeping the rolled plan.
@@ -392,11 +417,23 @@ namespace Swat
 
         static LevelLayout BuildMap(string mapId, Transform parent)
         {
+            if (mapId != null && mapId.StartsWith(CustomLevelStore.MapPrefix))
+            {
+                var custom = CustomLevelStore.Get(mapId.Substring(CustomLevelStore.MapPrefix.Length));
+                if (custom != null) return CustomLevelBuilder.Build(parent, custom);
+                Debug.LogWarning("SWAT: custom level '" + mapId + "' not found; loading the office map instead.");
+            }
             switch (mapId)
             {
                 case "warehouse": return WarehouseMap.Build(parent);
                 case "apartment": return ApartmentMap.Build(parent);
                 case "training": return TrainingMap.Build(parent);
+                case "store": return StoreMap.Build(parent);
+                case "motel": return MotelMap.Build(parent);
+                case "bank": return BankMap.Build(parent);
+                case "clinic": return ClinicMap.Build(parent);
+                case "nightclub": return NightclubMap.Build(parent);
+                case "factory": return FactoryMap.Build(parent);
                 default: return OfficeMap.Build(parent);
             }
         }
@@ -494,6 +531,19 @@ namespace Swat
             var progress = SaveManager.Progress;
             var record = SaveManager.Record(result.mission.id);
             record.attempts++;
+            if (result.mission.isCustom)
+            {
+                // Custom levels keep a best score but don't count toward campaign unlocks.
+                result.previousBest = record.bestScore;
+                if (result.success)
+                {
+                    record.completed = true;
+                    result.newBest = result.total > record.bestScore;
+                    if (result.total >= record.bestScore) { record.bestScore = result.total; record.bestRating = result.rating; record.bestTime = result.time; }
+                }
+                SaveManager.Save();
+                return;
+            }
             result.previousBest = record.bestScore;
             int before = progress.missionsCompleted;
             bool trainingBefore = progress.trainingComplete;

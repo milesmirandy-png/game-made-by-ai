@@ -55,6 +55,7 @@ namespace Swat
         readonly TacticalMapUI map = new TacticalMapUI();
         readonly PauseMenuController pause = new PauseMenuController();
         readonly MissionDebriefUI debrief = new MissionDebriefUI();
+        readonly LevelEditorUI levelEditor = new LevelEditorUI();
 
         SecurityConsole console;
         GameState lastState = GameState.MainMenu;
@@ -173,6 +174,7 @@ namespace Swat
                     pause.Draw(game, this);
                     break;
                 case GameState.Debrief: debrief.Draw(game); break;
+                case GameState.LevelEditor: levelEditor.Draw(game); break;
             }
 
             GUI.enabled = true;
@@ -304,7 +306,7 @@ namespace Swat
             float x = w * 0.5f - 560f, y = h * 0.5f - 210f;
             MissionSelectionUI.Thumbnail(new Rect(x, y, 420f, 260f), mission, true);
             float tx = x + 460f, tw = 660f;
-            UITheme.Text(new Rect(tx, y, tw, 26f), "DEPLOYING TO", 16, UITheme.Accent, TextAnchor.UpperLeft, true);
+            UITheme.Text(new Rect(tx, y, tw, 26f), mission.LevelLabel + "  -  DEPLOYING TO", 16, UITheme.Accent, TextAnchor.UpperLeft, true);
             UITheme.Text(new Rect(tx, y + 28f, tw, 46f), mission.displayName.ToUpperInvariant(), 38, UITheme.TextColor, TextAnchor.UpperLeft, true);
             UITheme.Text(new Rect(tx, y + 80f, tw, 24f), mission.location + "   |   " + LightingProfile.Names[(int)plan.timeOfDay] + "   |   " + OfficerSelectionManager.DifficultyNames[plan.difficulty], 17, UITheme.Dim);
             float dh = UITheme.TextHeight(mission.description, 18, tw);

@@ -122,6 +122,14 @@ namespace Swat
             return created;
         }
 
+        // Like Record, but doesn't create an entry for a mission that was never played.
+        public static MissionRecord FindRecord(string missionId)
+        {
+            foreach (var record in Progress.missions)
+                if (record.missionId == missionId) return record;
+            return null;
+        }
+
         public static bool IsUnlocked(string id)
         {
             return string.IsNullOrEmpty(id) || Progress.unlocked.Contains(id);

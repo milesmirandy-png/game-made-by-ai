@@ -100,9 +100,14 @@ namespace Swat
         [Tooltip("0 = new random seed each deployment")] public int seed;
         public int unlockAfterMissions;
         public int sortOrder;
+        [Tooltip("Shown as LEVEL n on the level select; 0 = not part of the numbered campaign")] public int levelNumber;
         public bool isTraining;
+        [Tooltip("Made in the level creator (not part of campaign progress)")] public bool isCustom;
         public Color thumbnailColor = new Color(0.2f, 0.3f, 0.45f);
 
         public TimeOfDay DefaultTime { get { return timeOfDay != TimeOfDay.Day ? timeOfDay : night ? TimeOfDay.Night : TimeOfDay.Day; } }
+
+        // "LEVEL 3", "TRAINING" or "CUSTOM LEVEL" for headers and cards.
+        public string LevelLabel { get { return isTraining ? "TRAINING" : isCustom ? "CUSTOM LEVEL" : levelNumber > 0 ? "LEVEL " + levelNumber : "OPERATION"; } }
     }
 }

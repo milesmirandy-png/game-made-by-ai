@@ -43,7 +43,7 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? "Click again to quit the mission" : "Quit mission", true, confirm == "hq"))
             {
-                if (confirm == "hq") { confirm = null; game.GoToHeadquarters(); }
+                if (confirm == "hq") { confirm = null; game.LeaveMissionScreens(); }
                 else confirm = "hq";
             }
             y += bh + gap;

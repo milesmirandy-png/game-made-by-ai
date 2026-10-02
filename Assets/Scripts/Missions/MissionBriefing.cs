@@ -7,11 +7,16 @@ namespace Swat
     // and the rolled plan (so the briefing matches what you'll find).
     public static class MissionBriefing
     {
-        public static readonly string[] MapNames = { "office", "Office Complex", "warehouse", "Warehouse", "apartment", "Apartment Building", "training", "Training Ground" };
+        public static readonly string[] MapNames =
+        {
+            "office", "Office Complex", "warehouse", "Warehouse", "apartment", "Apartment Building", "training", "Training Ground",
+            "store", "Corner Store", "motel", "Motel", "bank", "Bank", "clinic", "Medical Clinic", "nightclub", "Nightclub", "factory", "Factory",
+        };
 
         public static string MapName(string mapId)
         {
             for (int i = 0; i < MapNames.Length; i += 2) if (MapNames[i] == mapId) return MapNames[i + 1];
+            if (mapId != null && mapId.StartsWith(CustomLevelStore.MapPrefix)) return "Custom Map";
             return mapId;
         }
 

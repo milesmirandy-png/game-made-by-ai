@@ -72,7 +72,11 @@ namespace Swat
                 game.RollPlan();
                 game.Deploy();
             }
-            if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Headquarters", true, true, 19)) game.GoToHeadquarters();
+            if (result.mission.isCustom)
+            {
+                if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Level creator", true, true, 19)) game.OpenLevelEditor();
+            }
+            else if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Level select", true, true, 19)) game.GoToHeadquarters();
             if (UITheme.Button(new Rect(w - 300f, by, 240f, 50f), "Main menu", true, false, 18)) game.GoToMainMenu();
             GUI.enabled = wasEnabled;
             UITheme.Alpha = 1f;

@@ -17,7 +17,7 @@ namespace Swat
                 game.GoToHeadquarters();
                 return;
             }
-            UITheme.Header(new Rect(60f, 40f, w - 120f, 60f), "Mission Briefing", mission.displayName + "  -  " + mission.location);
+            UITheme.Header(new Rect(60f, 40f, w - 120f, 60f), "Mission Briefing", mission.LevelLabel + "  |  " + mission.displayName + "  -  " + mission.location);
 
             // Left: situation and objectives.
             var left = new Rect(60f, 120f, w * 0.5f - 80f, h - 240f);
@@ -106,7 +106,8 @@ namespace Swat
             y += 38f;
             UITheme.Text(new Rect(x, y, cw, 40f), "Squad size: up to " + mission.maxSquad + " AI officers. Difficulty changes suspect accuracy and reaction time and the score multiplier.", 15, UITheme.Faint);
 
-            if (UITheme.Button(new Rect(60f, h - 90f, 220f, 50f), "< Mission board")) game.GoToHeadquarters();
+            bool custom = game.Plan != null && game.Plan.mission.isCustom;
+            if (UITheme.Button(new Rect(60f, h - 90f, 220f, 50f), custom ? "< Level creator" : "< Level select")) game.LeaveMissionScreens();
             if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), "Select officers  >", true, true, 21)) game.OpenOfficerSelection(false);
         }
     }

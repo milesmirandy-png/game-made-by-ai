@@ -14,7 +14,14 @@ namespace Swat
         public static bool IsAvailable(ArmorData item) { return item != null && Gate(item.unlockAfterMissions); }
         public static bool IsAvailable(AttachmentData item) { return item != null && Gate(item.unlockAfterMissions); }
         public static bool IsAvailable(EquipmentData item) { return item != null && Gate(item.unlockAfterMissions); }
-        public static bool IsAvailable(MissionData item) { return item != null && (item.isTraining || Gate(item.unlockAfterMissions)); }
+        // Training and custom levels are always open; a level stays open once it has been completed.
+        public static bool IsAvailable(MissionData item)
+        {
+            if (item == null) return false;
+            if (item.isTraining || item.isCustom || Gate(item.unlockAfterMissions)) return true;
+            var record = SaveManager.FindRecord(item.id);
+            return record != null && record.completed;
+        }
 
         public static bool IsAvailable(OfficerData officer)
         {

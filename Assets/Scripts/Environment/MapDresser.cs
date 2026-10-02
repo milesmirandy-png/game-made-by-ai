@@ -315,6 +315,27 @@ namespace Swat
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
                     break;
+                case RoomKind.Medical:
+                    items.Add(Floor((p, at, yaw) => EnvironmentProps.FilingCabinet(p, at, yaw)));
+                    items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.3f, 0.6f, 0.7f))));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
+                    break;
+                case RoomKind.Club:
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.6f, 0.2f, 0.7f))));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.15f, 0.5f, 0.75f))));
+                    items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
+                    break;
+                case RoomKind.Vault:
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
+                    items.Add(Floor((p, at, yaw) => EnvironmentProps.BoxStack(p, at, yaw)));
+                    break;
+                case RoomKind.Retail:
+                    items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
+                    break;
                 case RoomKind.Garage:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.Toolbox(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
