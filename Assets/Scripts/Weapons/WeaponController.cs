@@ -1,46 +1,40 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Swat
 {
-    // The player's loadout: four guns plus tactical equipment in one list of
-    // slots. Q cycles slots, 1-7 pick one, left click fires or uses it.
-    // Guns are hitscan (raycasts), so there are no bullet objects to simulate.
+    // The player's weapons and equipment: firing (hitscan), reloading,
+    // switching between primary and sidearm, fire mode, steady aim, the aiming
+    // laser, and using the selected tactical equipment (G).
     public class WeaponController : MonoBehaviour
     {
         [SerializeField] float laserWidth = 0.02f;
 
-        public int SlotCount { get { return weapons.Count + equipment.Count; } }
-        public int CurrentSlot { get; private set; }
-        public bool IsWeaponSelected { get { return CurrentSlot < weapons.Count; } }
-        public Weapon CurrentWeapon { get { return IsWeaponSelected ? weapons[CurrentSlot] : null; } }
-        public EquipmentSlot CurrentEquipment { get { return IsWeaponSelected ? null : equipment[CurrentSlot - weapons.Count]; } }
+        public WeaponInventory Inventory { get; private set; }
+        public Weapon Current { get { return Inventory.Current; } }
         public bool IsReloading { get { return reloadEnd > 0f; } }
-        public float ReloadProgress { get { return IsReloading ? 1f - (reloadEnd - Time.time) / CurrentWeapon.Data.reloadTime : 0f; } }
+        public bool IsSwitching { get { return Time.time < switchEnd; } }
+        public float ReloadProgress { get { return IsReloading ? Mathf.Clamp01(1f - (reloadEnd - Time.time) / Current.Data.reloadTime) : 0f; } }
         public float Spread { get; private set; }
-        public float MoveSpeedMultiplier { get { return IsWeaponSelected ? CurrentWeapon.Data.moveSpeedMultiplier : 1f; } }
         public float LastHitTime { get; private set; }
-        public IList<Weapon> Weapons { get { return weapons; } }
-        public IList<EquipmentSlot> Equipment { get { return equipment; } }
+        public int ShotsFired { get; private set; }
+        public int ShotsHit { get; private set; }
+        public bool Overcharged { get; set; }
 
-        readonly List<Weapon> weapons = new List<Weapon>();
-        readonly List<EquipmentSlot> equipment = new List<EquipmentSlot>();
+        public float MoveSpeedMultiplier
+        {
+            get { return Current.Data.moveSpeedMultiplier * Current.MoveMultiplier; }
+        }
+
         PlayerController player;
-        CharacterParts parts;
         Transform laser;
-        float nextFireTime, reloadEnd, bloom;
-        int lastWeaponSlot;
-        bool initialized;
+        float nextFireTime, reloadEnd, switchEnd, bloom;
 
-        public void Init(PlayerController owner, CharacterParts characterParts)
+        public void Init(PlayerController owner, WeaponInventory inventory)
         {
             player = owner;
-            parts = characterParts;
-            foreach (var data in GameData.Weapons) weapons.Add(new Weapon(data));
-            foreach (var data in GameData.Equipment) equipment.Add(new EquipmentSlot(data));
-
+            Inventory = inventory;
             laser = Shapes.Box("Laser", transform, Vector3.zero, Vector3.one, new Color(1f, 0.15f, 0.1f), false, 3f).transform;
-            Select(Mathf.Min(2, weapons.Count - 1)); // start with the assault rifle
+            ApplyWeaponModel();
         }
 
         public void Tick(float dt, bool active)
@@ -48,9 +42,10 @@ namespace Swat
             if (IsReloading && Time.time >= reloadEnd)
             {
                 reloadEnd = 0f;
-                CurrentWeapon.FinishReload();
+                Current.FinishReload();
             }
-            bloom = Mathf.MoveTowards(bloom, 0f, (IsWeaponSelected ? CurrentWeapon.Data.recoilRecovery : 10f) * dt);
+            bloom = Mathf.MoveTowards(bloom, 0f, Current.Data.recoilRecovery * dt);
+            player.Animator.SetReload(ReloadProgress);
 
             if (!active)
             {
@@ -58,48 +53,64 @@ namespace Swat
                 return;
             }
 
-            if (GameInput.SwitchItem) Select((CurrentSlot + 1) % SlotCount);
-            int pressed = GameInput.SlotPressed;
-            if (pressed >= 0 && pressed < SlotCount) Select(pressed);
+            if (GameInput.Down(InputAction.SwitchWeapon)) Switch(Inventory.CurrentIndex == 0 ? 1 : 0);
+            if (GameInput.Down(InputAction.Slot1)) Switch(0);
+            if (GameInput.Down(InputAction.Slot2)) Switch(1);
+            if (GameInput.Down(InputAction.Slot3)) CycleEquipment(-1);
+            if (GameInput.Down(InputAction.Slot4)) CycleEquipment(1);
+            if (GameInput.Down(InputAction.FireMode) && Current.ToggleFireMode())
+            {
+                AudioManager.Ui(Sound.Click);
+                UIManager.Notify(Current.Data.displayName + ": " + (Current.Automatic ? "automatic" : "semi-automatic"));
+            }
+            if (GameInput.Down(InputAction.UseEquipment)) UseSelectedEquipment();
 
-            if (IsWeaponSelected) UpdateGun();
-            else if (GameInput.FirePressed) UseEquipment();
-
+            UpdateGun();
             UpdateLaser();
         }
 
-        void Select(int slot)
+        void Switch(int index)
         {
-            if (slot == CurrentSlot && initialized) return;
-            initialized = true;
-            CurrentSlot = slot;
+            if (index == 0 && Inventory.PrimaryBlocked)
+            {
+                if (GameInput.Down(InputAction.Slot1)) UIManager.Notify("You can't use a primary weapon while carrying a shield");
+                return;
+            }
+            if (index == Inventory.CurrentIndex) return;
+            Inventory.CurrentIndex = index;
             reloadEnd = 0f;
             bloom = 0f;
-            if (IsWeaponSelected)
-            {
-                lastWeaponSlot = slot;
-                float length = CurrentWeapon.Data.modelLength;
-                parts.gun.gameObject.SetActive(true);
-                parts.gun.localScale = new Vector3(0.08f, 0.11f, length);
-                parts.gun.localPosition = new Vector3(0.1f, 1.2f, 0.25f + length * 0.5f);
-            }
-            else
-            {
-                parts.gun.gameObject.SetActive(false);
-            }
-            AudioManager.Play2D(Sound.Click, 0.4f);
+            switchEnd = Time.time + Current.Data.switchTime;
+            ApplyWeaponModel();
+            AudioManager.Play(Sound.Click, player.Position, 0.4f);
+            MissionManager.Instance.Report(ObjectiveType.TrainingSwitchWeapon, index);
+        }
+
+        void ApplyWeaponModel()
+        {
+            CharacterFactory.SetWeapon(player.Parts, Current.Data, Inventory.CurrentIndex == 0 ? player.Loadout : null);
+        }
+
+        void CycleEquipment(int direction)
+        {
+            Inventory.SelectNextEquipment(direction);
+            var slot = Inventory.SelectedSlot;
+            if (slot != null) UIManager.Notify("Equipment: " + slot.Data.displayName + " (" + slot.Count + ")");
+            AudioManager.Ui(Sound.UiHover);
         }
 
         void UpdateGun()
         {
-            var weapon = CurrentWeapon;
+            var weapon = Current;
             var data = weapon.Data;
-            Spread = data.spread + bloom + (player.IsMoving ? data.spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f);
+            float stance = (player.IsCrouched ? 0.75f : 1f) * (player.IsSteadyAiming ? 0.6f : 1f);
+            Spread = (weapon.Spread + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f);
 
-            if (GameInput.Reload && weapon.CanReload && !IsReloading) StartReload();
+            if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
 
-            bool trigger = data.fireMode == FireMode.FullAuto ? GameInput.FireHeld : GameInput.FirePressed;
-            if (!trigger || IsReloading || player.IsSprinting || Time.time < nextFireTime) return;
+            bool trigger = weapon.Automatic ? GameInput.Held(InputAction.Fire) : GameInput.Down(InputAction.Fire);
+            if (!trigger || IsReloading || IsSwitching || player.IsSprinting) return;
+            if (Time.time < nextFireTime) return;
 
             if (weapon.Magazine > 0)
             {
@@ -115,8 +126,9 @@ namespace Swat
 
         void StartReload()
         {
-            reloadEnd = Time.time + CurrentWeapon.Data.reloadTime;
+            reloadEnd = Time.time + Current.Data.reloadTime;
             AudioManager.Play(Sound.Reload, player.Position, 0.7f);
+            MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
         }
 
         void Fire(Weapon weapon)
@@ -124,117 +136,61 @@ namespace Swat
             var data = weapon.Data;
             weapon.Magazine--;
             nextFireTime = Time.time + 1f / Mathf.Max(0.1f, data.fireRate);
+            ShotsFired++;
 
             Vector3 origin = player.ChestPosition;
-            Vector3 muzzle = parts.muzzle.position;
-            var effects = EffectsManager.Instance;
+            Vector3 muzzle = player.Parts.muzzle.position;
             bool hitSomeone = false;
+            float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
+            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost };
 
             for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
             {
-                // Average of two randoms gives more shots near the centre of the cone.
-                float angle = (Random.value + Random.value - 1f) * Spread;
-                Vector3 direction = Quaternion.Euler(0f, angle, 0f) * player.AimDirection;
-                Vector3 end = origin + direction * data.range;
-
-                RaycastHit hit;
-                if (Physics.Raycast(origin, direction, out hit, data.range, Layers.ShootableMask, QueryTriggerInteraction.Ignore))
-                {
-                    end = hit.point;
-                    var target = hit.collider.GetComponentInParent<IDamageable>();
-                    if (target != null && target.IsAlive)
-                    {
-                        target.TakeDamage(new DamageInfo { amount = data.damage, point = hit.point, direction = direction, attacker = Team.Police });
-                        effects.Burst(hit.point, -direction, new Color(0.6f, 0.05f, 0.05f), 4, 2f);
-                        hitSomeone = true;
-                    }
-                    else
-                    {
-                        effects.Burst(hit.point, hit.normal, new Color(0.75f, 0.72f, 0.65f), 3, 2.5f, 0.05f);
-                    }
-                }
-                effects.SpawnTracer(muzzle, end, data.tracerColor);
+                Vector3 direction = WeaponEffects.Scatter(player.AimDirection, Spread);
+                if (WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor) != null) hitSomeone = true;
             }
+            if (data.lessLethal && Overcharged) Overcharged = false;
 
-            bloom = Mathf.Min(bloom + data.recoil, data.recoil * 6f + 4f);
-            effects.FlashLight(muzzle, new Color(1f, 0.8f, 0.45f), 2.5f, 6f, 0.06f);
-            AudioManager.Play(data.fireSound, muzzle, 0.8f, Random.Range(0.94f, 1.06f));
-            Noise.Emit(origin, data.noiseRadius, NoiseKind.Gunshot);
-            GameManager.Instance.CameraRig.Shake(data.recoil * 0.08f);
-            if (hitSomeone)
-            {
-                LastHitTime = Time.time;
-                AudioManager.Play2D(Sound.Hit, 0.35f);
-            }
+            bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
+            player.Animator.Fire(Mathf.Clamp(weapon.Recoil * 0.6f, 0.4f, 1.5f));
+            WeaponEffects.MuzzleFlash(muzzle, data.fireSound, 0.8f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            GameManager.Instance.CameraRig.Shake(weapon.Recoil * 0.08f);
+            if (!hitSomeone) return;
+            ShotsHit++;
+            LastHitTime = Time.time;
+            AudioManager.Play2D(Sound.Hit, 0.35f);
         }
 
-        void UseEquipment()
+        void UseSelectedEquipment()
         {
-            var slot = CurrentEquipment;
+            var slot = Inventory.SelectedSlot;
+            if (slot == null)
+            {
+                UIManager.Notify("You aren't carrying any equipment");
+                return;
+            }
             if (slot.Count <= 0)
             {
                 UIManager.Notify("No " + slot.Data.displayName + " left");
                 AudioManager.Play2D(Sound.Empty, 0.6f);
                 return;
             }
-
-            if (slot.Data.kind == EquipmentKind.BreachingCharge)
-            {
-                var door = AIManager.Instance.FindBreachableDoor(player.Position, 2.2f);
-                if (door == null)
-                {
-                    UIManager.Notify("Stand next to a locked door to place a breaching charge");
-                    return;
-                }
-                slot.Count--;
-                door.PlaceCharge();
-            }
-            else
-            {
-                Vector3 target = player.AimPoint;
-                Vector3 offset = target - player.Position;
-                offset.y = 0f;
-                target = player.Position + Vector3.ClampMagnitude(offset, slot.Data.throwRange);
-                target.y = 0.1f;
-                slot.Count--;
-                ThrownGrenade.Throw(slot.Data, player.ChestPosition + player.AimDirection * 0.4f, target);
-                AudioManager.Play(Sound.Throw, player.Position, 0.6f);
-            }
-            Select(lastWeaponSlot);
-        }
-
-        // The breaching charge can also be placed by pressing E at a locked door.
-        public bool TryUseBreachingCharge()
-        {
-            foreach (var slot in equipment)
-            {
-                if (slot.Data.kind != EquipmentKind.BreachingCharge || slot.Count <= 0) continue;
-                slot.Count--;
-                return true;
-            }
-            return false;
-        }
-
-        public int CountOf(EquipmentKind kind)
-        {
-            foreach (var slot in equipment)
-                if (slot.Data.kind == kind) return slot.Count;
-            return 0;
+            TacticalEquipment.UseByPlayer(player, slot);
         }
 
         // A thin laser from the gun to whatever it points at makes aiming from above easy.
         void UpdateLaser()
         {
-            if (!IsWeaponSelected || player.IsSprinting)
+            if (player.IsSprinting || IsSwitching)
             {
                 laser.gameObject.SetActive(false);
                 return;
             }
             Vector3 origin = player.ChestPosition;
-            float range = CurrentWeapon.Data.range;
+            float range = Current.Data.range;
             RaycastHit hit;
             float length = Physics.Raycast(origin, player.AimDirection, out hit, range, Layers.ShootableMask, QueryTriggerInteraction.Ignore) ? hit.distance : range;
-            Vector3 start = parts.muzzle.position;
+            Vector3 start = player.Parts.muzzle.position;
             Vector3 end = origin + player.AimDirection * length;
             end.y = start.y;
             Vector3 delta = end - start;
@@ -245,7 +201,8 @@ namespace Swat
             }
             laser.gameObject.SetActive(true);
             laser.SetPositionAndRotation(start + delta * 0.5f, Quaternion.LookRotation(delta));
-            laser.localScale = new Vector3(laserWidth, laserWidth, delta.magnitude);
+            float width = player.IsSteadyAiming ? laserWidth * 1.6f : laserWidth;
+            laser.localScale = new Vector3(width, width, delta.magnitude);
         }
     }
 }

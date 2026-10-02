@@ -2,42 +2,34 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Settings for one type of suspect. Lives in Resources/Enemies; the level
-    // asks for a profile by asset name (for example "Suspect" or "Heavy").
+    public enum EnemyArchetype { UnarmedSuspect, Hostile, Guard, Nervous, Armored, Leader, TrainingDummy }
+
+    // Settings for one suspect archetype.
     [CreateAssetMenu(menuName = "SWAT/Enemy", fileName = "NewEnemy")]
     public class EnemyData : ScriptableObject
     {
+        public string id = "hostile";
+        public string displayName = "Armed Suspect";
+        public EnemyArchetype archetype = EnemyArchetype.Hostile;
         public float maxHealth = 100f;
+        [Range(0f, 0.8f)] public float damageReduction;
         public float walkSpeed = 2f;
         public float runSpeed = 4f;
         public float detectionRange = 16f;
-        [Tooltip("Field of view in degrees")] public float fieldOfView = 110f;
-        [Range(0f, 1f), Tooltip("Chance to hit at close range")] public float accuracy = 0.45f;
-        [Tooltip("Seconds between spotting you and reacting")] public float reactionTime = 0.7f;
+        public float fieldOfView = 110f;
+        [Range(0f, 1f)] public float accuracy = 0.45f;
+        public float reactionTime = 0.7f;
         public float weaponDamage = 9f;
-        [Tooltip("Shots per second during a burst")] public float fireRate = 3.5f;
+        public float fireRate = 3.5f;
         public int burstSize = 3;
-        [Range(0f, 1f), Tooltip("Base chance to give up when an officer shouts")] public float surrenderChance = 0.35f;
+        [Range(0f, 1f)] public float surrenderChance = 0.35f;
+        [Range(0f, 1f), Tooltip("Chance to run instead of fight when things go badly")] public float fleeChance = 0.15f;
+        public bool armed = true;
+        [Tooltip("Moves unpredictably")] public bool erratic;
+        public bool respondsToAlarms = true;
+        [Tooltip("Radius in which this suspect calls friends when it spots police")] public float callForHelpRadius = 12f;
         public Color shirtColor = new Color(0.55f, 0.12f, 0.1f);
-
-        public static EnemyData Create(string name, float health, float walk, float run, float range, float fov, float accuracy,
-            float reaction, float damage, float fireRate, int burst, float surrender)
-        {
-            var data = CreateInstance<EnemyData>();
-            data.name = name;
-            data.maxHealth = health;
-            data.walkSpeed = walk;
-            data.runSpeed = run;
-            data.detectionRange = range;
-            data.fieldOfView = fov;
-            data.accuracy = accuracy;
-            data.reactionTime = reaction;
-            data.weaponDamage = damage;
-            data.fireRate = fireRate;
-            data.burstSize = burst;
-            data.surrenderChance = surrender;
-            if (name == "Heavy") data.shirtColor = new Color(0.25f, 0.25f, 0.28f);
-            return data;
-        }
+        public Color pantsColor = new Color(0.15f, 0.15f, 0.17f);
+        [Tooltip("0 hair, 1 cap, 2 balaclava, 3 helmet")] public int headwear = 2;
     }
 }

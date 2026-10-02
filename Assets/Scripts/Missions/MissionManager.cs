@@ -3,239 +3,293 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Tracks objectives and score for the current mission.
-    //
-    // Scoring rewards tactics, not body count: objectives, rescues and arrests
-    // are worth points; killing a suspect is worth nothing on its own (it only
-    // counts towards the "neutralize" objective), and hurting civilians or
-    // surrendered suspects costs points.
+    public class MissionResult
+    {
+        public MissionData mission;
+        public MissionPlan plan;
+        public bool success;
+        public string reason;
+        public List<ScoreLine> lines;
+        public int total;
+        public string rating;
+        public float time;
+        public float playerHealth;
+        public List<Objective> objectives;
+        public MissionStats stats;
+        public readonly List<string> squad = new List<string>();
+        public readonly List<string> unlocks = new List<string>();
+        public bool newBest;
+        public int previousBest;
+    }
+
+    // Runs the current mission: the objective tracker, statistics, the mission
+    // clock and the final result. Gameplay systems report events here.
     public class MissionManager : MonoBehaviour
     {
-        public struct ScoreLine
-        {
-            public string label;
-            public int points;
-        }
-
-        const int RescuePoints = 150;
-        const int ArrestPoints = 100;
-        const int CompletionPoints = 500;
-        const int CivilianCasualtyPenalty = 500;
-        const int UnauthorizedForcePenalty = 200;
-
         public static MissionManager Instance { get; private set; }
 
-        public string MissionName { get; private set; }
-        public readonly List<Objective> Objectives = new List<Objective>();
-        public readonly List<ScoreLine> Breakdown = new List<ScoreLine>();
-        public int Score { get; private set; }
-        public int MaxScore { get; private set; }
-        public string Rating { get; private set; }
-        public float ElapsedTime { get; private set; }
-        public string CurrentRoom { get; private set; }
+        public MissionData Mission { get; private set; }
+        public MissionPlan Plan { get; private set; }
+        public MissionStats Stats { get; private set; }
+        public ObjectiveTracker Tracker { get; private set; }
+        public List<Objective> Objectives { get { return Tracker.Objectives; } }
+        public float Elapsed { get; private set; }
+        public bool Running { get; private set; }
+        public MissionResult Result { get; private set; }
 
-        public int CiviliansTotal { get; private set; }
-        public int CiviliansRescued { get; private set; }
-        public int CiviliansKilled { get; private set; }
-        public int SuspectsTotal { get; private set; }
-        public int SuspectsArrested { get; private set; }
-        public int SuspectsKilled { get; private set; }
-        public int Penalties { get; private set; }
-
-        LevelLayout level;
-        Objective enter, rescue, neutralize, extract;
-        readonly List<Objective> secureObjectives = new List<Objective>();
-        readonly List<RoomArea> secureRooms = new List<RoomArea>();
-        float nextCheck;
-        int unauthorizedForce;
+        float nextTick;
+        string lastForceName;
+        float lastForceTime = -10f;
 
         void Awake()
         {
             Instance = this;
+            Stats = new MissionStats();
+            Tracker = new ObjectiveTracker();
         }
 
-        public void Begin(LevelLayout layout, int suspects, int civilians)
+        public void Begin(MissionPlan plan)
         {
-            level = layout;
-            MissionName = layout.missionName;
-            SuspectsTotal = suspects;
-            CiviliansTotal = civilians;
-            CiviliansRescued = CiviliansKilled = SuspectsArrested = SuspectsKilled = Penalties = unauthorizedForce = 0;
-            ElapsedTime = 0f;
-            Score = 0;
-            Breakdown.Clear();
-            Objectives.Clear();
-            secureObjectives.Clear();
-            secureRooms.Clear();
+            Plan = plan;
+            Mission = plan.mission;
+            Stats = new MissionStats();
+            Tracker = new ObjectiveTracker();
+            Tracker.Begin(Mission, plan);
+            Elapsed = 0f;
+            Result = null;
+            Running = true;
+            nextTick = 0f;
 
-            enter = Add(new Objective("Enter the building", 100));
-            rescue = Add(new Objective("Rescue civilians", 300, civilians));
-            neutralize = Add(new Objective("Neutralize or arrest suspects", 300, suspects));
-            foreach (var room in layout.rooms)
+            foreach (var enemy in AIManager.Instance.Enemies)
+                if (enemy.Data.archetype != EnemyArchetype.TrainingDummy) Stats.suspectsTotal++;
+            foreach (var civilian in AIManager.Instance.Civilians)
             {
-                if (!room.mustSecure) continue;
-                secureRooms.Add(room);
-                secureObjectives.Add(Add(new Objective("Secure the " + room.name, 200)));
+                Stats.civilians.total++;
+                if (civilian.State == CivilianState.Injured) Stats.civilians.initiallyInjured++;
             }
-            extract = Add(new Objective("Return to the SWAT van", 200, 0, ObjectiveState.Pending));
-
-            int objectivePoints = 0;
-            foreach (var objective in Objectives) objectivePoints += objective.Points;
-            MaxScore = objectivePoints + civilians * RescuePoints + suspects * ArrestPoints + CompletionPoints + 200 + 300;
-        }
-
-        Objective Add(Objective objective)
-        {
-            Objectives.Add(objective);
-            return objective;
+            Stats.evidenceTotal = GameManager.Instance.Level.evidence.Count;
+            // Deployed solo: squad-command steps can't be done, so they're waived.
+            if (AIManager.Instance.Officers.Count == 0) Tracker.CompleteType(ObjectiveType.TrainingCommandSquad);
+            // A shield carrier has no primary weapon to switch back to.
+            var player = GameManager.Instance.Player;
+            if (player != null && player.Weapons.Inventory.PrimaryBlocked) Tracker.CompleteType(ObjectiveType.TrainingSwitchWeapon);
         }
 
         void Update()
         {
             var game = GameManager.Instance;
-            if (game == null || !game.IsPlaying || level == null) return;
-            ElapsedTime += Time.deltaTime;
-            if (Time.time < nextCheck) return;
-            nextCheck = Time.time + 0.25f;
+            if (!Running || game == null || !game.IsPlaying || game.Player == null) return;
+            Elapsed += Time.deltaTime;
+            if (Time.time < nextTick) return;
+            nextTick = Time.time + 0.25f;
+            Tracker.Tick(this, game, Elapsed);
+            if (Tracker.ExtractionReached) game.EndMission(!Tracker.AnyMandatoryFailed, Tracker.AnyMandatoryFailed ? "A primary objective failed." : null);
+            else if (Mission.isTraining && Tracker.CurrentStep == null) game.EndMission(true, null);
+        }
 
-            var player = game.Player;
-            if (player == null || !player.Health.IsAlive) return;
-            Vector3 p = player.Position;
-            var room = level.RoomAt(p);
-            CurrentRoom = room != null ? room.name : (level.buildingBounds.Contains(new Vector3(p.x, 1f, p.z)) ? "Inside" : "Outside");
+        // ---- Reports from gameplay ----
 
-            if (!enter.IsDone && level.buildingBounds.Contains(new Vector3(p.x, 1f, p.z))) Complete(enter);
+        public void Report(ObjectiveType type, int amount)
+        {
+            if (Running) Tracker.Report(type, amount);
+        }
 
-            for (int i = 0; i < secureRooms.Count; i++)
+        public void ReportTarget(ObjectiveType type, string id)
+        {
+            if (Running) Tracker.ReportTarget(type, id);
+        }
+
+        public void ReportEquipment(EquipmentKind kind)
+        {
+            if (Running) Stats.UsedEquipment(kind);
+        }
+
+        public void ReportDoor(DoorController door)
+        {
+            ReportTarget(ObjectiveType.TrainingOpenDoor, door.Id);
+        }
+
+        public void ReportBreach(DoorController door, bool byPlayer)
+        {
+            if (!Running) return;
+            Stats.doorsBreached++;
+            ReportTarget(ObjectiveType.TrainingBreach, door.Id);
+        }
+
+        public void ReportConsole(SecurityConsole console)
+        {
+            ReportTarget(ObjectiveType.UseConsole, console.Id);
+        }
+
+        public void ReportFootage()
+        {
+            Stats.footageReviewed = true;
+        }
+
+        public void ReportCameras()
+        {
+            foreach (var cam in SecurityCamera.All) if (cam != null && cam.Active) return;
+            Stats.camerasDisabled = true;
+        }
+
+        public void ReportEvidence()
+        {
+            Stats.evidenceSecured++;
+            UIManager.Notify("Evidence secured (" + Stats.evidenceSecured + ")");
+        }
+
+        public void ReportAlarm()
+        {
+            Stats.alarmTriggered = true;
+            if (Running) Tracker.Fail(ObjectiveType.AlarmNotTriggered);
+        }
+
+        // ---- Suspects ----
+
+        public void OnUnauthorizedForce(string targetName)
+        {
+            if (!Running) return;
+            // One shotgun blast or burst counts once.
+            if (targetName == lastForceName && Time.time - lastForceTime < 2f) return;
+            lastForceName = targetName;
+            lastForceTime = Time.time;
+            Stats.unauthorizedForce++;
+            UIManager.Notify("Unauthorized use of force against " + targetName + " (penalty)", true);
+        }
+
+        public void OnSuspectRestrained(EnemyAI enemy)
+        {
+            if (!Running) return;
+            if (enemy.Data.archetype == EnemyArchetype.TrainingDummy) Tracker.CompleteType(ObjectiveType.TrainingRestrain);
+            else
             {
-                var objective = secureObjectives[i];
-                var area = secureRooms[i];
-                if (objective.IsDone || room != area || AIManager.Instance.AnyThreatIn(area.bounds)) continue;
-                Complete(objective);
+                Stats.suspectsArrested++;
+                UIManager.Notify("Suspect arrested");
             }
+        }
 
-            if (extract.State == ObjectiveState.Pending && AllRequiredDone())
+        public void OnSuspectDown(EnemyAI enemy, bool wasRestrained)
+        {
+            if (!Running) return;
+            if (enemy.Data.archetype == EnemyArchetype.TrainingDummy)
             {
-                extract.State = ObjectiveState.Active;
-                UIManager.Notify("Building secure. Return to the SWAT van.");
+                Tracker.Fail(ObjectiveType.TrainingRestrain);
+                return;
             }
-            if (extract.State == ObjectiveState.Active && level.extractionZone.Contains(new Vector3(p.x, 1f, p.z)))
-            {
-                Complete(extract);
-                game.CompleteMission();
-            }
-        }
-
-        bool AllRequiredDone()
-        {
-            foreach (var objective in Objectives)
-                if (objective != extract && !objective.IsDone) return false;
-            return true;
-        }
-
-        void Complete(Objective objective)
-        {
-            if (objective.IsDone) return;
-            objective.State = ObjectiveState.Completed;
-            UIManager.Notify("Objective complete: " + objective.Title);
-            AudioManager.Play2D(Sound.Rescue, 0.5f, 1.3f);
-        }
-
-        // ---- Events ----
-
-        public void OnCivilianRescued()
-        {
-            CiviliansRescued++;
-            UIManager.Notify("Civilian rescued");
-            UpdateRescue();
-        }
-
-        public void OnCivilianKilled(bool wasRescued)
-        {
-            CiviliansKilled++;
-            if (wasRescued) CiviliansRescued--;
-            Penalties++;
-            UIManager.Notify("CIVILIAN CASUALTY  -" + CivilianCasualtyPenalty, true);
-            UpdateRescue();
-        }
-
-        void UpdateRescue()
-        {
-            rescue.SetProgress(CiviliansRescued);
-            if (rescue.IsDone) return;
-            if (CiviliansRescued + CiviliansKilled >= CiviliansTotal)
-            {
-                rescue.State = CiviliansRescued > 0 ? ObjectiveState.Completed : ObjectiveState.Failed;
-                UIManager.Notify(rescue.State == ObjectiveState.Completed ? "Objective complete: Rescue civilians" : "Objective failed: Rescue civilians", rescue.State == ObjectiveState.Failed);
-            }
-        }
-
-        public void OnSuspectArrested()
-        {
-            SuspectsArrested++;
-            UIManager.Notify("Suspect arrested");
-            UpdateNeutralize();
-        }
-
-        public void OnSuspectKilled()
-        {
-            SuspectsKilled++;
+            if (wasRestrained) Stats.suspectsArrested = Mathf.Max(0, Stats.suspectsArrested - 1);
+            Stats.suspectsKilled++;
             UIManager.Notify("Suspect neutralized");
-            UpdateNeutralize();
         }
 
-        void UpdateNeutralize()
+        public void OnLeaderEscaped(EnemyAI enemy)
         {
-            neutralize.SetProgress(SuspectsArrested + SuspectsKilled);
-            if (SuspectsArrested + SuspectsKilled >= SuspectsTotal) Complete(neutralize);
+            if (!Running) return;
+            Stats.suspectsEscaped++;
+            Stats.leaderEscaped = true;
+            UIManager.Notify("The suspect leader escaped!", true);
+            SquadCommandManager.Instance.Radio(null, "Suspect leader has left the perimeter.");
         }
 
-        public void OnUnauthorizedForce()
+        // ---- Police ----
+
+        public void OnOfficerDown(SquadAI officer)
         {
-            Penalties++;
-            unauthorizedForce++;
-            UIManager.Notify("PENALTY: Unauthorized use of force  -" + UnauthorizedForcePenalty, true);
+            if (!Running) return;
+            Stats.officersDowned++;
+            Tracker.Fail(ObjectiveType.NoOfficerDown);
         }
 
-        // Works out the final score breakdown when the mission ends.
-        public void Finish(bool success, float playerHealth)
+        public void OnPlayerDown()
         {
-            Breakdown.Clear();
-            int objectivePoints = 0;
-            foreach (var objective in Objectives)
+            if (!Running) return;
+            Stats.playerDowned = true;
+            Stats.officersDowned++;
+            Tracker.Fail(ObjectiveType.NoOfficerDown);
+        }
+
+        // ---- Civilians ----
+
+        public void OnCivilianEncountered(CivilianAI civilian)
+        {
+            if (Running) Stats.civilians.encountered++;
+        }
+
+        public void OnCivilianSecured(CivilianAI civilian)
+        {
+            if (Running) Stats.civilians.rescued++;
+        }
+
+        public void OnCivilianEvacuated(CivilianAI civilian)
+        {
+            if (!Running) return;
+            Stats.civilians.evacuated++;
+            UIManager.Notify("Civilian evacuated (" + Stats.civilians.evacuated + "/" + Stats.civilians.total + ")");
+            AudioManager.Play2D(Sound.Rescue, 0.6f);
+        }
+
+        public void OnCivilianTreated(CivilianAI civilian)
+        {
+            if (Running) Stats.civilians.treated++;
+        }
+
+        public void OnCivilianInjured(CivilianAI civilian)
+        {
+            if (!Running) return;
+            Stats.civilians.injured++;
+            UIManager.Notify("A civilian was hurt!", true);
+        }
+
+        public void OnCivilianKilled(CivilianAI civilian)
+        {
+            if (!Running) return;
+            Stats.civilians.killed++;
+            Tracker.Fail(ObjectiveType.NoCivilianCasualties);
+            Tracker.Fail(ObjectiveType.TrainingEscort);
+            UIManager.Notify("Civilian casualty", true);
+        }
+
+        // ---- End ----
+
+        public MissionResult Finish(bool success, string reason)
+        {
+            if (!Running && Result != null) return Result;
+            Running = false;
+            Tracker.Settle(success);
+            var game = GameManager.Instance;
+            var player = game.Player;
+            if (player != null)
             {
-                if (objective.State != ObjectiveState.Completed) continue;
-                // The rescue objective pays out in proportion to how many were saved.
-                objectivePoints += objective == rescue && CiviliansTotal > 0 ? objective.Points * CiviliansRescued / CiviliansTotal : objective.Points;
+                Stats.shotsFired = player.Weapons.ShotsFired;
+                Stats.shotsHit = player.Weapons.ShotsHit;
             }
-            AddLine("Objectives", objectivePoints);
-            AddLine("Civilians rescued  x" + CiviliansRescued, CiviliansRescued * RescuePoints);
-            AddLine("Suspects arrested  x" + SuspectsArrested, SuspectsArrested * ArrestPoints);
-            if (success)
+            float health = player != null ? player.Health.Fraction : 0f;
+
+            var result = new MissionResult
             {
-                AddLine("Mission complete", CompletionPoints);
-                AddLine("Health remaining", Mathf.RoundToInt(playerHealth * 2f));
-                AddLine("Time bonus", Mathf.Clamp(Mathf.RoundToInt((600f - ElapsedTime) * 0.5f), 0, 300));
-            }
-            if (CiviliansKilled > 0) AddLine("Civilian casualties  x" + CiviliansKilled, -CiviliansKilled * CivilianCasualtyPenalty);
-            if (unauthorizedForce > 0) AddLine("Unauthorized force  x" + unauthorizedForce, -unauthorizedForce * UnauthorizedForcePenalty);
-
-            Score = 0;
-            foreach (var line in Breakdown) Score += line.points;
-            Score = Mathf.Max(0, Score);
-
-            float percent = MaxScore > 0 ? (float)Score / MaxScore : 0f;
-            if (!success) Rating = "F";
-            else if (percent >= 0.9f && CiviliansKilled == 0) Rating = "S";
-            else if (percent >= 0.75f) Rating = "A";
-            else if (percent >= 0.6f) Rating = "B";
-            else if (percent >= 0.4f) Rating = "C";
-            else Rating = "D";
+                mission = Mission,
+                plan = Plan,
+                success = success,
+                reason = reason,
+                time = Elapsed,
+                playerHealth = health,
+                objectives = new List<Objective>(Tracker.Objectives),
+                stats = Stats,
+            };
+            int total;
+            string rating;
+            result.lines = MissionScoring.Calculate(this, success, health, out total, out rating);
+            result.total = total;
+            result.rating = rating;
+            foreach (var officer in AIManager.Instance.Officers)
+                result.squad.Add(officer.Data.callsign + " (" + officer.Data.role + "): " + SquadStatusTracker.Condition(officer.Health)
+                    + (officer.IsAlive ? " " + Mathf.RoundToInt(officer.Health.Fraction * 100f) + "%" : ""));
+            Result = result;
+            return result;
         }
 
-        void AddLine(string label, int points)
+        public void Abort()
         {
-            Breakdown.Add(new ScoreLine { label = label, points = points });
+            Running = false;
         }
     }
 }

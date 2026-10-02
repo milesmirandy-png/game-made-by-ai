@@ -1,2 +1,2 @@
-Placeholder folder. Materials, models and sounds are currently generated from code
-(Scripts/Core/Shapes.cs and Scripts/Core/AudioManager.cs), so nothing is needed here yet.
+Not used yet. Materials and meshes are generated from code
+(Scripts/Utilities/Shapes.cs, Scripts/Core/CharacterFactory.cs, Scripts/Weapons/WeaponModels.cs).

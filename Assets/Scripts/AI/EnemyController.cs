@@ -3,23 +3,27 @@ using UnityEngine;
 namespace Swat
 {
     // A suspect's body: pose, floor ring colour, the red "!" alert marker and
-    // the walk bob. EnemyAI decides what to do; this makes it visible.
+    // visibility. EnemyAI decides what to do; this makes it visible.
     public class EnemyController : MonoBehaviour
     {
         static readonly Color HostileRing = new Color(1f, 0.25f, 0.2f);
+        static readonly Color UnarmedRing = new Color(1f, 0.55f, 0.25f);
         static readonly Color SurrenderRing = new Color(1f, 0.85f, 0.2f);
-        static readonly Color ArrestedRing = new Color(0.3f, 0.6f, 1f);
+        static readonly Color RestrainedRing = new Color(0.3f, 0.6f, 1f);
 
         public CharacterParts Parts { get; private set; }
+        public ProceduralAnimator Animator { get; private set; }
         AgentMover mover;
         float alertUntil;
-        bool dead;
+        bool dead, crouched;
 
-        public void Init(CharacterParts parts, AgentMover agentMover)
+        public void Init(CharacterParts parts, AgentMover agentMover, bool armed)
         {
             Parts = parts;
             mover = agentMover;
-            parts.SetRingColor(HostileRing);
+            Animator = new ProceduralAnimator(parts);
+            Animator.SetPose(armed ? Pose.Aim : Pose.Relaxed);
+            parts.SetRingColor(armed ? HostileRing : UnarmedRing);
         }
 
         public void ShowAlert(float seconds)
@@ -30,39 +34,46 @@ namespace Swat
 
         public void SetSurrendered()
         {
-            Parts.PoseHandsUp();
-            if (Parts.gun != null) Parts.gun.gameObject.SetActive(false);
+            Animator.SetPose(Pose.HandsUp);
+            Animator.SetCrouch(false);
+            Parts.ShowWeapon(false);
             Parts.SetRingColor(SurrenderRing);
             Parts.alertMarker.SetActive(false);
         }
 
-        public void SetArrested()
+        public void SetRestrained()
         {
-            Parts.PoseCuffed();
-            Parts.SetRingColor(ArrestedRing);
-            Parts.model.localPosition = new Vector3(0f, -0.35f, 0f); // kneeling
+            Animator.SetPose(Pose.Cuffed);
+            Animator.SetCrouch(true); // kneeling
+            Parts.SetRingColor(RestrainedRing);
         }
 
-        public void SetStunned(bool stunned)
+        public void SetStunned(bool stunned, bool armed)
         {
-            if (stunned) Parts.SetArms(new Vector3(-150f, 0f, 25f), new Vector3(-150f, 0f, -25f)); // shielding eyes
-            else Parts.PoseAiming();
+            Animator.SetPose(stunned ? Pose.Cower : armed ? Pose.Aim : Pose.Relaxed);
+        }
+
+        public void SetHiding(bool hiding)
+        {
+            crouched = hiding;
+            Animator.SetCrouch(hiding);
+            if (hiding) Animator.SetPose(Pose.Cower);
         }
 
         public void SetDead()
         {
             dead = true;
-            Parts.Fall();
+            Animator.SetDown(true);
         }
 
         // Called every frame by the AI manager (no Update of its own).
-        public void Animate()
+        public void Animate(float dt)
         {
             if (dead) return;
             if (Parts.alertMarker.activeSelf && Time.time > alertUntil) Parts.alertMarker.SetActive(false);
-            float bob = mover.IsMoving ? Mathf.Abs(Mathf.Sin(Time.time * 10f + transform.position.x)) * 0.05f : 0f;
-            Vector3 p = Parts.model.localPosition;
-            if (p.y >= -0.01f) Parts.model.localPosition = new Vector3(0f, bob, 0f);
+            Animator.Tick(dt, mover.Speed, mover.IsRunning);
         }
+
+        public bool IsCrouched { get { return crouched; } }
     }
 }

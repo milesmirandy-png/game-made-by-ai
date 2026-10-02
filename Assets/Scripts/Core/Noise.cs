@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Gunshot is the player's gunfire; EnemyGunshot is a suspect's.
-    public enum NoiseKind { Footstep, Door, Gunshot, EnemyGunshot, Explosion, Callout }
+    // Gunshot is police gunfire; EnemyGunshot is a suspect's.
+    public enum NoiseKind { Footstep, Door, Gunshot, EnemyGunshot, Explosion, Callout, Alarm }
 
     // Sounds the AI can hear. Anything can make a noise; the AI manager decides who hears it.
     public static class Noise

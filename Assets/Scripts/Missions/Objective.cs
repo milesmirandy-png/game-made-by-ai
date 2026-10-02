@@ -2,37 +2,56 @@ namespace Swat
 {
     public enum ObjectiveState { Pending, Active, Completed, Failed }
 
-    // One line on the objectives list. Objectives with a target count show progress, e.g. "(2/5)".
+    // One mission objective at runtime, created from an ObjectiveDefinition
+    // in the MissionData. ObjectiveTracker updates its state.
     public class Objective
     {
-        public string Title { get; private set; }
-        public int Points { get; private set; }
+        public ObjectiveDefinition Definition { get; private set; }
+        public ObjectiveType Type { get { return Definition.type; } }
+        public string TargetId { get { return Definition.targetId; } }
+        public bool Optional { get; private set; }
         public ObjectiveState State { get; set; }
-        public int Progress { get; private set; }
-        public int Target { get; private set; }
-        public string Label { get; private set; }
-
-        public Objective(string title, int points, int target = 0, ObjectiveState state = ObjectiveState.Active)
-        {
-            Title = title;
-            Points = points;
-            Target = target;
-            State = state;
-            RefreshLabel();
-        }
-
+        public int Progress { get; set; }
+        public int Target { get; set; }
+        public int Points { get { return Definition.points; } }
         public bool IsDone { get { return State == ObjectiveState.Completed || State == ObjectiveState.Failed; } }
 
-        public void SetProgress(int value)
+        // Conditions hold until something breaks them; they're settled when the mission ends.
+        public bool IsCondition
         {
-            if (value == Progress) return;
-            Progress = value;
-            RefreshLabel();
+            get
+            {
+                return Type == ObjectiveType.NoCivilianCasualties || Type == ObjectiveType.NoOfficerDown
+                    || Type == ObjectiveType.AlarmNotTriggered || Type == ObjectiveType.TimeLimit;
+            }
         }
 
-        void RefreshLabel()
+        public string Label
         {
-            Label = Target > 0 ? Title + "  (" + Progress + "/" + Target + ")" : Title;
+            get
+            {
+                string text = string.IsNullOrEmpty(Definition.description) ? Type.ToString() : Definition.description;
+                if (Target > 1 && !IsCondition) text += "  (" + System.Math.Min(Progress, Target) + "/" + Target + ")";
+                return text;
+            }
+        }
+
+        public Objective(ObjectiveDefinition definition, bool optional)
+        {
+            Definition = definition;
+            Optional = optional;
+            State = ObjectiveState.Active;
+            Target = definition.count;
+        }
+
+        public void Complete()
+        {
+            if (!IsDone) State = ObjectiveState.Completed;
+        }
+
+        public void Fail()
+        {
+            if (!IsDone) State = ObjectiveState.Failed;
         }
     }
 }

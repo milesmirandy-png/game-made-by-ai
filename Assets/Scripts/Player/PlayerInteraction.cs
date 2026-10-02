@@ -2,19 +2,22 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Finds the nearest thing the player can use (door, civilian, surrendered
-    // suspect) and handles E to use it and F to shout at suspects.
+    // Finds the best thing to use near the player and handles E (tap or hold,
+    // with a progress bar for longer actions) and X to shout compliance.
     public class PlayerInteraction : MonoBehaviour
     {
-        [SerializeField] float range = 1.9f;
+        [SerializeField] float range = 2f;
         [SerializeField] float shoutCooldown = 1.5f;
 
         public IInteractable Current { get; private set; }
+        public bool IsInteracting { get { return holding != null; } }
+        public float Progress { get { return holding != null && holdDuration > 0f ? holdTime / holdDuration : 0f; } }
         public float LastShoutTime { get; private set; }
 
-        readonly Collider[] nearby = new Collider[24];
+        readonly Collider[] nearby = new Collider[32];
         PlayerController player;
-        float nextScan;
+        IInteractable holding;
+        float holdTime, holdDuration, nextScan;
 
         void Awake()
         {
@@ -27,26 +30,58 @@ namespace Swat
             if (!active)
             {
                 Current = null;
+                holding = null;
                 return;
             }
 
-            // Scanning ten times a second is plenty and keeps physics queries cheap.
-            if (Time.time >= nextScan)
+            if (Time.time >= nextScan && holding == null)
             {
                 nextScan = Time.time + 0.1f;
                 Current = FindBest();
             }
-            if (Current != null && GameInput.Interact && Current.CanInteract(player))
+
+            if (holding != null)
             {
-                Current.Interact(player);
-                nextScan = 0f;
+                // Keep holding E, stay close, and the action completes.
+                bool stillValid = GameInput.Held(InputAction.Interact) && holding.CanInteract(player)
+                    && Flat(holding.InteractPosition - player.Position) < range + 0.6f;
+                if (!stillValid)
+                {
+                    holding = null;
+                }
+                else
+                {
+                    holdTime += Time.deltaTime;
+                    if (holdTime >= holdDuration)
+                    {
+                        var target = holding;
+                        holding = null;
+                        target.Interact(player);
+                        nextScan = 0f;
+                    }
+                }
+            }
+            else if (Current != null && GameInput.Down(InputAction.Interact) && Current.CanInteract(player))
+            {
+                float duration = Current.InteractDuration(player);
+                if (duration <= 0.01f)
+                {
+                    Current.Interact(player);
+                    nextScan = 0f;
+                }
+                else
+                {
+                    holding = Current;
+                    holdTime = 0f;
+                    holdDuration = duration;
+                }
             }
 
-            if (GameInput.Shout && Time.time - LastShoutTime > shoutCooldown)
+            if (GameInput.Down(InputAction.Shout) && Time.time - LastShoutTime > shoutCooldown)
             {
                 LastShoutTime = Time.time;
-                AudioManager.Play2D(Sound.Shout, 0.6f);
-                AIManager.Instance.Shout(player);
+                AudioManager.Play2D(Sound.Shout, 0.6f, 1f, SoundCategory.Voice);
+                AIManager.Instance.Shout(player.ChestPosition, player.Position, true);
             }
         }
 
@@ -60,7 +95,6 @@ namespace Swat
             {
                 var candidate = nearby[i].GetComponentInParent<IInteractable>();
                 if (candidate == null || !candidate.CanInteract(player)) continue;
-
                 Vector3 to = candidate.InteractPosition - player.Position;
                 to.y = 0f;
                 float distance = to.magnitude;
@@ -71,6 +105,12 @@ namespace Swat
                 bestScore = score;
             }
             return best;
+        }
+
+        static float Flat(Vector3 v)
+        {
+            v.y = 0f;
+            return v.magnitude;
         }
 
         // No using things through walls.

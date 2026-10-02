@@ -1,22 +1,23 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.AI;
 
 namespace Swat
 {
-    // Runs every suspect and civilian from a single Update. Each one "thinks"
-    // (perception and decisions) only a few times a second, staggered so they
-    // don't all think on the same frame. Also delivers noises, flashbang
-    // stuns and shouts, finds cover, and opens doors for the AI.
+    // Runs every suspect, civilian and squad officer from a single Update.
+    // Each one "thinks" (perception and decisions) only a few times a second,
+    // staggered so they don't all think on the same frame. Also delivers
+    // noises, alarms, flashbang stuns and shouts, and opens doors for the AI.
     public class AIManager : MonoBehaviour
     {
         public static AIManager Instance { get; private set; }
 
         public readonly List<EnemyAI> Enemies = new List<EnemyAI>();
         public readonly List<CivilianAI> Civilians = new List<CivilianAI>();
+        public readonly List<SquadAI> Officers = new List<SquadAI>();
+        public readonly List<ICombatTarget> PoliceTargets = new List<ICombatTarget>();
 
-        readonly List<Vector3> coverPoints = new List<Vector3>();
         readonly List<DoorController> doors = new List<DoorController>();
+        LevelLayout level;
         float nextDoorCheck;
 
         void Awake()
@@ -24,65 +25,91 @@ namespace Swat
             Instance = this;
         }
 
-        public void Begin(LevelLayout level)
+        public void Begin(LevelLayout layout)
         {
+            level = layout;
             Enemies.Clear();
             Civilians.Clear();
+            Officers.Clear();
+            PoliceTargets.Clear();
             doors.Clear();
-            doors.AddRange(level.doors);
+            doors.AddRange(layout.doors);
             foreach (var door in doors) door.RefreshNavMeshCarving();
-            coverPoints.Clear();
-            // Keep only cover spots that are actually on the NavMesh.
-            foreach (var point in level.coverPoints)
-            {
-                NavMeshHit hit;
-                if (NavMesh.SamplePosition(point, out hit, 0.6f, NavMesh.AllAreas)) coverPoints.Add(hit.position);
-            }
+            CoverPoint.Build(layout.coverPoints);
+        }
+
+        public void Clear()
+        {
+            level = null;
+            Enemies.Clear();
+            Civilians.Clear();
+            Officers.Clear();
+            PoliceTargets.Clear();
+            doors.Clear();
+        }
+
+        public void RegisterPlayer(PlayerController player)
+        {
+            PoliceTargets.Insert(0, player);
         }
 
         public void Register(EnemyAI enemy)
         {
             enemy.NextThink = Time.time + Random.value * 0.3f;
+            enemy.Area = level.AreaAt(enemy.Position);
             Enemies.Add(enemy);
         }
 
         public void Register(CivilianAI civilian)
         {
             civilian.NextThink = Time.time + Random.value * 0.3f;
+            civilian.Area = level.AreaAt(civilian.Position);
             Civilians.Add(civilian);
+        }
+
+        public void Register(SquadAI officer)
+        {
+            officer.NextThink = Time.time + Random.value * 0.2f;
+            Officers.Add(officer);
+            PoliceTargets.Add(officer);
         }
 
         void Update()
         {
             var game = GameManager.Instance;
-            if (game == null || !game.IsPlaying) return;
+            if (game == null || !game.IsPlaying || level == null) return;
             float dt = Time.deltaTime;
+            if (dt <= 0f) return;
             float now = Time.time;
             float interval = QualityManager.Current.aiThinkInterval;
-            var player = game.Player;
 
             for (int i = 0; i < Enemies.Count; i++)
             {
                 var enemy = Enemies[i];
-                if (enemy.State == EnemyState.Dead) continue;
-                enemy.FrameUpdate(dt, player);
-                if (now >= enemy.NextThink)
-                {
-                    enemy.NextThink = now + interval;
-                    enemy.Think(player);
-                }
+                if (enemy.State == EnemyState.Dead || enemy.Escaped) continue;
+                enemy.FrameUpdate(dt);
+                if (now < enemy.NextThink) continue;
+                enemy.NextThink = now + interval;
+                enemy.Think();
+            }
+
+            for (int i = 0; i < Officers.Count; i++)
+            {
+                var officer = Officers[i];
+                officer.FrameUpdate(dt);
+                if (now < officer.NextThink) continue;
+                officer.NextThink = now + interval * officer.ThinkScale;
+                officer.Think();
             }
 
             for (int i = 0; i < Civilians.Count; i++)
             {
                 var civilian = Civilians[i];
-                if (civilian.State == CivilianState.Dead || civilian.State == CivilianState.Rescued) continue;
+                if (!civilian.IsAlive || civilian.IsEvacuated) continue;
                 civilian.FrameUpdate(dt);
-                if (now >= civilian.NextThink)
-                {
-                    civilian.NextThink = now + interval * 1.5f;
-                    civilian.Think();
-                }
+                if (now < civilian.NextThink) continue;
+                civilian.NextThink = now + interval * 1.5f;
+                civilian.Think();
             }
 
             if (now >= nextDoorCheck)
@@ -92,7 +119,7 @@ namespace Swat
             }
         }
 
-        // Unlocked doors open when a suspect or civilian walks up to them.
+        // Unlocked doors open when anyone controlled by the AI walks up to them.
         void OpenDoorsForAI()
         {
             foreach (var door in doors)
@@ -101,119 +128,123 @@ namespace Swat
                 Vector3 doorPosition = door.transform.position;
                 foreach (var enemy in Enemies)
                 {
-                    if (enemy.IsThreat && enemy.State != EnemyState.Stunned && FlatDistance(enemy.Position, doorPosition) < 1.3f)
-                    {
-                        door.Open(enemy.Position);
-                        break;
-                    }
+                    if (enemy.IsNeutralized || enemy.State == EnemyState.Surrendering || enemy.State == EnemyState.Stunned || enemy.State == EnemyState.Hiding) continue;
+                    if (FlatDistance(enemy.Position, doorPosition) < 1.3f) { door.Open(enemy.Position); break; }
+                }
+                if (door.State != DoorState.Closed) continue;
+                foreach (var officer in Officers)
+                {
+                    // Officers stacking on a door wait for the entry order instead of walking it open.
+                    if (!officer.IsAlive || !officer.IsMoving || officer.HoldsDoorsClosed || officer.StackDoor == door) continue;
+                    if (FlatDistance(officer.Position, doorPosition) < 1.3f) { door.Open(officer.Position); break; }
                 }
                 if (door.State != DoorState.Closed) continue;
                 foreach (var civilian in Civilians)
                 {
-                    if (civilian.IsAlive && civilian.State != CivilianState.Rescued && FlatDistance(civilian.transform.position, doorPosition) < 1.3f)
-                    {
-                        door.Open(civilian.transform.position);
-                        break;
-                    }
+                    if (!civilian.IsAlive || civilian.IsEvacuated || civilian.State == CivilianState.Hiding) continue;
+                    if (FlatDistance(civilian.Position, doorPosition) < 1.3f) { door.Open(civilian.Position); break; }
                 }
             }
         }
 
         public void HearNoise(Vector3 position, float radius, NoiseKind kind)
         {
+            if (level == null) return;
+            int area = level.AreaAt(position);
             float sqrRadius = radius * radius;
             foreach (var enemy in Enemies)
-                if ((enemy.Position - position).sqrMagnitude < sqrRadius) enemy.HearNoise(position, kind);
+                if (enemy.Area == area && (enemy.Position - position).sqrMagnitude < sqrRadius) enemy.HearNoise(position, kind);
 
             if (kind != NoiseKind.Gunshot && kind != NoiseKind.EnemyGunshot && kind != NoiseKind.Explosion) return;
             foreach (var civilian in Civilians)
-                if ((civilian.transform.position - position).sqrMagnitude < sqrRadius * 0.7f) civilian.Panic(position);
+                if (civilian.Area == area && (civilian.Position - position).sqrMagnitude < sqrRadius * 0.7f) civilian.Panic(position);
         }
 
-        // A suspect who spots the officer shouts to friends nearby.
-        public void Callout(EnemyAI caller, Vector3 target)
+        // A suspect who spots police calls friends nearby.
+        public void Callout(EnemyAI caller, Vector3 target, float radius)
         {
             foreach (var enemy in Enemies)
-                if (enemy != caller && (enemy.Position - caller.Position).sqrMagnitude < 12f * 12f) enemy.HearNoise(target, NoiseKind.Callout);
+                if (enemy != caller && enemy.Area == caller.Area && (enemy.Position - caller.Position).sqrMagnitude < radius * radius)
+                    enemy.HearNoise(target, NoiseKind.Callout);
         }
 
-        public void Shout(PlayerController player)
+        public void OnAlarm(Vector3 source)
         {
-            UIManager.ShowShout();
-            Vector3 from = player.ChestPosition;
+            foreach (var enemy in Enemies) enemy.OnAlarm(source);
+            foreach (var civilian in Civilians) civilian.HearShout();
+        }
+
+        // "Police! Show me your hands!" Suspects in sight may surrender; panicking civilians get down.
+        public void Shout(Vector3 chest, Vector3 position, bool byPlayer)
+        {
+            if (byPlayer) UIManager.ShowShout();
             foreach (var enemy in Enemies)
             {
-                if (!enemy.IsThreat || (enemy.Position - player.Position).sqrMagnitude > 10f * 10f) continue;
-                if (!Physics.Linecast(from, enemy.Position + Vector3.up * 1.5f, Layers.WorldMask, QueryTriggerInteraction.Ignore)) enemy.HearShout(player);
+                if (enemy.IsNeutralized || (enemy.Position - position).sqrMagnitude > 10f * 10f) continue;
+                if (!Physics.Linecast(chest, enemy.Head, Layers.WorldMask, QueryTriggerInteraction.Ignore)) enemy.HearShout(position, byPlayer);
             }
             foreach (var civilian in Civilians)
-                if ((civilian.transform.position - player.Position).sqrMagnitude < 10f * 10f) civilian.HearShout();
+                if ((civilian.Position - position).sqrMagnitude < 10f * 10f) civilian.HearShout();
         }
 
-        public void Stun(Vector3 center, float radius, float duration)
+        public void Stun(Vector3 center, float radius, float duration, bool hurtsPolice)
         {
             float sqrRadius = radius * radius;
             foreach (var enemy in Enemies)
             {
-                Vector3 head = enemy.Position + Vector3.up * 1.5f;
-                float sqr = (head - center).sqrMagnitude;
-                if (sqr < sqrRadius && !Physics.Linecast(center, head, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                float sqr = (enemy.Head - center).sqrMagnitude;
+                if (sqr < sqrRadius && !Physics.Linecast(center, enemy.Head, Layers.WorldMask, QueryTriggerInteraction.Ignore))
                     enemy.Stun(duration * (1f - 0.5f * Mathf.Sqrt(sqr) / radius));
             }
             foreach (var civilian in Civilians)
             {
-                Vector3 head = civilian.transform.position + Vector3.up * 1.5f;
+                Vector3 head = civilian.Position + Vector3.up * 1.5f;
                 if ((head - center).sqrMagnitude < sqrRadius && !Physics.Linecast(center, head, Layers.WorldMask, QueryTriggerInteraction.Ignore))
                     civilian.Stun(duration * 0.6f);
             }
-        }
-
-        // Nearest cover spot (within reach) that the threat can't see.
-        public bool FindCover(Vector3 from, Vector3 threat, float maxDistance, out Vector3 cover)
-        {
-            cover = from;
-            float best = maxDistance * maxDistance;
-            bool found = false;
-            Vector3 threatEye = threat + Vector3.up * 1.4f;
-            int checks = 0;
-            foreach (var point in coverPoints)
+            foreach (var officer in Officers)
             {
-                float sqr = (point - from).sqrMagnitude;
-                if (sqr >= best || sqr < 1f) continue;
-                if (++checks > 12) break; // keep raycasts bounded
-                if (!Physics.Linecast(point + Vector3.up * 1f, threatEye, Layers.WorldMask, QueryTriggerInteraction.Ignore)) continue;
-                best = sqr;
-                cover = point;
-                found = true;
+                if ((officer.Position - center).sqrMagnitude < sqrRadius * 0.5f && !Physics.Linecast(center, officer.Position + Vector3.up * 1.5f, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                    officer.Dazzle(duration * 0.4f);
             }
-            return found;
         }
 
         public bool AnyThreatNear(Vector3 position, float radius)
         {
             foreach (var enemy in Enemies)
-                if (enemy.IsThreat && (enemy.Position - position).sqrMagnitude < radius * radius) return true;
+                if (enemy.IsArmedThreat && (enemy.Position - position).sqrMagnitude < radius * radius) return true;
             return false;
         }
 
-        public bool AnyThreatIn(Bounds area)
+        public bool AnyThreatIn(RoomController room)
         {
             foreach (var enemy in Enemies)
-            {
-                if (!enemy.IsThreat) continue;
-                Vector3 p = enemy.Position;
-                if (area.Contains(new Vector3(p.x, area.center.y, p.z))) return true;
-            }
+                if (enemy.IsArmedThreat && room.Contains(enemy.Position)) return true;
             return false;
         }
 
-        public DoorController FindBreachableDoor(Vector3 position, float range)
+        public bool AnySuspectIn(RoomController room)
+        {
+            foreach (var enemy in Enemies)
+                if (enemy.NeedsSecuring && room.Contains(enemy.Position)) return true;
+            return false;
+        }
+
+        public int PoliceNear(Vector3 position, float radius)
+        {
+            int count = 0;
+            foreach (var target in PoliceTargets)
+                if (target.IsAlive && (target.Position - position).sqrMagnitude < radius * radius) count++;
+            return count;
+        }
+
+        public DoorController FindDoor(Vector3 position, float range, System.Predicate<DoorController> match)
         {
             DoorController best = null;
             float bestDistance = range;
             foreach (var door in doors)
             {
-                if (door.State != DoorState.Locked || !door.Breachable || door.ChargePlaced) continue;
+                if (!match(door)) continue;
                 float distance = FlatDistance(door.transform.position, position);
                 if (distance < bestDistance)
                 {
@@ -224,7 +255,24 @@ namespace Swat
             return best;
         }
 
-        static float FlatDistance(Vector3 a, Vector3 b)
+        public CivilianAI NearestCivilianNeedingHelp(Vector3 position, float radius, int area)
+        {
+            CivilianAI best = null;
+            float bestDistance = radius;
+            foreach (var civilian in Civilians)
+            {
+                if (!civilian.NeedsHelp || civilian.Area != area || !TacticalIntel.Instance.IsDiscovered(civilian)) continue;
+                float distance = Vector3.Distance(civilian.Position, position);
+                if (distance < bestDistance)
+                {
+                    best = civilian;
+                    bestDistance = distance;
+                }
+            }
+            return best;
+        }
+
+        public static float FlatDistance(Vector3 a, Vector3 b)
         {
             a.y = 0f;
             b.y = 0f;

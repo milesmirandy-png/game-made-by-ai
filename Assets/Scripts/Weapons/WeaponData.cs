@@ -3,53 +3,45 @@ using UnityEngine;
 namespace Swat
 {
     public enum FireMode { SemiAuto, FullAuto }
+    public enum WeaponCategory { CompactSMG, SMG, CompactRifle, Rifle, Shotgun, Carbine, LessLethal, ServicePistol, BackupPistol, HeavyPistol }
 
-    // Settings for one gun. Create more with Assets > Create > SWAT > Weapon and
-    // put them in a Resources/Weapons folder; the player picks them up automatically.
+    // Settings for one firearm. The defaults live in DefaultContent; use the
+    // menu SWAT > Create Editable Data Assets to get editable copies.
     [CreateAssetMenu(menuName = "SWAT/Weapon", fileName = "NewWeapon")]
     public class WeaponData : ScriptableObject
     {
-        public string displayName = "Pistol";
-        [Tooltip("Order in the player's loadout (number key)")] public int slot;
+        public string id = "weapon";
+        public string displayName = "Weapon";
+        [TextArea] public string description;
+        public WeaponCategory category;
+        public bool isSidearm;
         public FireMode fireMode = FireMode.SemiAuto;
-        public float damage = 30f;
-        [Tooltip("Shots per second")] public float fireRate = 4f;
+        public bool canToggleFireMode;
+        public float damage = 25f;
+        [Tooltip("Shots per second")] public float fireRate = 5f;
         public int magazineSize = 15;
         public int startingReserve = 60;
-        public float reloadTime = 1.4f;
-        public float range = 35f;
-        [Tooltip("Inaccuracy in degrees")] public float spread = 2.5f;
-        [Tooltip("Extra spread in degrees added by each shot")] public float recoil = 1.5f;
-        [Tooltip("How fast recoil spread recovers, degrees per second")] public float recoilRecovery = 10f;
-        [Tooltip("Bullets per shot (shotguns fire several)")] public int pellets = 1;
-        [Tooltip("How far away suspects hear it")] public float noiseRadius = 22f;
+        public float reloadTime = 1.5f;
+        public float range = 30f;
+        [Tooltip("Inaccuracy in degrees")] public float spread = 2f;
+        [Tooltip("Extra spread in degrees per shot")] public float recoil = 1f;
+        public float recoilRecovery = 10f;
+        [Tooltip("Projectiles per shot (shotguns fire several)")] public int pellets = 1;
+        public float noiseRadius = 22f;
         public float moveSpeedMultiplier = 1f;
-        public float modelLength = 0.3f;
+        [Tooltip("Seconds to draw this weapon")] public float switchTime = 0.4f;
+        [Tooltip("Fires low-damage incapacitating rounds")] public bool lessLethal;
+        public float stunDuration;
+        [Tooltip("Bit mask of OfficerRole values allowed to carry it. 0 = everyone.")] public int allowedRoles;
+        [Tooltip("Completed missions needed to unlock. 0 = available from the start.")] public int unlockAfterMissions;
+        public Texture2D icon;
+        [Tooltip("Optional model to show instead of the built-in block model")] public GameObject modelPrefab;
         public Sound fireSound = Sound.Pistol;
         public Color tracerColor = new Color(1f, 0.85f, 0.45f);
 
-        public static WeaponData Create(string name, int slot, FireMode mode, float damage, float fireRate, int magazine, int reserve,
-            float reload, float range, float spread, float recoil, int pellets, float noise, float speed, float length, Sound sound)
+        public bool AllowedFor(OfficerRole role)
         {
-            var data = CreateInstance<WeaponData>();
-            data.name = name;
-            data.displayName = name;
-            data.slot = slot;
-            data.fireMode = mode;
-            data.damage = damage;
-            data.fireRate = fireRate;
-            data.magazineSize = magazine;
-            data.startingReserve = reserve;
-            data.reloadTime = reload;
-            data.range = range;
-            data.spread = spread;
-            data.recoil = recoil;
-            data.pellets = pellets;
-            data.noiseRadius = noise;
-            data.moveSpeedMultiplier = speed;
-            data.modelLength = length;
-            data.fireSound = sound;
-            return data;
+            return allowedRoles == 0 || (allowedRoles & (1 << (int)role)) != 0;
         }
     }
 }

@@ -35,8 +35,6 @@ namespace Swat
             new Profile { name = "Ultra", renderScale = 1f, shadows = 2, shadowDistance = 60f, msaa = 4, pixelLights = 6, particleScale = 1.3f, dynamicLights = true, aiThinkInterval = 0.1f, targetFps = 0, vSync = true },
         };
 
-        const string TierKey = "SWAT.Quality";  // -1 means Auto
-        const string FpsKey = "SWAT.ShowFps";
         const float LowFpsThreshold = 40f;
         const float LowFpsSeconds = 4f;
 
@@ -82,8 +80,9 @@ namespace Swat
             presentCamera.depth = cam.depth + 1;
             presentCamera.enabled = false;
 
-            ShowFps = PlayerPrefs.GetInt(FpsKey, 0) == 1;
-            int saved = PlayerPrefs.GetInt(TierKey, -1);
+            // Saved in the settings file; -1 means Auto.
+            ShowFps = SaveManager.Settings.showFps;
+            int saved = SaveManager.Settings.qualityTier;
             if (saved < 0 || saved >= Profiles.Length) SetTier(DetectTier(), true);
             else SetTier((QualityTier)saved, false);
         }
@@ -92,16 +91,16 @@ namespace Swat
         {
             Tier = tier;
             IsAuto = auto;
-            PlayerPrefs.SetInt(TierKey, auto ? -1 : (int)tier);
-            PlayerPrefs.SetInt(FpsKey, ShowFps ? 1 : 0);
-            PlayerPrefs.Save();
+            SaveManager.Settings.qualityTier = auto ? -1 : (int)tier;
+            SaveManager.Settings.showFps = ShowFps;
+            SaveManager.Save();
             Apply();
         }
 
         public void SaveFpsSetting()
         {
-            PlayerPrefs.SetInt(FpsKey, ShowFps ? 1 : 0);
-            PlayerPrefs.Save();
+            SaveManager.Settings.showFps = ShowFps;
+            SaveManager.Save();
         }
 
         // Rough guess from the hardware. Auto mode corrects it later if the game runs slowly.
@@ -152,7 +151,7 @@ namespace Swat
         {
             float dt = Time.unscaledDeltaTime;
             if (dt > 0f) Fps = Mathf.Lerp(Fps, 1f / dt, 0.05f);
-            if (GameInput.ToggleFps)
+            if (GameInput.Down(InputAction.ToggleFps))
             {
                 ShowFps = !ShowFps;
                 SaveFpsSetting();

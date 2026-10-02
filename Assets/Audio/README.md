@@ -1,2 +1,2 @@
-Placeholder folder. Materials, models and sounds are currently generated from code
-(Scripts/Core/Shapes.cs and Scripts/Core/AudioManager.cs), so nothing is needed here yet.
+Not used yet. All sounds are generated procedurally at startup as clearly
+identified placeholders (Scripts/Audio/SoundLibrary.cs), played by Scripts/Audio/AudioManager.cs.

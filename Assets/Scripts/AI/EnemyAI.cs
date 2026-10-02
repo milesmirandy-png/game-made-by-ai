@@ -6,32 +6,40 @@ namespace Swat
     public enum EnemyState
     {
         Idle, Patrol, Suspicious, Investigating, Alert, Chasing, Attacking, TakingCover, Searching,
-        Stunned, Surrendered, Arrested, Dead,
+        Fleeing, Hiding, Stunned, Surrendering, Restrained, Dead,
     }
 
-    // A suspect's brain: a small finite state machine.
+    // A suspect's brain: a small finite state machine shared by every archetype.
     //
     //   Idle/Patrol --hears something--> Suspicious --> Investigating --> Searching --> back to post
     //        |                                                                ^
-    //        +--sees officer--> Alert --> Attacking <--> Chasing -------------+
-    //                                        |
-    //                                        +--> TakingCover --> Chasing
+    //        +--sees police--> Alert --> Attacking <--> Chasing --------------+
+    //                            |          |
+    //                            |          +--> TakingCover
+    //                            +--> Fleeing --> Hiding          (unarmed, nervous, leaders)
     //
-    // Flashbangs put suspects in Stunned. Shouting (F) can make them Surrendered,
-    // and pressing E on a surrendered suspect arrests them.
-    // Think() runs a few times a second; FrameUpdate() only does cheap turning and shooting.
+    // Flashbangs and less-lethal rounds cause Stunned. Shouting can cause
+    // Surrendering; restraining a surrendered suspect makes them Restrained.
+    // Think() runs a few times a second; FrameUpdate() only turns and shoots.
     public class EnemyAI : MonoBehaviour, IInteractable
     {
+        public EnemyData Data { get; private set; }
         public EnemyState State { get; private set; }
-        public bool IsNeutralized { get { return State == EnemyState.Dead || State == EnemyState.Arrested; } }
-        public bool IsThreat { get { return !IsNeutralized && State != EnemyState.Surrendered; } }
+        public bool IsNeutralized { get { return State == EnemyState.Dead || State == EnemyState.Restrained || Escaped; } }
+        public bool IsArmedThreat { get { return Data.armed && !IsNeutralized && State != EnemyState.Surrendering && State != EnemyState.Hiding; } }
+        public bool NeedsSecuring { get { return !IsNeutralized; } }
+        public bool IsLeader { get { return Data.archetype == EnemyArchetype.Leader; } }
+        public bool Escaped { get; private set; }
+        public bool HasSpottedPolice { get { return everAlerted; } }
         public Vector3 Position { get { return transform.position; } }
+        public Vector3 Head { get { return transform.position + Vector3.up * 1.5f; } }
         public float NextThink { get; set; }
+        public int Area { get; set; }
+        public EnemyController Body { get { return body; } }
 
-        public string Prompt { get { return "[E] Arrest suspect"; } }
+        public string Prompt { get { return Data.armed ? "[E] Restrain suspect (hold)" : "[E] Restrain and question suspect (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up; } }
 
-        EnemyData data;
         AgentMover mover;
         EnemyHealth health;
         EnemyWeapon weapon;
@@ -42,18 +50,25 @@ namespace Swat
         float postYaw;
         Vector3[] patrol;
         int patrolIndex;
-
-        float stateStart, idleUntil, reactionDone, lastSeenTime = -100f, stunUntil, coverWaitUntil, nextCoverCheck, searchDuration, nextShoutCheck;
-        bool seesPlayer, everAlerted;
-        Vector3 lastKnownPlayer, noisePosition, searchCenter, coverPoint;
+        float stateStart, idleUntil, reactionDone, lastSeenTime = -100f, stunUntil, coverWaitUntil, nextCoverCheck, searchDuration, nextShoutCheck, nextErratic, alarmCallAt = -1f;
+        float reactionMultiplier = 1f;
+        bool everAlerted;
+        ICombatTarget target;
+        Vector3 lastKnown, noisePosition, searchCenter, coverPoint, fleeTarget;
 
         float StateTime { get { return Time.time - stateStart; } }
-        bool IsCalm { get { return State == EnemyState.Idle || State == EnemyState.Patrol || State == EnemyState.Suspicious || State == EnemyState.Investigating || State == EnemyState.Searching; } }
-
-        public static EnemyAI Spawn(Transform parent, EnemySpawn spawn)
+        bool IsCalm
         {
-            var data = GameData.Enemy(spawn.profile);
-            var go = new GameObject("Suspect (" + spawn.profile + ")");
+            get
+            {
+                return State == EnemyState.Idle || State == EnemyState.Patrol || State == EnemyState.Suspicious
+                    || State == EnemyState.Investigating || State == EnemyState.Searching;
+            }
+        }
+
+        public static EnemyAI Spawn(Transform parent, EnemyData data, EnemySpawnPoint spawn, float accuracyMultiplier, float reactionMultiplier)
+        {
+            var go = new GameObject(data.displayName);
             go.transform.SetParent(parent, false);
             go.transform.SetPositionAndRotation(spawn.position, Quaternion.Euler(0f, spawn.yaw, 0f));
 
@@ -64,24 +79,38 @@ namespace Swat
             go.AddComponent<NavMeshAgent>();
 
             var ai = go.AddComponent<EnemyAI>();
-            ai.data = data;
+            ai.Data = data;
             ai.bodyCollider = collider;
+            ai.reactionMultiplier = reactionMultiplier;
             ai.mover = go.AddComponent<AgentMover>();
             ai.mover.Init(data.walkSpeed, data.runSpeed);
             ai.health = go.AddComponent<EnemyHealth>();
-            ai.health.Init(data.maxHealth, ai);
+            ai.health.Init(data, ai);
 
-            var parts = CharacterFactory.Build(go.transform, data.shirtColor, new Color(0.15f, 0.15f, 0.17f), CharacterFactory.RandomSkin(),
-                new Color(0.08f, 0.08f, 0.09f), Color.red, true, false);
+            var look = new Appearance
+            {
+                shirt = data.shirtColor,
+                pants = data.pantsColor,
+                skin = CharacterFactory.RandomSkin(),
+                headwear = data.headwear == 3 ? new Color(0.12f, 0.12f, 0.13f) : new Color(0.08f, 0.08f, 0.09f),
+                head = data.headwear == 0 ? HeadStyle.Hair : data.headwear == 1 ? HeadStyle.Cap : data.headwear == 2 ? HeadStyle.Balaclava : HeadStyle.Helmet,
+                vestOn = data.damageReduction > 0.2f,
+                vest = new Color(0.12f, 0.12f, 0.12f),
+                ring = Color.red,
+                armed = data.armed,
+            };
+            var parts = CharacterFactory.Build(go.transform, look);
+            if (data.armed)
+                CharacterFactory.SetWeapon(parts, GameData.Weapon(data.archetype == EnemyArchetype.Nervous ? "pistol_bk6" : data.archetype == EnemyArchetype.Armored ? "rifle_service" : "smg_compact"), null);
             ai.body = go.AddComponent<EnemyController>();
-            ai.body.Init(parts, ai.mover);
+            ai.body.Init(parts, ai.mover, data.armed);
             ai.weapon = go.AddComponent<EnemyWeapon>();
-            ai.weapon.Init(data, parts.muzzle);
+            ai.weapon.Init(data, parts.muzzle, accuracyMultiplier);
 
             ai.post = spawn.position;
             ai.postYaw = spawn.yaw;
             ai.patrol = spawn.patrol ?? new Vector3[0];
-            ai.lastKnownPlayer = spawn.position;
+            ai.lastKnown = spawn.position;
             ai.SetState(EnemyState.Idle);
             ai.idleUntil = Time.time + Random.Range(0.5f, 3f);
             Shapes.SetLayer(go, Layers.Characters);
@@ -90,24 +119,25 @@ namespace Swat
 
         void SetState(EnemyState next)
         {
+            if (State == EnemyState.Hiding && next != EnemyState.Hiding) body.SetHiding(false);
             State = next;
             stateStart = Time.time;
         }
 
         // ---- Every frame: turning and shooting ----
 
-        public void FrameUpdate(float dt, PlayerController player)
+        public void FrameUpdate(float dt)
         {
-            body.Animate();
+            body.Animate(dt);
             switch (State)
             {
                 case EnemyState.Attacking:
-                    if (player == null) break;
-                    mover.Face(player.Position, 360f, dt);
-                    if (seesPlayer && FacingWithin(player.Position, 15f)) weapon.TryFire(player);
+                    if (target == null || !target.IsAlive) break;
+                    mover.Face(target.Position, 360f, dt);
+                    if (Data.armed && FacingWithin(target.Position, 15f)) weapon.TryFire(target);
                     break;
                 case EnemyState.Alert:
-                    mover.Face(lastKnownPlayer, 300f, dt);
+                    mover.Face(lastKnown, 300f, dt);
                     break;
                 case EnemyState.Suspicious:
                     mover.Face(noisePosition, 200f, dt);
@@ -130,25 +160,37 @@ namespace Swat
 
         // ---- A few times a second: perception and decisions ----
 
-        public void Think(PlayerController player)
+        public void Think()
         {
-            if (State == EnemyState.Dead || State == EnemyState.Arrested || State == EnemyState.Surrendered) return;
+            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            mover.TrackProgress();
+            if (mover.IsStuck) mover.Stop();
+
             if (State == EnemyState.Stunned)
             {
                 if (Time.time >= stunUntil)
                 {
-                    body.SetStunned(false);
-                    BeginSearch(lastKnownPlayer, 8f);
+                    body.SetStunned(false, Data.armed);
+                    if (Data.armed) BeginSearch(lastKnown, 8f);
+                    else BeginFlee(lastKnown);
                 }
                 return;
             }
 
-            seesPlayer = player != null && player.Health.IsAlive && CanSee(player);
-            if (seesPlayer)
+            var seen = FindVisibleTarget();
+            if (seen != null)
             {
-                lastKnownPlayer = player.Position;
+                target = seen;
+                lastKnown = seen.Position;
                 lastSeenTime = Time.time;
                 ReactToSighting();
+            }
+
+            if (alarmCallAt > 0f && Time.time >= alarmCallAt)
+            {
+                alarmCallAt = -1f;
+                var alarm = AlarmSystem.Instance;
+                if (alarm != null && alarm.State == AlarmState.Armed) alarm.Trigger(Position, "a guard radioed for help");
             }
 
             switch (State)
@@ -185,26 +227,39 @@ namespace Swat
                 case EnemyState.Alert:
                     if (Time.time >= reactionDone)
                     {
-                        if (seesPlayer) StartAttack();
+                        if (ShouldFlee()) BeginFlee(lastKnown);
+                        else if (seen != null) StartAttack();
                         else StartChase();
                     }
                     break;
 
                 case EnemyState.Chasing:
-                    if (mover.HasArrived || StateTime > 20f) BeginSearch(lastKnownPlayer, 10f);
+                    if (mover.HasArrived || StateTime > 20f) BeginSearch(lastKnown, 10f);
                     break;
 
                 case EnemyState.Attacking:
-                    if (!seesPlayer && Time.time - lastSeenTime > 1.2f)
+                    if (seen == null && Time.time - lastSeenTime > 1.2f)
                     {
                         StartChase();
                         break;
                     }
+                    if (Data.erratic && Time.time > nextErratic)
+                    {
+                        // Nervous suspects shuffle around unpredictably while shooting.
+                        nextErratic = Time.time + Random.Range(1f, 2.5f);
+                        Vector3 point;
+                        if (mover.RandomPointNear(Position, 2.5f, out point)) mover.MoveTo(point, true);
+                    }
                     if (Time.time >= nextCoverCheck)
                     {
                         nextCoverCheck = Time.time + Random.Range(2f, 4f);
+                        if (health.Fraction < 0.35f && Random.value < Data.fleeChance)
+                        {
+                            BeginFlee(lastKnown);
+                            break;
+                        }
                         bool wantsCover = health.Fraction < 0.6f || Random.value < 0.25f;
-                        if (wantsCover && AIManager.Instance.FindCover(Position, lastKnownPlayer, 9f, out coverPoint))
+                        if (wantsCover && CoverPoint.Find(Position, lastKnown, 9f, out coverPoint))
                         {
                             SetState(EnemyState.TakingCover);
                             coverWaitUntil = 0f;
@@ -217,7 +272,7 @@ namespace Swat
                     if (mover.HasArrived)
                     {
                         if (coverWaitUntil <= 0f) coverWaitUntil = Time.time + Random.Range(1.5f, 3f);
-                        if (seesPlayer) StartAttack();
+                        if (seen != null) StartAttack();
                         else if (Time.time > coverWaitUntil) StartChase();
                     }
                     else if (StateTime > 6f)
@@ -238,27 +293,56 @@ namespace Swat
                         if (mover.RandomPointNear(searchCenter, 5f, out point)) mover.MoveTo(point, false);
                     }
                     break;
+
+                case EnemyState.Fleeing:
+                    if (IsLeader && Vector3.Distance(Position, fleeTarget) < 1.5f && GameManager.Instance.Level.escapePoints.Count > 0)
+                    {
+                        Escape();
+                        break;
+                    }
+                    if (mover.HasArrived || StateTime > 12f)
+                    {
+                        SetState(EnemyState.Hiding);
+                        mover.Stop();
+                        body.SetHiding(true);
+                    }
+                    break;
+
+                case EnemyState.Hiding:
+                    // Cornered: an armed suspect who is found up close may fight back.
+                    if (seen != null && Data.armed && Vector3.Distance(seen.Position, Position) < 4f && Random.value < 0.3f)
+                    {
+                        body.SetHiding(false);
+                        StartAttack();
+                    }
+                    break;
             }
         }
 
-        bool CanSee(PlayerController player)
+        ICombatTarget FindVisibleTarget()
         {
-            Vector3 eye = transform.position + Vector3.up * 1.6f;
-            Vector3 target = player.ChestPosition;
-            Vector3 to = target - eye;
-            float distance = to.magnitude;
+            Vector3 eye = Head;
+            float fov = IsCalm ? Data.fieldOfView : 300f;
+            ICombatTarget best = null;
+            float bestDistance = float.MaxValue;
+            foreach (var candidate in AIManager.Instance.PoliceTargets)
+            {
+                if (!candidate.IsAlive) continue;
+                float distance = Vector3.Distance(candidate.Position, Position);
+                if (distance > Data.detectionRange * 1.3f || distance >= bestDistance) continue;
+                float visibility = AIVisibility.VisibilityOf(candidate.Position, candidate.IsCrouched, candidate.FlashlightOn);
+                if (!AIVisibility.CanSee(eye, transform.forward, fov, Data.detectionRange, candidate.ChestPosition, visibility)) continue;
+                best = candidate;
+                bestDistance = distance;
+            }
+            return best;
+        }
 
-            float range = data.detectionRange;
-            if (SmokeCloud.Contains(player.Position)) range *= 0.3f;
-            if (distance > range) return false;
-
-            // Calm suspects only see what's in front of them; alerted ones look all around.
-            Vector3 flat = new Vector3(to.x, 0f, to.z);
-            float fov = IsCalm ? data.fieldOfView : 300f;
-            if (distance > 2.5f && Vector3.Angle(transform.forward, flat) > fov * 0.5f) return false;
-
-            if (Physics.Linecast(eye, target, Layers.WorldMask, QueryTriggerInteraction.Ignore)) return false;
-            return !SmokeCloud.Blocks(eye, target);
+        bool ShouldFlee()
+        {
+            if (!Data.armed) return true;
+            if (IsLeader) return Random.value < Data.fleeChance;
+            return Data.archetype == EnemyArchetype.Nervous && Random.value < Data.fleeChance * 0.5f;
         }
 
         void ReactToSighting()
@@ -267,16 +351,17 @@ namespace Swat
             {
                 SetState(EnemyState.Alert);
                 mover.Stop();
-                reactionDone = Time.time + data.reactionTime * (everAlerted ? 0.5f : 1f) * Random.Range(0.85f, 1.2f);
+                reactionDone = Time.time + Data.reactionTime * reactionMultiplier * (everAlerted ? 0.5f : 1f) * Random.Range(0.85f, 1.2f);
                 body.ShowAlert(1.5f);
                 if (!everAlerted)
                 {
                     AudioManager.Play(Sound.Detect, Position + Vector3.up * 2f, 0.7f);
-                    AIManager.Instance.Callout(this, lastKnownPlayer);
+                    AIManager.Instance.Callout(this, lastKnown, Data.callForHelpRadius);
+                    if (Data.archetype == EnemyArchetype.Guard && Random.value < 0.4f) alarmCallAt = Time.time + 2.5f;
                 }
                 everAlerted = true;
             }
-            else if (State == EnemyState.Chasing)
+            else if (State == EnemyState.Chasing && Data.armed)
             {
                 StartAttack();
             }
@@ -284,6 +369,11 @@ namespace Swat
 
         void StartAttack()
         {
+            if (!Data.armed)
+            {
+                BeginFlee(lastKnown);
+                return;
+            }
             SetState(EnemyState.Attacking);
             mover.Stop();
             weapon.ResetBurst();
@@ -292,8 +382,13 @@ namespace Swat
 
         void StartChase()
         {
+            if (!Data.armed)
+            {
+                BeginSearch(lastKnown, 6f);
+                return;
+            }
             SetState(EnemyState.Chasing);
-            mover.MoveTo(lastKnownPlayer, true);
+            mover.MoveTo(lastKnown, true);
         }
 
         void BeginSearch(Vector3 center, float duration)
@@ -302,6 +397,54 @@ namespace Swat
             searchCenter = center;
             searchDuration = duration;
             mover.MoveTo(center, false);
+        }
+
+        // Run away from the threat. Leaders head for an escape route.
+        void BeginFlee(Vector3 threat)
+        {
+            SetState(EnemyState.Fleeing);
+            body.ShowAlert(1f);
+            if (IsLeader)
+            {
+                float best = float.MaxValue;
+                bool found = false;
+                foreach (var point in GameManager.Instance.Level.escapePoints)
+                {
+                    if (!mover.CanReach(point)) continue;
+                    float distance = Vector3.Distance(point, Position);
+                    if (distance < best)
+                    {
+                        best = distance;
+                        fleeTarget = point;
+                        found = true;
+                    }
+                }
+                if (found)
+                {
+                    mover.MoveTo(fleeTarget, true);
+                    UIManager.Notify("The leader is trying to escape!", true);
+                    return;
+                }
+            }
+            Vector3 away = Position - threat;
+            away.y = 0f;
+            Vector3 goal = Position + (away.sqrMagnitude > 0.01f ? away.normalized : -transform.forward) * 8f;
+            if (mover.RandomPointNear(goal, 3f, out fleeTarget)) mover.MoveTo(fleeTarget, true);
+            else
+            {
+                SetState(EnemyState.Hiding);
+                body.SetHiding(true);
+            }
+        }
+
+        void Escape()
+        {
+            Escaped = true;
+            mover.Disable();
+            bodyCollider.enabled = false;
+            body.Parts.SetVisible(false);
+            gameObject.SetActive(false);
+            MissionManager.Instance.OnLeaderEscaped(this);
         }
 
         void ReturnToPost()
@@ -323,19 +466,20 @@ namespace Swat
 
         public void HearNoise(Vector3 position, NoiseKind kind)
         {
-            if (!IsThreat || State == EnemyState.Stunned || State == EnemyState.Attacking || State == EnemyState.Alert) return;
+            if (IsNeutralized || State == EnemyState.Surrendering || State == EnemyState.Stunned || State == EnemyState.Attacking
+                || State == EnemyState.Alert || State == EnemyState.Fleeing || State == EnemyState.Hiding) return;
 
             bool fromAlly = kind == NoiseKind.EnemyGunshot || kind == NoiseKind.Callout;
-            // Friends' gunfire brings calm suspects running, but doesn't distract ones already tracking the officer.
             if (fromAlly && !IsCalm) return;
-            bool loud = fromAlly || kind == NoiseKind.Gunshot || kind == NoiseKind.Explosion;
+            bool loud = fromAlly || kind == NoiseKind.Gunshot || kind == NoiseKind.Explosion || kind == NoiseKind.Alarm;
             if (loud)
             {
-                lastKnownPlayer = position;
+                lastKnown = position;
                 if (State == EnemyState.TakingCover) return;
                 if (!everAlerted) body.ShowAlert(1f);
                 everAlerted = true;
-                StartChase();
+                if (!Data.armed && kind != NoiseKind.Alarm) BeginFlee(position);
+                else StartChase();
             }
             else if (IsCalm && State != EnemyState.Investigating)
             {
@@ -345,91 +489,123 @@ namespace Swat
             }
         }
 
+        public void OnAlarm(Vector3 source)
+        {
+            if (!Data.respondsToAlarms || !IsCalm) return;
+            noisePosition = source;
+            HearNoise(source, NoiseKind.Alarm);
+        }
+
         public void Stun(float duration)
         {
-            if (!IsThreat) return;
+            if (IsNeutralized || State == EnemyState.Surrendering) return;
             SetState(EnemyState.Stunned);
             mover.Stop();
             stunUntil = Time.time + duration;
-            body.SetStunned(true);
+            body.SetStunned(true, Data.armed);
         }
 
-        // The officer shouted "Police! Drop your weapon!"
-        public void HearShout(PlayerController player)
+        // An officer shouted "Police! Show me your hands!"
+        public void HearShout(Vector3 from, bool byPlayer)
         {
-            if (!IsThreat || Time.time < nextShoutCheck) return;
+            if (IsNeutralized || State == EnemyState.Surrendering || Time.time < nextShoutCheck) return;
             nextShoutCheck = Time.time + 1f;
 
-            float chance = data.surrenderChance;
+            float chance = Data.surrenderChance;
             if (State == EnemyState.Stunned) chance += 0.5f;
             if (!everAlerted) chance += 0.25f;
+            if (State == EnemyState.Hiding) chance += 0.3f;
             if (health.Fraction < 0.5f) chance += 0.25f;
             if (State == EnemyState.Attacking && health.Fraction > 0.7f) chance -= 0.15f;
+            if (AIManager.Instance.PoliceNear(Position, 6f) >= 2) chance += 0.1f; // outnumbered
 
             if (Random.value < chance)
             {
                 Surrender();
                 return;
             }
-            lastKnownPlayer = player.Position;
+            lastKnown = from;
             if (IsCalm) ReactToSighting();
         }
 
         void Surrender()
         {
-            SetState(EnemyState.Surrendered);
+            SetState(EnemyState.Surrendering);
             mover.Stop();
             body.SetSurrendered();
-            UIManager.Notify("Suspect surrendered. Press E to arrest them.");
+            UIManager.Notify(Data.displayName + " surrendered. Restrain them (E).");
+            MissionManager.Instance.Report(ObjectiveType.TrainingRestrain, 0);
         }
 
-        public bool CanInteract(PlayerController player)
-        {
-            return State == EnemyState.Surrendered;
-        }
+        public float InteractDuration(PlayerController player) { return 1f; }
+        public bool CanInteract(PlayerController player) { return State == EnemyState.Surrendering; }
+        public void Interact(PlayerController player) { Restrain(true); }
 
-        public void Interact(PlayerController player)
+        public void Restrain(bool byPlayer)
         {
-            if (State != EnemyState.Surrendered) return;
-            SetState(EnemyState.Arrested);
+            if (State != EnemyState.Surrendering) return;
+            SetState(EnemyState.Restrained);
             mover.Disable();
-            body.SetArrested();
+            body.SetRestrained();
             AudioManager.Play(Sound.Click, Position, 0.8f);
-            MissionManager.Instance.OnSuspectArrested();
+            MissionManager.Instance.OnSuspectRestrained(this);
+            if (!Data.armed && Data.archetype != EnemyArchetype.TrainingDummy)
+            {
+                // Questioning an unarmed suspect reveals who else is nearby.
+                TacticalIntel.Instance.RevealAround(Position, 15f, 20f);
+                UIManager.Notify("The suspect tells you where the others are (marked on the map)");
+            }
         }
 
         public void OnHit(DamageInfo info, bool lethal)
         {
-            if (info.attacker == Team.Police && (State == EnemyState.Surrendered || State == EnemyState.Arrested))
-                MissionManager.Instance.OnUnauthorizedForce();
+            bool unjustified = State == EnemyState.Surrendering || State == EnemyState.Restrained
+                || (!Data.armed && !info.lessLethal) || Data.archetype == EnemyArchetype.TrainingDummy;
+            if (info.attacker == Team.Police && unjustified) MissionManager.Instance.OnUnauthorizedForce(Data.displayName);
 
             if (lethal)
             {
                 Die();
                 return;
             }
-            if (!IsThreat) return;
+            if (IsNeutralized || State == EnemyState.Surrendering) return;
+
+            if (info.lessLethal && info.stun > 0f && Data.archetype != EnemyArchetype.Armored)
+            {
+                Stun(info.stun);
+                if (Random.value < Data.surrenderChance + 0.35f) Surrender();
+                return;
+            }
 
             var player = GameManager.Instance.Player;
-            if (player != null) lastKnownPlayer = player.Position;
+            if (player != null) lastKnown = player.Position;
+            everAlerted = true;
             if (IsCalm)
             {
                 SetState(EnemyState.Alert);
                 mover.Stop();
                 reactionDone = Time.time + 0.25f;
                 body.ShowAlert(1.5f);
-                everAlerted = true;
+            }
+            else if (!Data.armed && State != EnemyState.Fleeing)
+            {
+                BeginFlee(lastKnown);
             }
         }
 
         void Die()
         {
-            bool wasArrested = State == EnemyState.Arrested;
+            bool wasRestrained = State == EnemyState.Restrained;
             SetState(EnemyState.Dead);
             mover.Disable();
             bodyCollider.enabled = false;
             body.SetDead();
-            if (!wasArrested) MissionManager.Instance.OnSuspectKilled();
+            MissionManager.Instance.OnSuspectDown(this, wasRestrained);
+        }
+
+        public void SetSeen(bool visible)
+        {
+            body.Parts.SetVisible(visible || State == EnemyState.Dead || State == EnemyState.Restrained);
         }
     }
 }

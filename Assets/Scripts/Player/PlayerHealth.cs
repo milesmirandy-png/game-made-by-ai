@@ -2,38 +2,28 @@ using UnityEngine;
 
 namespace Swat
 {
-    public class PlayerHealth : MonoBehaviour, IDamageable
+    public class PlayerHealth : OperatorHealth
     {
-        [SerializeField] float maxHealth = 100f;
-
-        public float Current { get; private set; }
-        public float Max { get { return maxHealth; } }
-        public float Fraction { get { return Current / maxHealth; } }
-        public Team Team { get { return Team.Police; } }
-        public bool IsAlive { get { return Current > 0f; } }
-
         // Read by the HUD for screen effects.
         public float DamageFlash { get; private set; }
         public float Blind { get; private set; }
+        public Vector3 LastHitFrom { get; private set; }
+        public float HitIndicator { get; private set; }
 
-        void Awake()
+        protected override void OnDamaged(DamageInfo info, float amount)
         {
-            Current = maxHealth;
+            DamageFlash = 1f;
+            HitIndicator = 1f;
+            LastHitFrom = transform.position - info.direction * 5f;
+            AudioManager.Play2D(Sound.Hurt, 0.7f);
+            GameManager.Instance.CameraRig.Shake(0.25f);
         }
 
-        public void TakeDamage(DamageInfo info)
+        protected override void OnDowned()
         {
-            var game = GameManager.Instance;
-            if (!IsAlive || info.attacker == Team.Police || game == null || !game.IsPlaying) return;
-
-            Current = Mathf.Max(0f, Current - info.amount);
-            DamageFlash = 1f;
-            AudioManager.Play2D(Sound.Hurt, 0.7f);
-            game.CameraRig.Shake(0.25f);
-            if (IsAlive) return;
-
-            GetComponent<PlayerController>().Parts.Fall();
-            game.OnPlayerDied();
+            var player = GetComponent<PlayerController>();
+            player.Animator.SetDown(true);
+            GameManager.Instance.OnPlayerDown();
         }
 
         public void Flashbang(float amount)
@@ -41,10 +31,12 @@ namespace Swat
             Blind = Mathf.Max(Blind, Mathf.Clamp01(amount));
         }
 
-        void Update()
+        protected override void Update()
         {
+            base.Update();
             float dt = Time.deltaTime;
             if (DamageFlash > 0f) DamageFlash = Mathf.MoveTowards(DamageFlash, 0f, dt * 2f);
+            if (HitIndicator > 0f) HitIndicator = Mathf.MoveTowards(HitIndicator, 0f, dt);
             if (Blind > 0f) Blind = Mathf.MoveTowards(Blind, 0f, dt * 0.35f);
         }
     }
