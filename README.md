@@ -1,94 +1,139 @@
-# SWAT: Breach & Clear
+# SWAT: Clear the Building
 
-A first-person SWAT shooter made in Unity. You're a SWAT officer sent into a
-building taken over by armed suspects. Breach the front door, clear every room,
-rescue the hostages and arrest (or take down) the suspects.
+A lightweight top-down tactical SWAT game made in Unity. Lead the raid on an
+office building: breach doors, throw flashbangs, rescue civilians, and arrest
+or neutralize armed suspects. Then get back to the van.
 
-Every mission builds a new random building: a warehouse, apartment building or
-office. Each mission you beat makes the next one bigger, with more suspects who
-are better shots.
+It's built to run on anything, from a potato laptop to a gaming PC. The game
+picks a graphics level for your hardware and turns itself down if it starts
+to stutter.
 
-The whole game is made from code. There are no models, textures, sounds or
-scenes to set up. The buildings, people, guns and sound effects are all
-created when you press Play.
+## How to Run
 
-## How to play it
-
-You need **Unity 2022.3 or newer** (Unity 6 recommended) from
-[Unity Hub](https://unity.com/download).
+You need **Unity 2022.3 or newer** (Unity 6 recommended), installed through
+[Unity Hub](https://unity.com/download). No extra packages are needed.
 
 **Option A: open this folder as a project**
 
-1. Download this repository (on GitHub: **Code → Download ZIP**, then unzip it).
-2. In Unity Hub, click **Add → Add project from disk** and pick the unzipped folder.
-3. Open it. If Hub asks which editor version to use, any 2022.3+ or Unity 6 version is fine.
-4. When the editor opens, press **Play** ▶.
+1. Download this repository (on GitHub: **Code → Download ZIP**) and unzip it.
+2. In Unity Hub click **Add → Add project from disk** and pick the unzipped folder.
+3. If Hub says the editor version isn't installed, click the version and choose the Unity version you have.
+4. When the editor has opened, press **Play** ▶ at the top.
 
-**Option B: put it in a project you already have**
+**Option B: copy it into a new project**
 
-1. In Unity Hub, create a new project with the **Universal 3D** or **3D (Built-In)** template.
-2. Copy the `Assets/SWAT` folder from this repository into your project's `Assets` folder.
-3. Press **Play** ▶ in the default scene.
+1. In Unity Hub create a new project (the **Universal 3D** or **3D (Built-In)** template both work).
+2. Copy everything inside this repository's `Assets` folder into your project's `Assets` folder.
+3. Press **Play** ▶.
 
-The game starts itself in whatever scene is open, so you don't need to
-drag anything into the scene. An empty scene works best.
+The game builds the level when you press Play, in whatever scene is open, so
+there is nothing to drag into the scene. Click inside the Game view so it gets
+your keyboard and mouse.
 
-Click inside the Game view so it captures the mouse.
+If nothing happens when you press Play, open **Window → General → Console** and
+look for red error messages.
 
 ## Controls
 
 | Key | Action |
 | --- | --- |
 | **W A S D** | Move |
-| **Mouse** | Look |
-| **Left click** | Shoot |
-| **Right click** | Aim down the sight |
-| **Shift** | Sprint |
+| **Mouse** | Aim |
+| **Left click** | Fire, or use the selected equipment |
 | **R** | Reload |
-| **E** | Breach the door / restrain a suspect / rescue a hostage |
+| **Shift** | Sprint (loud: suspects hear you) |
+| **E** | Open/close doors, rescue civilians, arrest surrendered suspects |
+| **Q** | Switch to the next weapon or equipment |
+| **1 - 7** | Pick a slot: Pistol, SMG, Assault Rifle, Shotgun, Flashbang, Smoke, Breaching Charge |
 | **F** | Shout "Police! Drop your weapon!" |
-| **G** | Throw a flashbang |
-| **Esc** | Pause |
+| **Mouse wheel** | Zoom |
+| **Esc** | Pause menu (graphics settings, restart, quit) |
+| **F3** | Show FPS |
 
-## How it works
+## The mission
 
-- **Breach the door** with **E**. It's loud, so nearby suspects will turn
-  towards the door.
-- **Flashbangs** (**G**) stun every suspect who can see the blast for a few
-  seconds. Don't look at it yourself.
-- **Shout** (**F**) to make suspects surrender. Suspects who haven't spotted
-  you yet, are stunned, or are wounded give up much more often. When a suspect
-  puts their hands up, walk over and press **E** to restrain them.
-- **Hostages** kneel with their hands up. Walk up to them and press **E** to
-  rescue them.
-- **Head shots** take a suspect down in one hit.
-- The mission is complete when every suspect is restrained or down and every
-  hostage is rescued.
-- **Don't shoot hostages** (instant mission fail) or suspects who have
-  surrendered (big penalty).
+Objectives:
 
-At the end of each mission you get a score and a rating from S to F. Arrests
-earn more points than kills, and you also get points for health left and
-finishing quickly.
+1. Enter the building
+2. Rescue civilians (yellow rings)
+3. Neutralize or arrest the suspects (red rings)
+4. Secure the Storage Room and the Security Room (stand inside with no armed suspects left)
+5. Return to the SWAT van (blue zone)
+
+Tips:
+
+- **Doors with yellow stripes are locked.** Stand next to one and press **E**
+  (or select the breaching charge with **7** and click) to blow it open. Step
+  back: the blast hurts.
+- **Flashbangs** stun every suspect who can see the blast. **Smoke** blocks
+  their view.
+- **Shouting** makes suspects surrender, especially ones who haven't seen you,
+  are stunned, or are hurt. Walk up to a surrendered suspect and press **E** to arrest them.
+- Suspects hear gunshots, sprinting and doors. Walking is quiet.
+- Scoring rewards tactics, not body count. Objectives, rescues and arrests earn
+  points. Killing a suspect earns nothing extra. Hurting civilians or
+  surrendered suspects costs points.
+
+## Runs on anything
+
+| Tier | What changes |
+| --- | --- |
+| **Potato** | World drawn at half resolution (HUD stays sharp), no shadows, no dynamic lights, fewer particles, AI thinks less often |
+| **Low** | 75% resolution, no shadows |
+| **Medium** | Full resolution, hard shadows, muzzle-flash lights |
+| **High** | Soft shadows, 2x anti-aliasing, VSync |
+| **Ultra** | Longer shadows, 4x anti-aliasing, more particles |
+
+- The first launch picks a tier from your graphics card, memory and CPU.
+- In **Auto** mode, if the frame rate stays under 40 FPS for a few seconds,
+  the game drops a tier and tells you.
+- You can pick a tier yourself on the briefing screen or in the pause menu.
+  The choice is saved.
+
+Under the hood:
+- The level is plain boxes with one shared material per colour.
+- Bullets are raycasts, not physics objects.
+- Effects, sounds and grenades are reused from pools instead of being created and destroyed.
+- All AI runs from one update loop, and each character only "thinks" a few times a second.
+
+## Project layout
+
+```
+Assets/
+├── Scenes/              (optional saved scene, see below)
+├── Scripts/
+│   ├── Core/            GameManager, GameBootstrap, CameraController, QualityManager,
+│   │                    AudioManager, EffectsManager, GameInput, CharacterFactory, Shapes
+│   ├── Player/          PlayerController, PlayerHealth, PlayerInteraction
+│   ├── Weapons/         WeaponController, Weapon, WeaponData, EquipmentData,
+│   │                    ThrownGrenade, SmokeCloud, Equipment
+│   ├── AI/              AIManager, EnemyAI (state machine), EnemyController, EnemyHealth,
+│   │                    EnemyWeapon, EnemyData, CivilianAI, AgentMover
+│   ├── Missions/        MissionManager, Objective
+│   ├── World/           LevelBuilder, LevelLayout, DoorController, NavMeshBaker
+│   ├── UI/              UIManager
+│   └── Editor/          SWAT menu (save a mission scene)
+├── ScriptableObjects/Resources/
+│   ├── Weapons/         Pistol, SMG, Assault Rifle, Shotgun
+│   ├── Equipment/       Flashbang, Smoke Grenade, Breaching Charge
+│   └── Enemies/         Suspect, Heavy
+├── Prefabs/ Materials/ Models/ Audio/   (placeholders, everything is generated by code for now)
+```
 
 ## Changing things
 
-All the code is in `Assets/SWAT/Scripts`:
+- **Weapons, equipment and enemies:** click the assets in
+  `Assets/ScriptableObjects/Resources` and change the numbers in the Inspector
+  (damage, fire rate, magazine size, spread, recoil, enemy accuracy, reaction
+  time and so on). To add a weapon, use **Assets → Create → SWAT → Weapon** and
+  save it in the `Weapons` folder.
+- **The building:** `Scripts/World/LevelBuilder.cs`. Rooms, walls, doors,
+  furniture, suspects and civilians are each one line. Copy
+  `BuildClearTheBuilding` to make a new building.
+- **Camera:** select the Main Camera while playing to tweak angle, zoom limits and look-ahead.
 
-| File | What it does |
-| --- | --- |
-| `GameManager.cs` | Starts the game, mission flow, scoring, HUD and menus |
-| `LevelGenerator.cs` | Builds the random buildings, furniture, vehicles and street |
-| `PlayerController.cs` | Movement, mouse look, health, shout and flashbang |
-| `Weapon.cs` | The rifle: damage, fire rate, recoil, reloading, aiming |
-| `Suspect.cs` | Suspect AI: spotting you, shooting, surrendering |
-| `Hostage.cs` | Hostages |
-| `Flashbang.cs`, `BreachDoor.cs` | Flashbangs and the front door |
-| `Sfx.cs` | Sound effects (generated from code) |
-| `GameInput.cs` | Keyboard and mouse (works with both of Unity's input systems) |
+## Building a standalone game
 
-Some easy things to try:
-
-- Mouse too fast or slow? Change `lookSensitivity` in `PlayerController.cs`.
-- Want a bigger magazine or more damage? Edit `magazineSize` and `damage` in `Weapon.cs`.
-- Suspects too good? Lower `accuracy` in `LevelGenerator.Populate`.
+1. Use the menu **SWAT → Create Mission Scene**. It saves
+   `Assets/Scenes/Mission01_ClearTheBuilding.unity` and adds it to Build Settings.
+2. **File → Build Settings → Build**.
