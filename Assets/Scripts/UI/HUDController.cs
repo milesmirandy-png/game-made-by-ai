@@ -10,26 +10,59 @@ namespace Swat
     // over squadmates and waypoints, and the crosshair.
     public class HUDController
     {
+        readonly TacticalMapUI minimap = new TacticalMapUI();
+        // The health bar keeps a pale "lost health" segment for a moment after damage.
+        float healthGhost = -1f, ghostHoldUntil;
+
         public void Draw(GameManager game)
         {
             var player = game.Player;
             if (player == null) return;
             float w = UITheme.Width, h = UITheme.Height;
+            var settings = SaveManager.Settings;
 
-            // Screen effects (kept mild: no gore, just tints).
-            if (player.Health.Blind > 0f) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(1f, 1f, 1f, player.Health.Blind * 0.92f));
-            if (player.Health.DamageFlash > 0f) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.7f, 0f, 0f, player.Health.DamageFlash * 0.22f));
+            // Screen effects (kept mild: no gore, just tints; "reduce flashes" softens them further).
+            bool reduce = settings.reduceFlashes;
+            if (player.Health.Blind > 0f) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(reduce ? 0.85f : 1f, reduce ? 0.87f : 1f, reduce ? 0.9f : 1f, player.Health.Blind * (reduce ? 0.6f : 0.92f)));
+            if (player.Health.DamageFlash > 0f) DrawDamageEdges(player.Health.DamageFlash * (reduce ? 0.45f : 1f));
             if (!player.IsAlive) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.2f, 0f, 0f, 0.4f));
             DrawHitIndicator(game, player);
             DrawWorldLabels(game);
 
             DrawObjectives(game);
-            DrawStatusTopRight(game);
-            DrawSquad(game);
+            float y = 30f;
+            if (settings.minimap && !game.MapOpen && !game.PlanningMode)
+            {
+                float size = 220f * Mathf.Clamp(settings.minimapScale, 0.75f, 1.5f);
+                var rect = new Rect(w - size - 20f, 18f, size, size);
+                minimap.DrawMinimap(game, rect, settings.minimapOpacity);
+                y = rect.yMax + 12f;
+            }
+            y = DrawStatusTopRight(game, y);
+            DrawSquad(game, Mathf.Max(150f, y + 8f));
             DrawPlayer(game, player);
             DrawWeapon(player);
             DrawPrompt(game, player);
             DrawRadio();
+        }
+
+        // Damage shows as a soft red tint creeping in from the screen edges rather than a full-screen flash.
+        static void DrawDamageEdges(float amount)
+        {
+            float w = UITheme.Width, h = UITheme.Height;
+            var color = new Color(0.75f, 0.05f, 0.03f, Mathf.Clamp01(amount) * 0.55f);
+            float edge = Mathf.Min(w, h) * 0.16f;
+            // Gradient shading is opaque at the top of the rect when "upward" is true.
+            UITheme.Shade(new Rect(0f, 0f, w, edge), color, true);
+            UITheme.Shade(new Rect(0f, h - edge, w, edge), color, false);
+            if (Event.current.type != EventType.Repaint) return;
+            // Left and right edges: the same gradient turned a quarter turn.
+            var matrix = GUI.matrix;
+            GUI.matrix = matrix * Matrix4x4.TRS(new Vector3(0f, h, 0f), Quaternion.Euler(0f, 0f, -90f), Vector3.one);
+            UITheme.Shade(new Rect(0f, 0f, h, edge), color, true);
+            GUI.matrix = matrix * Matrix4x4.TRS(new Vector3(w, 0f, 0f), Quaternion.Euler(0f, 0f, 90f), Vector3.one);
+            UITheme.Shade(new Rect(0f, 0f, h, edge), color, true);
+            GUI.matrix = matrix;
         }
 
         // ---- Objectives ----
@@ -74,14 +107,14 @@ namespace Swat
 
         // ---- Top right ----
 
-        void DrawStatusTopRight(GameManager game)
+        float DrawStatusTopRight(GameManager game, float y)
         {
             float w = UITheme.Width;
-            float y = 30f;
             var alarm = game.Level.alarm;
             if (alarm != null && alarm.State == AlarmState.Triggered)
             {
-                bool flash = Mathf.Repeat(Time.unscaledTime * 2f, 1f) < 0.5f;
+                // Steady red instead of blinking when flashes are reduced.
+                bool flash = !SaveManager.Settings.reduceFlashes && Mathf.Repeat(Time.unscaledTime * 2f, 1f) < 0.5f;
                 var rect = new Rect(w - 250f, y, 230f, 34f);
                 UITheme.Fill(rect, flash ? new Color(UITheme.AlertRed.r, UITheme.AlertRed.g, UITheme.AlertRed.b, 0.85f) : new Color(0.3f, 0.03f, 0.03f, 0.85f));
                 UITheme.Text(rect, "ALARM ACTIVE", 18, Color.white, TextAnchor.MiddleCenter, true);
@@ -100,29 +133,37 @@ namespace Swat
                 y += 24f;
             }
             if (game.Plan != null && game.Plan.powerOutage)
+            {
                 UITheme.ShadowText(new Rect(w - 300f, y, 280f, 24f), "Power out", 15, UITheme.Warn, TextAnchor.UpperRight);
+                y += 24f;
+            }
+            return y;
         }
 
         // ---- Squad ----
 
-        void DrawSquad(GameManager game)
+        void DrawSquad(GameManager game, float y)
         {
             var squad = SquadCommandManager.Instance;
             var officers = squad.Squad;
             float w = UITheme.Width;
-            float y = 150f;
             if (officers.Count == 0) return;
             UITheme.ShadowText(new Rect(w - 330f, y, 310f, 22f), "SQUAD  -  orders to: " + squad.SelectionLabel, 14, UITheme.Accent, TextAnchor.UpperRight, true);
             y += 26f;
             for (int i = 0; i < officers.Count; i++)
             {
                 var officer = officers[i];
+                var id = UITheme.RoleColor(officer.Data.role);
                 var rect = new Rect(w - 330f, y, 310f, 62f);
                 UITheme.Fill(rect, officer.Selected ? new Color(UITheme.AccentDim.r, UITheme.AccentDim.g, UITheme.AccentDim.b, 0.85f) : UITheme.PanelColor);
-                UITheme.Fill(new Rect(rect.x, rect.y, 3f, rect.height), officer.Selected ? UITheme.Accent : UITheme.RoleColor(officer.Data.role));
-                UITheme.RoleIcon(new Rect(rect.x + 10f, rect.y + 10f, 30f, 30f), officer.Data.role);
-                UITheme.Text(new Rect(rect.x + 48f, rect.y + 6f, 170f, 22f), "F" + (i + 1) + "  " + officer.Data.callsign, 16, UITheme.TextColor, TextAnchor.UpperLeft, true);
-                UITheme.Text(new Rect(rect.x + 48f, rect.y + 26f, 250f, 20f), officer.Status, 14, officer.IsAlive ? UITheme.Dim : UITheme.Bad);
+                UITheme.Fill(new Rect(rect.x, rect.y, 3f, rect.height), officer.Selected ? UITheme.Accent : id);
+                // Squad number in the officer's ID colour (matches the armband and marker in the world).
+                var badge = new Rect(rect.x + 10f, rect.y + 8f, 30f, 30f);
+                UITheme.Fill(badge, officer.IsAlive ? id : UITheme.Faint);
+                UITheme.Text(badge, (i + 1).ToString(), 18, new Color(0.03f, 0.04f, 0.06f), TextAnchor.MiddleCenter, true);
+                UITheme.Text(new Rect(rect.x + 48f, rect.y + 6f, 170f, 22f), officer.Data.callsign + "  <color=#7c8798>F" + (i + 1) + "</color>", 16, UITheme.TextColor, TextAnchor.UpperLeft, true);
+                UIIcons.Order(new Rect(rect.x + 48f, rect.y + 27f, 18f, 18f), officer.Order, DoorAction.None, officer.IsAlive ? UITheme.Accent : UITheme.Faint);
+                UITheme.Text(new Rect(rect.x + 70f, rect.y + 26f, 230f, 20f), officer.Status, 14, officer.IsAlive ? UITheme.Dim : UITheme.Bad);
                 UITheme.Bar(new Rect(rect.x + 48f, rect.y + 50f, 250f, 5f), officer.Health.Fraction, HealthColor(officer.Health.Fraction));
                 var weapon = officer.Inventory.Current;
                 UITheme.Text(new Rect(rect.x + 200f, rect.y + 6f, 100f, 22f), weapon.Magazine + "/" + weapon.Reserve, 14, UITheme.Dim, TextAnchor.UpperRight);
@@ -154,7 +195,13 @@ namespace Swat
             UITheme.Text(new Rect(x, rect.y + 28f, cw, 20f), UITheme.RoleName(player.Officer.role) + "  |  " + state + (player.FlashlightOn ? "  |  Light on" : ""), 13, UITheme.Dim);
             var health = player.Health;
             UITheme.Text(new Rect(x, rect.y + 52f, 70f, 18f), "HEALTH", 12, UITheme.Dim, TextAnchor.MiddleLeft, true);
-            UITheme.Bar(new Rect(x + 72f, rect.y + 56f, cw - 120f, 10f), health.Fraction, HealthColor(health.Fraction));
+            var healthRect = new Rect(x + 72f, rect.y + 56f, cw - 120f, 10f);
+            if (healthGhost < health.Fraction || healthGhost < 0f) healthGhost = health.Fraction;
+            else if (healthGhost > health.Fraction && Time.unscaledTime > ghostHoldUntil) healthGhost = Mathf.MoveTowards(healthGhost, health.Fraction, Time.unscaledDeltaTime * 0.5f);
+            if (player.Health.DamageFlash > 0.95f) ghostHoldUntil = Time.unscaledTime + 0.5f;
+            UITheme.Bar(healthRect, health.Fraction, HealthColor(health.Fraction));
+            if (healthGhost > health.Fraction + 0.002f)
+                UITheme.Fill(new Rect(healthRect.x + healthRect.width * health.Fraction, healthRect.y, healthRect.width * (healthGhost - health.Fraction), healthRect.height), new Color(1f, 0.92f, 0.85f, 0.75f));
             UITheme.Text(new Rect(x + cw - 44f, rect.y + 50f, 44f, 20f), Mathf.CeilToInt(health.Current).ToString(), 15, UITheme.TextColor, TextAnchor.MiddleRight, true);
             UITheme.Text(new Rect(x, rect.y + 74f, 70f, 18f), "ARMOR", 12, UITheme.Dim, TextAnchor.MiddleLeft, true);
             UITheme.Bar(new Rect(x + 72f, rect.y + 78f, cw - 120f, 8f), health.ArmorCondition, UITheme.Accent);
@@ -218,12 +265,15 @@ namespace Swat
                 string prompt = current.Prompt;
                 if (!string.IsNullOrEmpty(prompt))
                 {
-                    prompt = prompt.Replace("[E]", "[" + UITheme.KeyFor(InputAction.Interact) + "]");
-                    var rect = new Rect(w * 0.5f - 260f, h - 250f, 520f, 40f);
-                    UITheme.Fill(rect, new Color(0f, 0f, 0f, 0.6f));
-                    UITheme.Text(rect, prompt, 19, UITheme.TextColor, TextAnchor.MiddleCenter, true);
-                    if (interaction.IsInteracting) UITheme.Bar(new Rect(rect.x, rect.yMax, rect.width, 5f), interaction.Progress, UITheme.Accent);
+                    var door = current as DoorController;
+                    DrawPromptBadge(new Vector2(w * 0.5f, h - 250f), prompt, door != null ? door.StatusText : null, interaction.IsInteracting ? interaction.Progress : -1f);
                 }
+            }
+            else
+            {
+                // Doors that can't be used (sealed shut) still explain themselves, without a key prompt.
+                var door = InspectDoor(game, player);
+                if (door != null) UITheme.ShadowText(new Rect(w * 0.5f - 300f, h - 246f, 600f, 24f), door.StatusText, 16, UITheme.Dim, TextAnchor.MiddleCenter);
             }
             // Extraction zone status when close.
             var extraction = game.Level.extraction;
@@ -238,20 +288,79 @@ namespace Swat
             }
         }
 
+        // One consistent prompt: a key cap, the action, a HOLD tag for timed actions,
+        // an optional status line and the hold progress bar.
+        static void DrawPromptBadge(Vector2 anchor, string prompt, string status, float progress)
+        {
+            string text = prompt;
+            bool hold = false;
+            if (text.StartsWith("[E]")) text = text.Substring(3).Trim();
+            if (text.EndsWith("(hold)"))
+            {
+                hold = true;
+                text = text.Substring(0, text.Length - 6).Trim();
+            }
+            string key = GameInput.PromptKey(InputAction.Interact);
+            const int size = 19;
+            float keyWidth = Mathf.Max(30f, UITheme.TextWidth(key, 16, true) + 14f);
+            float textWidth = UITheme.TextWidth(text, size, true);
+            float holdWidth = hold ? 52f : 0f;
+            float width = Mathf.Max(240f, keyWidth + 12f + textWidth + holdWidth + 32f);
+            bool hasStatus = !string.IsNullOrEmpty(status);
+            var rect = new Rect(anchor.x - width * 0.5f, anchor.y, width, hasStatus ? 64f : 44f);
+            UITheme.Fill(rect, new Color(0.02f, 0.03f, 0.05f, 0.78f));
+            UITheme.Fill(new Rect(rect.x, rect.y, 3f, rect.height), UITheme.Accent);
+            float x = rect.x + 16f;
+            UITheme.KeyCap(new Vector2(x, rect.y + 7f), key, 30f);
+            x += keyWidth + 12f;
+            UITheme.Text(new Rect(x, rect.y, textWidth + 4f, 44f), text, size, UITheme.TextColor, TextAnchor.MiddleLeft, true);
+            if (hold) UITheme.Text(new Rect(rect.xMax - holdWidth - 12f, rect.y, holdWidth, 44f), "HOLD", 12, UITheme.Accent, TextAnchor.MiddleRight, true);
+            if (hasStatus) UITheme.Text(new Rect(rect.x + 16f, rect.y + 40f, rect.width - 28f, 20f), status, 13, UITheme.Dim, TextAnchor.UpperLeft);
+            if (progress >= 0f) UITheme.Bar(new Rect(rect.x, rect.yMax, rect.width, 5f), progress, UITheme.Accent);
+        }
+
+        static DoorController InspectDoor(GameManager game, PlayerController player)
+        {
+            DoorController best = null;
+            float bestDistance = 2.2f * 2.2f;
+            foreach (var door in game.Level.doors)
+            {
+                if (door == null || door.State != DoorState.Disabled) continue;
+                Vector3 to = door.transform.position - player.Position;
+                to.y = 0f;
+                float d = to.sqrMagnitude;
+                if (d >= bestDistance || Vector3.Dot(to, player.AimDirection) < 0f) continue;
+                best = door;
+                bestDistance = d;
+            }
+            return best != null && !string.IsNullOrEmpty(best.StatusText) ? best : null;
+        }
+
+        // Radio chatter as subtitles (toggle and size in Accessibility settings).
         void DrawRadio()
         {
+            var settings = SaveManager.Settings;
+            if (!settings.subtitles) return;
             float w = UITheme.Width, h = UITheme.Height;
             var radio = SquadCommandManager.Instance.RadioLog;
+            int size = Mathf.RoundToInt(16f * Mathf.Clamp(settings.subtitleSize, 0.8f, 1.6f));
+            float row = size + 10f;
             float y = h - 300f;
-            for (int i = radio.Count - 1; i >= 0; i--)
+            int shown = 0;
+            for (int i = radio.Count - 1; i >= 0 && shown < 4; i--)
             {
                 var line = radio[i];
                 float age = Time.unscaledTime - line.time;
-                if (age > 5f) continue;
+                if (age > 5f || age < 0f) continue;
+                shown++;
+                float alpha = Mathf.Clamp01(5f - age) * Mathf.Clamp01(age / 0.15f + 0.2f);
+                string text = "<color=#5c9ef2>" + line.speaker + ":</color> " + line.text;
+                float width = Mathf.Min(900f, UITheme.TextWidth(line.speaker + ": " + line.text, size) + 24f);
+                UITheme.Fill(new Rect(w * 0.5f - width * 0.5f, y - 3f, width, row - 2f), new Color(0f, 0f, 0f, 0.45f * alpha));
                 var color = UITheme.TextColor;
-                color.a = Mathf.Clamp01(5f - age);
-                UITheme.ShadowText(new Rect(w * 0.5f - 400f, y, 800f, 22f), "<color=#5c9ef2>" + line.speaker + ":</color> " + line.text, 16, color, TextAnchor.UpperCenter);
-                y -= 22f;
+                color.a = alpha;
+                UITheme.Text(new Rect(w * 0.5f - 450f, y, 900f, row), text, size, color, TextAnchor.UpperCenter);
+                y -= row;
             }
         }
 
@@ -265,6 +374,11 @@ namespace Swat
                 Vector2 gui;
                 if (!UITheme.WorldToGui(cam, officer.Position + Vector3.up * 2.3f, out gui)) continue;
                 var color = !officer.IsAlive ? UITheme.Bad : officer.Selected ? UITheme.Accent : UITheme.Dim;
+                int number = SquadCommandManager.Instance.Squad.IndexOf(officer) + 1;
+                float nameWidth = UITheme.TextWidth(officer.Data.callsign, 14, true);
+                var chip = new Rect(gui.x - nameWidth * 0.5f - 22f, gui.y - 21f, 18f, 18f);
+                UITheme.Fill(chip, officer.IsAlive ? UITheme.RoleColor(officer.Data.role) : UITheme.Faint);
+                UITheme.Text(chip, number.ToString(), 13, new Color(0.03f, 0.04f, 0.06f), TextAnchor.MiddleCenter, true);
                 UITheme.ShadowText(new Rect(gui.x - 90f, gui.y - 22f, 180f, 20f), officer.Data.callsign, 14, color, TextAnchor.MiddleCenter, true);
                 UITheme.ShadowText(new Rect(gui.x - 110f, gui.y - 4f, 220f, 18f), officer.Status, 12, color, TextAnchor.MiddleCenter);
                 // Waypoints for move orders.
@@ -278,6 +392,19 @@ namespace Swat
                 }
                 if (officer.StackDoor != null && UITheme.WorldToGui(cam, officer.StackDoor.transform.position + Vector3.up * 2.6f, out gui))
                     UITheme.ShadowText(new Rect(gui.x - 60f, gui.y - 10f, 120f, 20f), "STACK", 13, UITheme.Accent, TextAnchor.MiddleCenter, true);
+            }
+            // Order confirmation: a ring that expands and fades where the order points.
+            var squadManager = SquadCommandManager.Instance;
+            float orderAge = Time.unscaledTime - squadManager.LastOrderTime;
+            if (squadManager.LastOrderHasPoint && orderAge < 1.1f)
+            {
+                Vector2 ping;
+                if (UITheme.WorldToGui(cam, squadManager.LastOrderPoint + Vector3.up * 0.1f, out ping))
+                {
+                    float k = orderAge / 1.1f;
+                    UITheme.Ring(ping, Mathf.Lerp(8f, 30f, k), new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 1f - k), 2.5f);
+                    UITheme.Dot(ping, 4f, new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 1f - k));
+                }
             }
             foreach (var marker in TacticalIntel.Instance.Markers)
             {
@@ -299,8 +426,12 @@ namespace Swat
             if (from.sqrMagnitude < 0.01f) return;
             // Screen up is world +z for this camera.
             Vector2 dir = new Vector2(from.x, -from.z).normalized;
-            Vector2 center = new Vector2(UITheme.Width * 0.5f, UITheme.Height * 0.5f) + dir * 130f;
-            UITheme.Dot(center, 14f, new Color(1f, 0.25f, 0.2f, amount * 0.8f));
+            Vector2 side = new Vector2(-dir.y, dir.x);
+            // A chevron around the screen centre pointing toward the shooter.
+            Vector2 tip = new Vector2(UITheme.Width * 0.5f, UITheme.Height * 0.5f) + dir * 150f;
+            var color = new Color(1f, 0.28f, 0.2f, amount * 0.85f);
+            UITheme.LineTo(tip - dir * 18f + side * 22f, tip, color, 5f);
+            UITheme.LineTo(tip - dir * 18f - side * 22f, tip, color, 5f);
         }
 
         // ---- Crosshair ----
@@ -313,26 +444,48 @@ namespace Swat
             float s = UITheme.Scale;
             Vector2 c = new Vector2(mouse.x / s, (Screen.height - mouse.y) / s);
             var weapons = player.Weapons;
-            float gap = 6f + weapons.Spread * 3f;
-            bool hit = Time.time - weapons.LastHitTime < 0.15f;
-            Color color = hit ? UITheme.Bad : weapons.Current.Magazine == 0 ? UITheme.Warn : Color.white;
-            float len = 9f, t = 2f;
-            var shadow = new Color(0f, 0f, 0f, 0.6f);
-            DrawCross(c + new Vector2(1f, 1f), gap, len, t, shadow);
-            DrawCross(c, gap, len, t, color);
-            UITheme.Dot(c, 1.5f, color);
+            float hitAge = Time.time - weapons.LastHitTime;
+            DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0);
             if (weapons.IsReloading)
             {
+                float size = Mathf.Clamp(SaveManager.Settings.crosshairSize, 0.5f, 2f);
+                float radius = (6f + weapons.Spread * 3f) * Mathf.Lerp(1f, size, 0.5f) + 9f * size + 8f;
                 float p = weapons.ReloadProgress;
                 int dots = 16;
                 for (int i = 0; i < dots; i++)
                 {
                     float a = -Mathf.PI * 0.5f + i * Mathf.PI * 2f / dots;
                     var col = i / (float)dots <= p ? UITheme.Warn : new Color(1f, 1f, 1f, 0.2f);
-                    UITheme.Dot(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (gap + len + 8f), 2f, col);
+                    UITheme.Dot(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius, 2f, col);
                 }
             }
         }
+
+        const float HitMarkerTime = 0.18f;
+
+        // The crosshair itself, using the size, opacity and colour settings. hitAge < 0 means no
+        // recent hit; the hit marker only shows when hit confirmation is enabled.
+        public static void DrawCrosshairShape(Vector2 c, float spread, float hitAge, bool empty)
+        {
+            var settings = SaveManager.Settings;
+            float size = Mathf.Clamp(settings.crosshairSize, 0.5f, 2f);
+            float opacity = Mathf.Clamp(settings.crosshairOpacity, 0.2f, 1f);
+            float gap = (6f + spread * 3f) * Mathf.Lerp(1f, size, 0.5f);
+            Color color = empty ? UITheme.Warn : UITheme.CrosshairColors[Mathf.Clamp(settings.crosshairColor, 0, UITheme.CrosshairColors.Length - 1)];
+            color.a = opacity;
+            float len = 9f * size, t = Mathf.Max(1.5f, 2f * Mathf.Sqrt(size));
+            var shadow = new Color(0f, 0f, 0f, 0.6f * opacity);
+            DrawCross(c + new Vector2(1f, 1f), gap, len, t, shadow);
+            DrawCross(c, gap, len, t, color);
+            UITheme.Dot(c, 1.5f * size, color);
+            if (hitAge < 0f || !settings.hitMarker) return;
+            // Hit confirmation: a small X that fades out quickly.
+            var marker = new Color(1f, 1f, 1f, (1f - hitAge / HitMarkerTime) * opacity);
+            float inner = 5f * size, outer = 12f * size;
+            foreach (var d in Diagonals) UITheme.LineTo(c + d * inner, c + d * outer, marker, t);
+        }
+
+        static readonly Vector2[] Diagonals = { new Vector2(0.707f, 0.707f), new Vector2(-0.707f, 0.707f), new Vector2(0.707f, -0.707f), new Vector2(-0.707f, -0.707f) };
 
         static void DrawCross(Vector2 c, float gap, float len, float t, Color color)
         {

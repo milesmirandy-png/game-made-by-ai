@@ -20,6 +20,88 @@ namespace Swat
         Bounds view;
         float scale;
         Vector2 offset;
+        // Minimap mode: same drawing code, clipped to a small player-centred window.
+        bool mini;
+        Rect clip;
+        readonly Dictionary<string, Objective> objectiveRooms = new Dictionary<string, Objective>();
+        const float MinimapRadius = 20f; // metres shown either side of the player
+
+        // A small always-on map in the corner. Shows only what the team knows
+        // (same rules as the tactical map), centred on the player, north up.
+        public void DrawMinimap(GameManager game, Rect rect, float opacity)
+        {
+            var level = game.Level;
+            var player = game.Player;
+            if (level == null || player == null || Event.current.type != EventType.Repaint) return;
+            float oldAlpha = UITheme.Alpha;
+            UITheme.Alpha = Mathf.Clamp(opacity, 0.2f, 1f);
+            UITheme.Fill(rect, new Color(0.01f, 0.02f, 0.04f, 0.82f));
+            mini = true;
+            clip = rect;
+            mapRect = rect;
+            viewArea = level.AreaAt(player.Position);
+            scale = rect.width / (MinimapRadius * 2f);
+            float depth = rect.height / scale;
+            view = new Bounds(new Vector3(player.Position.x, 0f, player.Position.z), new Vector3(MinimapRadius * 2f, 1f, depth));
+            offset = new Vector2(rect.x, rect.y);
+            DrawRooms(level);
+            DrawWalls(level);
+            DrawDoors(level);
+            DrawZones(level);
+            DrawObjects(level);
+            DrawPeople(game);
+            DrawMarkers();
+            mini = false;
+            UITheme.Frame(rect, new Color(UITheme.Line.r, UITheme.Line.g, UITheme.Line.b, 0.9f));
+            UITheme.Fill(new Rect(rect.x, rect.y, rect.width, 2f), UITheme.Accent);
+            if (level.areas.Count > 1 && viewArea >= 0 && viewArea < level.areas.Count)
+                UITheme.ShadowText(new Rect(rect.x + 6f, rect.yMax - 20f, rect.width - 12f, 18f), level.areas[viewArea].name, 12, UITheme.Dim, TextAnchor.LowerLeft);
+            UITheme.Alpha = oldAlpha;
+        }
+
+        void Box(Rect r, Color color)
+        {
+            if (mini)
+            {
+                r = Rect.MinMaxRect(Mathf.Max(r.xMin, clip.xMin), Mathf.Max(r.yMin, clip.yMin), Mathf.Min(r.xMax, clip.xMax), Mathf.Min(r.yMax, clip.yMax));
+                if (r.width <= 0f || r.height <= 0f) return;
+            }
+            UITheme.Fill(r, color);
+        }
+
+        void BoxFrame(Rect r, Color color, float thickness = 1f)
+        {
+            Box(new Rect(r.x, r.y, r.width, thickness), color);
+            Box(new Rect(r.x, r.yMax - thickness, r.width, thickness), color);
+            Box(new Rect(r.x, r.y, thickness, r.height), color);
+            Box(new Rect(r.xMax - thickness, r.y, thickness, r.height), color);
+        }
+
+        bool Inside(Vector2 p, float margin)
+        {
+            return !mini || (p.x > clip.xMin + margin && p.x < clip.xMax - margin && p.y > clip.yMin + margin && p.y < clip.yMax - margin);
+        }
+
+        void Label(Rect r, string text, int size, Color color, TextAnchor anchor = TextAnchor.UpperLeft, bool bold = false)
+        {
+            if (mini && (!Inside(new Vector2(r.xMin, r.yMin), -1f) || !Inside(new Vector2(r.xMax, r.yMax), -1f))) return;
+            UITheme.Text(r, text, size, color, anchor, bold);
+        }
+
+        void Dot(Vector2 p, float radius, Color color)
+        {
+            if (Inside(p, radius * 0.5f)) UITheme.Dot(p, radius, color);
+        }
+
+        void RingAt(Vector2 p, float radius, Color color, float thickness)
+        {
+            if (Inside(p, radius * 0.5f)) UITheme.Ring(p, radius, color, thickness);
+        }
+
+        void Line(Vector2 a, Vector2 b, Color color, float thickness)
+        {
+            if (Inside(a, 0f) && Inside(b, 0f)) UITheme.LineTo(a, b, color, thickness);
+        }
 
         public void Draw(GameManager game, bool planning)
         {
@@ -113,7 +195,7 @@ namespace Swat
 
         void DrawRooms(LevelLayout level)
         {
-            var objectiveRooms = new Dictionary<string, Objective>();
+            objectiveRooms.Clear();
             foreach (var objective in MissionManager.Instance.Objectives)
                 if ((objective.Type == ObjectiveType.SecureRoom || objective.Type == ObjectiveType.InvestigateRoom || objective.Type == ObjectiveType.TrainingFlashbang)
                     && !string.IsNullOrEmpty(objective.TargetId) && objective.State != ObjectiveState.Pending) objectiveRooms[objective.TargetId] = objective;
@@ -122,7 +204,7 @@ namespace Swat
             {
                 if (room.Area != viewArea) continue;
                 var r = ToMap(room.Bounds);
-                if (!room.Indoor) { UITheme.Fill(r, new Color(0.08f, 0.1f, 0.12f, 0.5f)); continue; }
+                if (!room.Indoor) { Box(r, new Color(0.08f, 0.1f, 0.12f, 0.5f)); continue; }
                 Color fill;
                 switch (room.State)
                 {
@@ -132,19 +214,19 @@ namespace Swat
                     case RoomState.Secured: fill = new Color(0.12f, 0.32f, 0.26f, 0.95f); break;
                     default: fill = new Color(0.15f, 0.4f, 0.28f, 0.95f); break;
                 }
-                UITheme.Fill(r, fill);
-                if (room.IsDark && room.State != RoomState.Undiscovered) UITheme.Fill(r, new Color(0f, 0f, 0f, 0.3f));
+                Box(r, fill);
+                if (room.IsDark && room.State != RoomState.Undiscovered) Box(r, new Color(0f, 0f, 0f, 0.3f));
                 Objective objective;
                 if (objectiveRooms.TryGetValue(room.Id, out objective))
                 {
                     var color = objective.State == ObjectiveState.Completed ? UITheme.Good : UITheme.Warn;
-                    UITheme.Frame(r, color, 2f);
-                    UITheme.Text(new Rect(r.x + 4f, r.yMax - 20f, r.width - 8f, 18f), objective.State == ObjectiveState.Completed ? "OBJECTIVE DONE" : "OBJECTIVE", 11, color, TextAnchor.LowerLeft, true);
+                    BoxFrame(r, color, 2f);
+                    Label(new Rect(r.x + 4f, r.yMax - 20f, r.width - 8f, 18f), objective.State == ObjectiveState.Completed ? "OBJECTIVE DONE" : "OBJECTIVE", 11, color, TextAnchor.LowerLeft, true);
                 }
                 if (room.State != RoomState.Undiscovered && r.width > 50f)
-                    UITheme.Text(new Rect(r.x + 4f, r.y + 3f, r.width - 8f, 16f), room.DisplayName, 11, UITheme.Dim, TextAnchor.UpperLeft);
+                    Label(new Rect(r.x + 4f, r.y + 3f, r.width - 8f, 16f), room.DisplayName, 11, UITheme.Dim, TextAnchor.UpperLeft);
                 else if (room.State == RoomState.Undiscovered && r.width > 50f)
-                    UITheme.Text(new Rect(r.x, r.y, r.width, r.height), "?", 16, UITheme.Faint, TextAnchor.MiddleCenter);
+                    Label(new Rect(r.x, r.y, r.width, r.height), "?", 16, UITheme.Faint, TextAnchor.MiddleCenter);
             }
         }
 
@@ -158,7 +240,7 @@ namespace Swat
                 Vector2 a = ToMap(new Vector3(wall.a.x, 0f, wall.a.y));
                 Vector2 b = ToMap(new Vector3(wall.b.x, 0f, wall.b.y));
                 var r = Rect.MinMaxRect(Mathf.Min(a.x, b.x) - t * 0.5f, Mathf.Min(a.y, b.y) - t * 0.5f, Mathf.Max(a.x, b.x) + t * 0.5f, Mathf.Max(a.y, b.y) + t * 0.5f);
-                UITheme.Fill(r, color);
+                Box(r, color);
             }
         }
 
@@ -185,8 +267,8 @@ namespace Swat
                 Vector2 a = ToMap(door.transform.position - along), b = ToMap(door.transform.position + along);
                 float t = Mathf.Max(3f, 0.3f * scale);
                 var r = Rect.MinMaxRect(Mathf.Min(a.x, b.x) - t * 0.5f, Mathf.Min(a.y, b.y) - t * 0.5f, Mathf.Max(a.x, b.x) + t * 0.5f, Mathf.Max(a.y, b.y) + t * 0.5f);
-                UITheme.Fill(r, color);
-                if (door.Breachable && known && door.State != DoorState.Breached) UITheme.Dot(c, 2f, UITheme.Warn);
+                Box(r, color);
+                if (door.Breachable && known && door.State != DoorState.Breached) Dot(c, 2f, UITheme.Warn);
             }
         }
 
@@ -195,22 +277,22 @@ namespace Swat
             if (level.extraction != null && level.extraction.Area == viewArea)
             {
                 var r = ToMap(level.extraction.Bounds);
-                UITheme.Frame(r, UITheme.Accent, 2f);
-                UITheme.Text(new Rect(r.x, r.yMax + 2f, Mathf.Max(r.width, 90f), 16f), "EXTRACTION", 11, UITheme.Accent, TextAnchor.UpperLeft, true);
+                BoxFrame(r, UITheme.Accent, 2f);
+                Label(new Rect(r.x, r.yMax + 2f, Mathf.Max(r.width, 90f), 16f), "EXTRACTION", 11, UITheme.Accent, TextAnchor.UpperLeft, true);
             }
             foreach (var zone in level.safeZones)
             {
                 if (zone.Area != viewArea) continue;
                 var r = ToMap(zone.Bounds);
-                UITheme.Frame(r, UITheme.Good, 2f);
-                UITheme.Text(new Rect(r.x, r.yMax + 2f, Mathf.Max(r.width, 90f), 16f), "SAFE ZONE", 11, UITheme.Good, TextAnchor.UpperLeft, true);
+                BoxFrame(r, UITheme.Good, 2f);
+                Label(new Rect(r.x, r.yMax + 2f, Mathf.Max(r.width, 90f), 16f), "SAFE ZONE", 11, UITheme.Good, TextAnchor.UpperLeft, true);
             }
             foreach (var stairs in level.stairs)
             {
                 if (!InView(stairs.transform.position, level)) continue;
                 Vector2 c = ToMap(stairs.transform.position);
-                UITheme.Fill(new Rect(c.x - 6f, c.y - 6f, 12f, 12f), new Color(0.3f, 0.75f, 0.45f));
-                UITheme.Text(new Rect(c.x + 8f, c.y - 8f, 140f, 16f), "Stairs", 11, UITheme.Good);
+                Box(new Rect(c.x - 6f, c.y - 6f, 12f, 12f), new Color(0.3f, 0.75f, 0.45f));
+                Label(new Rect(c.x + 8f, c.y - 8f, 140f, 16f), "Stairs", 11, UITheme.Good);
             }
         }
 
@@ -220,24 +302,24 @@ namespace Swat
             {
                 if (!item.Revealed || item.Secured || !InView(item.transform.position, level)) continue;
                 Vector2 c = ToMap(item.transform.position);
-                UITheme.LineTo(c + new Vector2(0f, -6f), c + new Vector2(6f, 0f), UITheme.Warn, 3f);
-                UITheme.LineTo(c + new Vector2(6f, 0f), c + new Vector2(0f, 6f), UITheme.Warn, 3f);
-                UITheme.LineTo(c + new Vector2(0f, 6f), c + new Vector2(-6f, 0f), UITheme.Warn, 3f);
-                UITheme.LineTo(c + new Vector2(-6f, 0f), c + new Vector2(0f, -6f), UITheme.Warn, 3f);
+                Line(c + new Vector2(0f, -6f), c + new Vector2(6f, 0f), UITheme.Warn, 3f);
+                Line(c + new Vector2(6f, 0f), c + new Vector2(0f, 6f), UITheme.Warn, 3f);
+                Line(c + new Vector2(0f, 6f), c + new Vector2(-6f, 0f), UITheme.Warn, 3f);
+                Line(c + new Vector2(-6f, 0f), c + new Vector2(0f, -6f), UITheme.Warn, 3f);
             }
             foreach (var console in level.consoles)
             {
                 var room = level.RoomAt(console.transform.position);
                 if (!InView(console.transform.position, level) || (room != null && room.State == RoomState.Undiscovered)) continue;
                 Vector2 c = ToMap(console.transform.position);
-                UITheme.Fill(new Rect(c.x - 4f, c.y - 4f, 8f, 8f), new Color(0.3f, 0.85f, 0.95f));
+                Box(new Rect(c.x - 4f, c.y - 4f, 8f, 8f), new Color(0.3f, 0.85f, 0.95f));
             }
             foreach (var cam in SecurityCamera.All)
             {
                 if (cam == null || !cam.Active || !InView(cam.transform.position, level)) continue;
                 var room = level.RoomAt(cam.transform.position);
                 if (room != null && room.State == RoomState.Undiscovered) continue;
-                UITheme.Dot(ToMap(cam.transform.position), 3f, UITheme.Bad);
+                Dot(ToMap(cam.transform.position), 3f, UITheme.Bad);
             }
         }
 
@@ -251,7 +333,7 @@ namespace Swat
             {
                 if (!intel.IsDiscovered(civilian) || civilian.IsEvacuated || civilian.Area != viewArea) continue;
                 Color color = !civilian.IsAlive ? new Color(0.4f, 0.4f, 0.4f) : civilian.State == CivilianState.Injured || civilian.State == CivilianState.Captive ? UITheme.Warn : UITheme.Good;
-                UITheme.Dot(ToMap(civilian.Position), r, color);
+                Dot(ToMap(civilian.Position), r, color);
             }
 
             foreach (var enemy in AIManager.Instance.Enemies)
@@ -262,8 +344,8 @@ namespace Swat
                 {
                     if (enemy.Escaped || level.AreaAt(enemy.Position) != viewArea) continue;
                     Vector2 p = ToMap(enemy.Position);
-                    UITheme.LineTo(p + new Vector2(-r, -r), p + new Vector2(r, r), new Color(0.55f, 0.55f, 0.6f), 2f);
-                    UITheme.LineTo(p + new Vector2(-r, r), p + new Vector2(r, -r), new Color(0.55f, 0.55f, 0.6f), 2f);
+                    Line(p + new Vector2(-r, -r), p + new Vector2(r, r), new Color(0.55f, 0.55f, 0.6f), 2f);
+                    Line(p + new Vector2(-r, r), p + new Vector2(r, -r), new Color(0.55f, 0.55f, 0.6f), 2f);
                     continue;
                 }
                 bool live = intel.IsRevealed(enemy);
@@ -272,15 +354,15 @@ namespace Swat
                 Vector2 m = ToMap(where);
                 if (live)
                 {
-                    UITheme.Dot(m, r, enemy.State == EnemyState.Surrendering ? UITheme.Warn : UITheme.Bad);
+                    Dot(m, r, enemy.State == EnemyState.Surrendering ? UITheme.Warn : UITheme.Bad);
                 }
                 else
                 {
                     float age = Time.time - contact.lastSeenTime;
                     var color = UITheme.Bad;
                     color.a = Mathf.Clamp(1f - age / 60f, 0.3f, 0.9f);
-                    UITheme.Ring(m, r, color, 2f);
-                    UITheme.Text(new Rect(m.x - 10f, m.y - 9f, 20f, 18f), "?", 12, color, TextAnchor.MiddleCenter, true);
+                    RingAt(m, r, color, 2f);
+                    Label(new Rect(m.x - 10f, m.y - 9f, 20f, 18f), "?", 12, color, TextAnchor.MiddleCenter, true);
                 }
             }
 
@@ -294,23 +376,23 @@ namespace Swat
                 foreach (var waypoint in officer.Waypoints)
                 {
                     Vector2 next = ToMap(waypoint);
-                    UITheme.LineTo(ToMap(previous), next, new Color(0.36f, 0.62f, 0.95f, 0.6f), 2f);
-                    UITheme.Dot(next, 3f, UITheme.Accent);
+                    Line(ToMap(previous), next, new Color(0.36f, 0.62f, 0.95f, 0.6f), 2f);
+                    Dot(next, 3f, UITheme.Accent);
                     previous = waypoint;
                 }
                 Color color = !officer.IsAlive ? UITheme.Bad : officer.Selected ? UITheme.Accent : new Color(0.55f, 0.7f, 0.95f);
-                UITheme.Dot(p, r + 1f, color);
-                UITheme.Text(new Rect(p.x - 10f, p.y - 10f, 20f, 20f), (i + 1).ToString(), 11, Color.black, TextAnchor.MiddleCenter, true);
-                if (officer.Selected) UITheme.Ring(p, r + 5f, UITheme.Accent, 2f);
+                Dot(p, r + 1f, color);
+                Label(new Rect(p.x - 10f, p.y - 10f, 20f, 20f), (i + 1).ToString(), 11, Color.black, TextAnchor.MiddleCenter, true);
+                if (officer.Selected) RingAt(p, r + 5f, UITheme.Accent, 2f);
             }
 
             var player = game.Player;
             if (level.AreaAt(player.Position) == viewArea)
             {
                 Vector2 p = ToMap(player.Position);
-                UITheme.Dot(p, r + 2f, Color.white);
+                Dot(p, r + 2f, Color.white);
                 Vector2 dir = new Vector2(player.AimDirection.x, -player.AimDirection.z);
-                UITheme.LineTo(p, p + dir * (r + 10f), Color.white, 3f);
+                Line(p, p + dir * (r + 10f), Color.white, 3f);
             }
         }
 
@@ -320,9 +402,9 @@ namespace Swat
             {
                 if (GameManager.Instance.Level.AreaAt(marker) != viewArea) continue;
                 Vector2 p = ToMap(marker);
-                UITheme.Ring(p, 8f, UITheme.Warn, 2f);
-                UITheme.Fill(new Rect(p.x - 1f, p.y - 12f, 2f, 24f), UITheme.Warn);
-                UITheme.Fill(new Rect(p.x - 12f, p.y - 1f, 24f, 2f), UITheme.Warn);
+                RingAt(p, 8f, UITheme.Warn, 2f);
+                Box(new Rect(p.x - 1f, p.y - 12f, 2f, 24f), UITheme.Warn);
+                Box(new Rect(p.x - 12f, p.y - 1f, 24f, 2f), UITheme.Warn);
             }
         }
 

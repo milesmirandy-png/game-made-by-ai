@@ -9,7 +9,7 @@ namespace Swat
         public bool Revealed { get; set; }
         GameObject marker;
 
-        public string Prompt { get { return "[E] Secure evidence (hold)"; } }
+        public string Prompt { get { return "[E] Secure Evidence (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up * 0.5f; } }
 
         public static EvidenceItem Create(Transform parent, Vector3 position)

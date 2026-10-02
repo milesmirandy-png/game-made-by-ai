@@ -81,7 +81,7 @@ namespace Swat
             {
                 case Surface.Metal:
                     Burst(point, normal, new Color(1f, 0.85f, 0.4f), 4, 4f, 0.035f, 2f);
-                    if (Random.value < 0.3f) AudioManager.Play(Sound.RicochetMetal, point, 0.35f, Random.Range(0.9f, 1.15f));
+                    if (Random.value < 0.3f) AudioManager.Play(Sound.RicochetMetal, point, 0.35f, Random.Range(0.9f, 1.15f), SoundCategory.Weapons);
                     Mark(point, normal, new Color(0.15f, 0.15f, 0.16f, 0.7f));
                     break;
                 case Surface.Wood:
@@ -150,7 +150,7 @@ namespace Swat
                 life = 0.9f,
                 size = size,
             });
-            if (Random.value < 0.35f) AudioManager.Play(Sound.Shell, position + right * 0.6f, 0.18f, Random.Range(0.9f, 1.15f));
+            if (Random.value < 0.35f) AudioManager.Play(Sound.Shell, position + right * 0.6f, 0.18f, Random.Range(0.9f, 1.15f), SoundCategory.Weapons);
         }
 
         public void FlashLight(Vector3 position, Color color, float intensity, float range, float duration)

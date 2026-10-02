@@ -22,7 +22,7 @@ namespace Swat
         float baseYaw, nextCheck, phase;
         bool seeing;
 
-        public string Prompt { get { return "[E] Disable camera (hold)"; } }
+        public string Prompt { get { return "[E] Disable Camera (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up * 1.3f; } }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

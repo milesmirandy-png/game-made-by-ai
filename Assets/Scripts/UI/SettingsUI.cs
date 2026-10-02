@@ -1,30 +1,45 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Swat
 {
-    // Settings window (from the main menu or pause menu): graphics quality,
-    // audio volumes and per-category mute, gameplay/camera options and key
-    // remapping. Everything is saved to the JSON settings file.
+    // Settings window (from the main menu or pause menu): gameplay, camera and
+    // aiming, graphics (preset plus per-option overrides, display, performance
+    // mode), audio mix, accessibility and controls. Every option is applied as
+    // soon as it changes and saved to the JSON settings file.
     public class SettingsUI
     {
-        static readonly string[] Tabs = { "Graphics", "Audio", "Gameplay", "Controls" };
+        static readonly string[] Tabs = { "Gameplay", "Graphics", "Audio", "Accessibility", "Controls" };
+        static readonly string[] ShakeNames = { "Off", "Low", "Medium" };
+        static readonly string[] TextureNames = { "Low", "Medium", "High" };
+        static readonly float[] UiScales = { 0.75f, 0.9f, 1f, 1.1f, 1.25f, 1.5f };
+        static readonly string[] UiScaleNames = { "75%", "90%", "100%", "110%", "125%", "150%" };
+        static readonly float[] TextSizes = { 0.85f, 1f, 1.15f, 1.3f, 1.4f };
+        static readonly string[] TextSizeNames = { "Small", "Normal", "Large", "Larger", "Largest" };
+        static readonly float[] SubtitleSizes = { 0.8f, 1f, 1.25f, 1.5f };
+        static readonly string[] SubtitleSizeNames = { "Small", "Normal", "Large", "Extra large" };
+        static readonly int[] AaValues = { -1, 0, 2, 4, 8 };
+        static readonly int[] DisplayModes = { -1, (int)FullScreenMode.ExclusiveFullScreen, (int)FullScreenMode.FullScreenWindow, (int)FullScreenMode.Windowed };
+        static readonly string[] DisplayModeNames = { "Keep current", "Fullscreen", "Borderless fullscreen", "Windowed" };
 
         public bool Open { get; private set; }
         public bool Rebinding { get { return rebindIndex >= 0; } }
         int tab, rebindIndex = -1, closedFrame = -1;
         float rebindArmedAt;
-        bool confirmReset, dirty;
+        bool confirmReset, dirty, showGamepad;
         string message;
+        readonly List<Vector2Int> resolutions = new List<Vector2Int>();
 
         public bool JustClosed { get { return closedFrame == Time.frameCount; } }
 
         public void Show(int startTab)
         {
             Open = true;
-            tab = startTab;
+            tab = Mathf.Clamp(startTab, 0, Tabs.Length - 1);
             rebindIndex = -1;
             confirmReset = false;
             message = null;
+            CollectResolutions();
         }
 
         void Close()
@@ -41,27 +56,28 @@ namespace Swat
             float w = UITheme.Width, h = UITheme.Height;
             var e = Event.current;
             if (Rebinding) CaptureKey(e);
-            else if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
+            else if ((e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) || (e.type == EventType.Repaint && GameInput.PadDown(PadButton.East)))
             {
                 Close();
-                e.Use();
+                if (e.type != EventType.Repaint) e.Use();
                 return;
             }
 
             UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.55f));
-            var rect = new Rect(w * 0.5f - 480f, h * 0.5f - 400f, 960f, 800f);
+            var rect = new Rect(w * 0.5f - 500f, h * 0.5f - 410f, 1000f, 820f);
             UITheme.Panel(rect);
             UITheme.Header(new Rect(rect.x + 30f, rect.y + 22f, 600f, 50f), "Settings");
             for (int i = 0; i < Tabs.Length; i++)
-                if (UITheme.Button(new Rect(rect.x + 30f + i * 160f, rect.y + 86f, 150f, 40f), Tabs[i], true, tab == i, 17)) { tab = i; rebindIndex = -1; }
+                if (UITheme.Button(new Rect(rect.x + 30f + i * 166f, rect.y + 86f, 158f, 40f), Tabs[i], true, tab == i, 17)) { tab = i; rebindIndex = -1; message = null; }
 
-            var body = new Rect(rect.x + 30f, rect.y + 146f, rect.width - 60f, rect.height - 230f);
+            var body = new Rect(rect.x + 30f, rect.y + 146f, rect.width - 60f, rect.height - 236f);
             bool changed = false;
             switch (tab)
             {
-                case 0: changed = DrawGraphics(body); break;
-                case 1: changed = DrawAudio(body); break;
-                case 2: changed = DrawGameplay(body, game); break;
+                case 0: changed = DrawGameplay(body, game); break;
+                case 1: changed = DrawGraphics(body, game); break;
+                case 2: changed = DrawAudio(body); break;
+                case 3: changed = DrawAccessibility(body); break;
                 default: DrawControls(body); break;
             }
             if (changed)
@@ -69,56 +85,295 @@ namespace Swat
                 dirty = true; // written to disk when the window closes
                 if (AudioManager.Instance != null) AudioManager.Instance.ApplyVolumes();
             }
-            if (!string.IsNullOrEmpty(message)) UITheme.Text(new Rect(rect.x + 30f, rect.yMax - 70f, rect.width - 260f, 40f), message, 15, UITheme.Warn, TextAnchor.MiddleLeft);
+            if (!string.IsNullOrEmpty(message)) UITheme.Text(new Rect(rect.x + 30f, rect.yMax - 72f, rect.width - 260f, 44f), message, 15, UITheme.Warn, TextAnchor.MiddleLeft);
             if (UITheme.Button(new Rect(rect.xMax - 210f, rect.yMax - 70f, 180f, 46f), "Done", true, true)) Close();
         }
 
-        bool DrawGraphics(Rect body)
+        // ---- Row helpers (two columns per tab) ----
+
+        const float Row = 40f;
+
+        static void Section(ref float y, float x, float width, string title)
+        {
+            UITheme.Text(new Rect(x, y, width, 22f), title.ToUpperInvariant(), 14, UITheme.Accent, TextAnchor.UpperLeft, true);
+            UITheme.Fill(new Rect(x, y + 22f, width, 1f), new Color(UITheme.Line.r, UITheme.Line.g, UITheme.Line.b, 0.6f));
+            y += 30f;
+        }
+
+        static bool Choice(ref float y, float x, float width, string label, ref int value, string[] options)
+        {
+            int next = UITheme.Stepper(new Rect(x, y, width, Row - 6f), label, Mathf.Clamp(value, 0, options.Length - 1), options, 0.44f);
+            y += Row;
+            if (next == value) return false;
+            value = next;
+            return true;
+        }
+
+        static bool Check(ref float y, float x, float width, string label, ref bool value)
+        {
+            bool next = UITheme.Toggle(new Rect(x, y, width, Row - 8f), label, value);
+            y += Row;
+            if (next == value) return false;
+            value = next;
+            return true;
+        }
+
+        static bool Range(ref float y, float x, float width, string label, ref float value, float min, float max, string text)
+        {
+            float next = UITheme.Slider(new Rect(x, y, width, Row - 6f), label, value, min, max, text, 0.44f);
+            y += Row;
+            if (Mathf.Approximately(next, value)) return false;
+            value = next;
+            return true;
+        }
+
+        // Picks the nearest entry of a fixed list of values (UI scale, text size...).
+        static bool Preset(ref float y, float x, float width, string label, ref float value, float[] values, string[] names)
+        {
+            int index = 0;
+            for (int i = 1; i < values.Length; i++)
+                if (Mathf.Abs(values[i] - value) < Mathf.Abs(values[index] - value)) index = i;
+            int next = index;
+            if (!Choice(ref y, x, width, label, ref next, names)) return false;
+            value = values[next];
+            return true;
+        }
+
+        static string Percent(float value) { return Mathf.RoundToInt(value * 100f) + "%"; }
+
+        // ---- Gameplay: rules, assists, minimap, camera and aiming ----
+
+        bool DrawGameplay(Rect body, GameManager game)
+        {
+            var s = SaveManager.Settings;
+            float colW = (body.width - 40f) * 0.5f;
+            float lx = body.x, rx = body.x + colW + 40f;
+            bool changed = false;
+
+            float y = body.y;
+            Section(ref y, lx, colW, "Gameplay");
+            int difficulty = s.difficulty;
+            if (Choice(ref y, lx, colW, "Difficulty", ref difficulty, OfficerSelectionManager.DifficultyNames))
+            {
+                s.difficulty = difficulty;
+                changed = true;
+                if (game.State == GameState.Briefing) game.RollPlan();
+                if (game.State == GameState.Paused) message = "Difficulty changes apply from the next deployment.";
+            }
+            changed |= Check(ref y, lx, colW, "Planning mode pauses the game", ref s.planningPauses);
+            changed |= Check(ref y, lx, colW, "Line of sight (hide what the team can't see)", ref s.lineOfSight);
+            changed |= Check(ref y, lx, colW, "Automatic reload when empty", ref s.autoReload);
+            changed |= Check(ref y, lx, colW, "Switch to sidearm when out of ammo", ref s.autoSwitchWhenEmpty);
+            changed |= Check(ref y, lx, colW, "Automatic flashlight in the dark", ref s.autoFlashlight);
+            y += 6f;
+            Section(ref y, lx, colW, "Minimap");
+            changed |= Check(ref y, lx, colW, "Show minimap", ref s.minimap);
+            changed |= Range(ref y, lx, colW, "Size", ref s.minimapScale, 0.75f, 1.5f, Percent(s.minimapScale));
+            changed |= Range(ref y, lx, colW, "Opacity", ref s.minimapOpacity, 0.3f, 1f, Percent(s.minimapOpacity));
+
+            y = body.y;
+            Section(ref y, rx, colW, "Camera");
+            changed |= Range(ref y, rx, colW, "Zoom speed", ref s.zoomSpeed, 0.3f, 2f, s.zoomSpeed.ToString("0.0") + "x");
+            int preset = s.zoomPreset;
+            if (Choice(ref y, rx, colW, "Default zoom", ref preset, CameraController.PresetNames))
+            {
+                s.zoomPreset = preset;
+                if (game.CameraRig != null) game.CameraRig.SetPreset(preset, false);
+                changed = true;
+            }
+            changed |= Check(ref y, rx, colW, "Zoom out automatically outdoors", ref s.autoIndoorZoom);
+            changed |= Range(ref y, rx, colW, "Look-ahead", ref s.lookAhead, 0f, 0.5f, Percent(s.lookAhead * 2f));
+            changed |= Range(ref y, rx, colW, "Camera smoothing", ref s.cameraSmoothing, 0f, 0.4f, s.cameraSmoothing <= 0.005f ? "Off" : Percent(s.cameraSmoothing / 0.4f));
+            changed |= Check(ref y, rx, colW, "Edge scrolling", ref s.edgeScrolling);
+            y += 6f;
+            Section(ref y, rx, colW, "Aiming");
+            changed |= Range(ref y, rx, colW, "Mouse sensitivity", ref s.mouseSensitivity, 0.4f, 2f, s.mouseSensitivity.ToString("0.00") + "x");
+            changed |= Range(ref y, rx, colW, "Aim smoothing", ref s.aimSmoothing, 0f, 1f, s.aimSmoothing <= 0.01f ? "Off" : Percent(s.aimSmoothing));
+            changed |= Range(ref y, rx, colW, "Controller sensitivity", ref s.controllerSensitivity, 0.3f, 2f, s.controllerSensitivity.ToString("0.0") + "x");
+            changed |= Check(ref y, rx, colW, "Controller aim assist", ref s.controllerAimAssist);
+
+            float by = body.yMax - 44f;
+            UITheme.Text(new Rect(lx, by - 26f, body.width, 20f), "Mouse sensitivity 1.00x uses the system cursor; other values use a game cursor. Save file: " + SaveManager.FilePath, 12, UITheme.Faint);
+            bool inMenu = game.State != GameState.Paused;
+            if (UITheme.Button(new Rect(lx, by, 340f, 40f), confirmReset ? "Click again to erase all progress" : "Reset campaign progress", inMenu, confirmReset, 16))
+            {
+                if (confirmReset)
+                {
+                    SaveManager.ResetProgress();
+                    message = "Campaign progress reset. Settings were kept.";
+                    confirmReset = false;
+                }
+                else confirmReset = true;
+            }
+            if (!inMenu) UITheme.Text(new Rect(lx + 356f, by, 300f, 40f), "Available from the main menu.", 14, UITheme.Faint, TextAnchor.MiddleLeft);
+            return changed;
+        }
+
+        // ---- Graphics: preset, display and per-option overrides ----
+
+        bool DrawGraphics(Rect body, GameManager game)
         {
             var quality = QualityManager.Instance;
+            var s = SaveManager.Settings;
+            float colW = (body.width - 40f) * 0.5f;
+            float lx = body.x, rx = body.x + colW + 40f;
+            bool changed = false, apply = false;
+
             float y = body.y;
+            Section(ref y, lx, colW, "Display");
             var names = new string[QualityManager.TierCount + 1];
-            names[0] = "Auto (" + QualityManager.TierName((int)QualityManager.DetectTier()) + " detected)";
+            names[0] = "Auto (" + QualityManager.TierName((int)QualityManager.DetectTier()) + ")";
             for (int i = 0; i < QualityManager.TierCount; i++) names[i + 1] = QualityManager.TierName(i);
             int current = quality.IsAuto ? 0 : (int)quality.Tier + 1;
-            int next = UITheme.Stepper(new Rect(body.x, y, body.width, 40f), "Quality preset", current, names);
-            if (next != current)
+            int next = current;
+            if (Choice(ref y, lx, colW, "Quality preset", ref next, names))
             {
                 if (next == 0) quality.SetTier(QualityManager.DetectTier(), true);
                 else quality.SetTier((QualityTier)(next - 1), false);
             }
-            y += 50f;
-            var profile = QualityManager.Current;
-            string details = "Render scale " + Mathf.RoundToInt(profile.renderScale * 100f) + "%   |   Shadows " + (profile.shadows == 0 ? "off" : profile.shadows == 1 ? "hard" : "soft")
-                + "   |   Dynamic lights " + (profile.dynamicLights ? "on" : "off") + "   |   Effects " + Mathf.RoundToInt(profile.particleScale * 100f) + "%   |   AI updates every " + Mathf.RoundToInt(profile.aiThinkInterval * 1000f) + " ms";
-            UITheme.Text(new Rect(body.x, y, body.width, 44f), details, 15, UITheme.Dim);
-            y += 50f;
-            bool fps = UITheme.Toggle(new Rect(body.x, y, body.width, 32f), "Show FPS counter (" + UITheme.KeyFor(InputAction.ToggleFps) + ")", quality.ShowFps);
-            if (fps != quality.ShowFps)
+
+            var resolutionNames = new string[resolutions.Count + 1];
+            resolutionNames[0] = "Current (" + Screen.width + " x " + Screen.height + ")";
+            int resolution = 0;
+            for (int i = 0; i < resolutions.Count; i++)
+            {
+                resolutionNames[i + 1] = resolutions[i].x + " x " + resolutions[i].y;
+                if (resolutions[i].x == s.resolutionWidth && resolutions[i].y == s.resolutionHeight) resolution = i + 1;
+            }
+            bool display = false;
+            if (Choice(ref y, lx, colW, "Resolution", ref resolution, resolutionNames))
+            {
+                s.resolutionWidth = resolution == 0 ? 0 : resolutions[resolution - 1].x;
+                s.resolutionHeight = resolution == 0 ? 0 : resolutions[resolution - 1].y;
+                display = true;
+            }
+            int mode = System.Array.IndexOf(DisplayModes, s.fullscreenMode);
+            if (mode < 0) mode = 0;
+            if (Choice(ref y, lx, colW, "Display mode", ref mode, DisplayModeNames))
+            {
+                s.fullscreenMode = DisplayModes[mode];
+                display = true;
+            }
+            if (display)
+            {
+                changed = true;
+                quality.ApplyDisplay();
+                if (Application.isEditor) message = "Resolution and display mode apply in a built game (the editor's Game view sets its own size).";
+            }
+
+            var preset = QualityManager.Current;
+            var basis = PresetOf(quality);
+            int vsync = s.vSync + 1;
+            apply |= Choice(ref y, lx, colW, "VSync", ref vsync, new[] { "Preset (" + (PresetOf(quality).vSync ? "on" : "off") + ")", "Off", "On" });
+            s.vSync = vsync - 1;
+            apply |= Check(ref y, lx, colW, "Performance mode (same look, less work)", ref s.performanceMode);
+            bool fps = quality.ShowFps;
+            if (Check(ref y, lx, colW, "Show FPS counter (" + UITheme.KeyFor(InputAction.ToggleFps) + ")", ref fps))
             {
                 quality.ShowFps = fps;
                 quality.SaveFpsSetting();
             }
-            y += 44f;
-            UITheme.Text(new Rect(body.x, y, body.width, 60f), "Auto mode picks a preset from your hardware and steps down if the frame rate stays low. Lower presets draw the 3D view at reduced resolution (the interface stays sharp), turn off shadows and dynamic lights, and update AI less often.", 15, UITheme.Faint);
-            y += 70f;
-            UITheme.Text(new Rect(body.x, y, body.width, 24f), "Hardware: " + quality.Hardware, 14, UITheme.Faint);
-            return false;
+            y += 8f;
+            string summary = "Drawing at " + Mathf.RoundToInt(preset.renderScale * 100f) + "% resolution, " + QualityManager.ShadowNames[Mathf.Clamp(preset.shadows, 0, 4)].ToLowerInvariant() + " shadows, "
+                + (preset.fixtureLights ? "real fixture lights" : "light pools only") + ", AI every " + Mathf.RoundToInt(preset.aiThinkInterval * 1000f) + " ms.";
+            UITheme.Text(new Rect(lx, y, colW, 44f), summary, 14, UITheme.Dim);
+            y += 48f;
+            UITheme.Text(new Rect(lx, y, colW, 80f), "Auto picks a preset from your hardware and steps down if the frame rate stays low. Hardware: " + quality.Hardware, 13, UITheme.Faint);
+
+            y = body.y;
+            Section(ref y, rx, colW, "Detail");
+            int shadows = s.shadowQuality + 1;
+            apply |= Choice(ref y, rx, colW, "Shadows", ref shadows, WithPreset(QualityManager.ShadowNames, QualityManager.ShadowNames[Mathf.Clamp(basis.shadows, 0, 4)]));
+            s.shadowQuality = shadows - 1;
+            int aa = Mathf.Max(0, System.Array.IndexOf(AaValues, s.antiAliasing));
+            if (Choice(ref y, rx, colW, "Anti-aliasing", ref aa, new[] { "Preset (" + (basis.msaa > 0 ? basis.msaa + "x" : "off") + ")", "Off", "2x MSAA", "4x MSAA", "8x MSAA" }))
+            {
+                s.antiAliasing = AaValues[aa];
+                apply = true;
+            }
+            int effects = s.effectsQuality + 1;
+            apply |= Choice(ref y, rx, colW, "Effects", ref effects, WithPreset(QualityManager.EffectsNames, basis.particleScale < 0.6f ? "low" : basis.particleScale < 1f ? "medium" : "high"));
+            s.effectsQuality = effects - 1;
+            int texture = s.textureQuality + 1;
+            if (Choice(ref y, rx, colW, "Texture quality", ref texture, WithPreset(TextureNames, TextureNames[Mathf.Clamp(basis.textures, 0, 2)])))
+            {
+                s.textureQuality = texture - 1;
+                apply = true;
+                message = "Texture quality applies to the next mission you load.";
+            }
+            bool post = s.postProcessing;
+            string postNote = !basis.post ? " (off on this preset)" : s.performanceMode ? " (off in performance mode)"
+                : QualityManager.PostProcessingOn && UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null ? " (vignette only)" : "";
+            if (Check(ref y, rx, colW, "Post-processing" + postNote, ref post))
+            {
+                s.postProcessing = post;
+                apply = true;
+            }
+            bool ao = s.ambientOcclusion;
+            string aoNote = !basis.contactShadows ? " (off on this preset)" : s.performanceMode ? " (off in performance mode)" : "";
+            if (Check(ref y, rx, colW, "Ambient occlusion" + aoNote, ref ao))
+            {
+                s.ambientOcclusion = ao;
+                apply = true;
+            }
+            if (Range(ref y, rx, colW, "View distance", ref s.viewDistance, 0.5f, 1.5f, Percent(s.viewDistance)))
+            {
+                changed = true;
+                game.RefreshLighting();
+            }
+            changed |= Range(ref y, rx, colW, "Flashlight brightness", ref s.flashlightBrightness, 0.5f, 1.5f, Percent(s.flashlightBrightness));
+            y += 8f;
+            UITheme.Text(new Rect(rx, y, colW, 60f), "\"Preset\" follows the quality preset; any other choice overrides it. Ambient occlusion here is soft contact shading painted under walls and props.", 13, UITheme.Faint);
+
+            if (apply)
+            {
+                quality.Apply();
+                changed = true;
+            }
+            return changed;
         }
+
+        static QualityManager.Profile PresetOf(QualityManager quality)
+        {
+            return QualityManager.PresetProfile(quality.Tier);
+        }
+
+        static string[] WithPreset(string[] options, string presetValue)
+        {
+            var list = new string[options.Length + 1];
+            list[0] = "Preset (" + presetValue.ToLowerInvariant() + ")";
+            for (int i = 0; i < options.Length; i++) list[i + 1] = options[i];
+            return list;
+        }
+
+        void CollectResolutions()
+        {
+            resolutions.Clear();
+            foreach (var r in Screen.resolutions)
+            {
+                var size = new Vector2Int(r.width, r.height);
+                if (size.x >= 800 && size.y >= 600 && !resolutions.Contains(size)) resolutions.Add(size);
+            }
+        }
+
+        // ---- Audio ----
 
         bool DrawAudio(Rect body)
         {
             var s = SaveManager.Settings;
             float y = body.y;
             bool changed = false;
+            Section(ref y, body.x, body.width, "Mix");
             changed |= Volume(ref y, body, "Master volume", ref s.masterVolume);
-            y += 10f;
-            changed |= VolumeWithMute(ref y, body, "Effects", ref s.effectsVolume, ref s.muteEffects);
+            y += 8f;
+            changed |= VolumeWithMute(ref y, body, "Music", ref s.musicVolume, ref s.muteMusic);
+            changed |= VolumeWithMute(ref y, body, "Weapons", ref s.weaponsVolume, ref s.muteWeapons);
+            changed |= VolumeWithMute(ref y, body, "Effects and environment", ref s.effectsVolume, ref s.muteEffects);
             changed |= VolumeWithMute(ref y, body, "Voice and radio", ref s.voiceVolume, ref s.muteVoice);
             changed |= VolumeWithMute(ref y, body, "Ambience", ref s.ambienceVolume, ref s.muteAmbience);
             changed |= VolumeWithMute(ref y, body, "Interface", ref s.interfaceVolume, ref s.muteInterface);
             y += 16f;
-            UITheme.Text(new Rect(body.x, y, body.width, 40f), "All sounds are generated procedurally at startup as clearly identified placeholders.", 14, UITheme.Faint);
+            UITheme.Text(new Rect(body.x, y, body.width, 40f), "Indoor rooms add reverb that matches their size and finish; footsteps change with the floor surface. All sounds are generated procedurally at startup as clearly identified placeholders.", 14, UITheme.Faint);
             return changed;
         }
 
@@ -139,63 +394,70 @@ namespace Swat
             return Volume(ref y, body, label, ref value) || changed;
         }
 
-        bool DrawGameplay(Rect body, GameManager game)
+        // ---- Accessibility ----
+
+        bool DrawAccessibility(Rect body)
         {
             var s = SaveManager.Settings;
-            float y = body.y;
+            float colW = (body.width - 40f) * 0.5f;
+            float lx = body.x, rx = body.x + colW + 40f;
             bool changed = false;
-            int difficulty = UITheme.Stepper(new Rect(body.x, y, body.width, 40f), "Difficulty", s.difficulty, OfficerSelectionManager.DifficultyNames);
-            if (difficulty != s.difficulty)
-            {
-                s.difficulty = difficulty;
-                changed = true;
-                if (game.State == GameState.Briefing) game.RollPlan();
-            }
-            y += 46f;
-            UITheme.Text(new Rect(body.x, y, body.width, 22f), game.State == GameState.Paused ? "Difficulty changes apply from the next deployment." : "Recruit: less accurate, slower suspects. Veteran: sharper suspects, higher score multiplier.", 14, UITheme.Faint);
-            y += 34f;
-            float zoom = UITheme.Slider(new Rect(body.x, y, body.width, 40f), "Zoom sensitivity", s.zoomSpeed, 0.3f, 2f, s.zoomSpeed.ToString("0.0") + "x");
-            if (!Mathf.Approximately(zoom, s.zoomSpeed)) { s.zoomSpeed = zoom; changed = true; }
-            y += 46f;
-            float look = UITheme.Slider(new Rect(body.x, y, body.width, 40f), "Mouse look-ahead", s.lookAhead, 0f, 0.5f, Mathf.RoundToInt(s.lookAhead * 200f) + "%");
-            if (!Mathf.Approximately(look, s.lookAhead)) { s.lookAhead = look; changed = true; }
-            y += 46f;
-            int preset = UITheme.Stepper(new Rect(body.x, y, body.width, 40f), "Default zoom preset", s.zoomPreset, CameraController.PresetNames);
-            if (preset != s.zoomPreset)
-            {
-                s.zoomPreset = preset;
-                game.CameraRig.SetPreset(preset, false);
-                changed = true;
-            }
-            y += 50f;
-            bool pauses = UITheme.Toggle(new Rect(body.x, y, body.width, 32f), "Planning mode pauses the game (off: slow motion)", s.planningPauses);
-            if (pauses != s.planningPauses) { s.planningPauses = pauses; changed = true; }
-            y += 40f;
-            bool los = UITheme.Toggle(new Rect(body.x, y, body.width, 32f), "Line of sight: hide suspects and civilians your team can't see", s.lineOfSight);
-            if (los != s.lineOfSight) { s.lineOfSight = los; changed = true; }
-            y += 56f;
 
-            UITheme.Text(new Rect(body.x, y, body.width, 22f), "Save file: " + SaveManager.FilePath, 13, UITheme.Faint);
-            y += 30f;
-            bool inMenu = game.State != GameState.Paused;
-            if (UITheme.Button(new Rect(body.x, y, 340f, 42f), confirmReset ? "Click again to erase all progress" : "Reset campaign progress", inMenu, confirmReset, 16))
-            {
-                if (confirmReset)
-                {
-                    SaveManager.ResetProgress();
-                    message = "Campaign progress reset. Settings were kept.";
-                    confirmReset = false;
-                }
-                else confirmReset = true;
-            }
-            if (!inMenu) UITheme.Text(new Rect(body.x + 356f, y, body.width - 356f, 42f), "Available from the main menu.", 14, UITheme.Faint, TextAnchor.MiddleLeft);
+            float y = body.y;
+            Section(ref y, lx, colW, "Interface");
+            changed |= Preset(ref y, lx, colW, "UI scale", ref s.uiScale, UiScales, UiScaleNames);
+            changed |= Preset(ref y, lx, colW, "Text size", ref s.textSize, TextSizes, TextSizeNames);
+            changed |= Check(ref y, lx, colW, "Colorblind-friendly colors", ref s.colorblindMode);
+            changed |= Check(ref y, lx, colW, "Subtitles for radio and voice", ref s.subtitles);
+            changed |= Preset(ref y, lx, colW, "Subtitle size", ref s.subtitleSize, SubtitleSizes, SubtitleSizeNames);
+            y += 6f;
+            Section(ref y, lx, colW, "Comfort");
+            changed |= Choice(ref y, lx, colW, "Screen shake", ref s.cameraShake, ShakeNames);
+            changed |= Check(ref y, lx, colW, "Reduce flashes (flashbangs, alarms, bloom)", ref s.reduceFlashes);
+            y += 8f;
+            UITheme.Text(new Rect(lx, y, colW, 60f), "Colorblind mode swaps red/green status colors for orange/blue and brightens warnings. Camera and controller sensitivity are under Gameplay.", 13, UITheme.Faint);
+
+            y = body.y;
+            Section(ref y, rx, colW, "Crosshair");
+            changed |= Range(ref y, rx, colW, "Size", ref s.crosshairSize, 0.5f, 2f, Percent(s.crosshairSize));
+            changed |= Range(ref y, rx, colW, "Opacity", ref s.crosshairOpacity, 0.2f, 1f, Percent(s.crosshairOpacity));
+            changed |= Choice(ref y, rx, colW, "Color", ref s.crosshairColor, UITheme.CrosshairColorNames);
+            changed |= Check(ref y, rx, colW, "Hit confirmation marker and sound", ref s.hitMarker);
+            // Live preview using the same drawing as the HUD.
+            var preview = new Rect(rx, y + 6f, colW, 120f);
+            UITheme.Fill(preview, new Color(0.12f, 0.14f, 0.16f, 1f));
+            UITheme.Fill(new Rect(preview.x, preview.y, preview.width * 0.5f, preview.height), new Color(0.55f, 0.57f, 0.6f, 1f));
+            float cycle = Mathf.Repeat(Time.unscaledTime, 1.2f);
+            HUDController.DrawCrosshairShape(preview.center, 0f, cycle < 0.18f ? cycle : -1f, false);
+            UITheme.Text(new Rect(preview.x + 8f, preview.yMax - 22f, preview.width - 16f, 20f), "Preview (hit marker flashes)", 12, UITheme.TextColor);
             return changed;
         }
 
+        // ---- Controls ----
+
         void DrawControls(Rect body)
         {
+            if (showGamepad) DrawGamepadLayout(body);
+            else DrawKeyBindings(body);
+            float by = body.yMax - 40f;
+            if (!showGamepad && UITheme.Button(new Rect(body.x, by, 220f, 40f), "Reset to defaults", true, false, 16))
+            {
+                GameInput.ResetToDefaults();
+                SaveManager.Save();
+                message = "Controls reset to defaults.";
+            }
+            if (UITheme.Button(new Rect(body.x + 236f, by, 240f, 40f), showGamepad ? "Keyboard and mouse" : "Gamepad layout", true, false, 16))
+            {
+                showGamepad = !showGamepad;
+                rebindIndex = -1;
+            }
+            UITheme.Text(new Rect(body.x + 492f, by, body.width - 492f, 40f), "Mouse wheel zooms. Number keys pick command wheel options. Hold " + GameInput.KeyName(GameInput.Binding(InputAction.SwitchWeapon)) + " for the weapon wheel.", 13, UITheme.Faint, TextAnchor.MiddleLeft);
+        }
+
+        void DrawKeyBindings(Rect body)
+        {
             int count = GameInput.ActionCount;
-            float row = 34f;
+            float row = 32f;
             int perColumn = Mathf.CeilToInt(count / 2f);
             float colW = (body.width - 20f) * 0.5f;
             for (int i = 0; i < count; i++)
@@ -212,14 +474,34 @@ namespace Swat
                     message = "Press a key or mouse button for \"" + GameInput.DisplayName(action) + "\". Esc cancels.";
                 }
             }
-            float by = body.y + perColumn * row + 12f;
-            if (UITheme.Button(new Rect(body.x, by, 240f, 40f), "Reset to defaults", true, false, 16))
+        }
+
+        static void DrawGamepadLayout(Rect body)
+        {
+            float y = body.y;
+            string state = GameInput.GamepadConnected ? "Gamepad connected." : "No gamepad detected.";
+#if !(ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM)
+            state = "Gamepads need Unity's Input System package (Window > Package Manager). Without it the game uses keyboard and mouse.";
+#endif
+            UITheme.Text(new Rect(body.x, y, body.width, 24f), state, 15, GameInput.GamepadConnected ? UITheme.Good : UITheme.Warn);
+            y += 34f;
+            UITheme.Text(new Rect(body.x, y, body.width, 44f), "Left stick: move.   Right stick: aim (and pick in radial menus).   Prompts switch to gamepad buttons while you use one. In menus the left stick moves the cursor, A selects, B closes settings.", 14, UITheme.Dim);
+            y += 52f;
+            float colW = (body.width - 20f) * 0.5f;
+            int shown = 0;
+            for (int i = 0; i < GameInput.ActionCount; i++)
             {
-                GameInput.ResetToDefaults();
-                SaveManager.Save();
-                message = "Controls reset to defaults.";
+                var action = (InputAction)i;
+                var button = GameInput.PadBinding(action);
+                if (button == PadButton.None) continue;
+                float x = body.x + (shown % 2) * (colW + 20f);
+                float ry = y + (shown / 2) * 34f;
+                UITheme.Text(new Rect(x, ry, colW * 0.6f, 30f), GameInput.DisplayName(action), 15, UITheme.TextColor, TextAnchor.MiddleLeft);
+                UITheme.KeyCap(new Vector2(x + colW * 0.6f, ry + 2f), GameInput.PadName(button), 26f);
+                shown++;
             }
-            UITheme.Text(new Rect(body.x + 260f, by, body.width - 260f, 40f), "Mouse wheel zooms the camera. Number keys pick command wheel options while it is open.", 14, UITheme.Faint, TextAnchor.MiddleLeft);
+            y += Mathf.CeilToInt(shown / 2f) * 34f + 12f;
+            UITheme.Text(new Rect(body.x, y, body.width, 40f), "Planning mode, fire mode, zoom presets and selecting individual officers stay on the keyboard; orders from the command wheel go to the whole squad unless officers are selected.", 13, UITheme.Faint);
         }
 
         void CaptureKey(Event e)

@@ -14,10 +14,15 @@ namespace Swat
         SelectOfficer1, SelectOfficer2, SelectOfficer3, SelectAllOfficers, ToggleFps, Screenshot,
     }
 
+    // Gamepad buttons (Xbox-style names; read only when the Input System package is installed).
+    public enum PadButton { None, South, East, West, North, LeftShoulder, RightShoulder, LeftTrigger, RightTrigger, LeftStick, RightStick, Start, Select, DpadUp, DpadDown, DpadLeft, DpadRight }
+
     // All gameplay input goes through here. Every action has a remappable
     // binding (keys and mouse buttons are both KeyCodes), saved with the
     // settings. Reads the Input System package when the project uses it,
     // otherwise the classic Input Manager, so it works in any project.
+    // With the Input System package a gamepad also works (fixed layout), and
+    // prompts switch to gamepad buttons while it is the last device used.
     public static class GameInput
     {
         static readonly KeyCode[] Defaults =
@@ -37,6 +42,42 @@ namespace Swat
         };
 
         static KeyCode[] bindings = (KeyCode[])Defaults.Clone();
+
+        // Fixed gamepad layout, one entry per InputAction (None = keyboard/mouse only).
+        static readonly PadButton[] PadBindings =
+        {
+            PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.RightTrigger, PadButton.LeftTrigger, PadButton.West, PadButton.LeftStick, PadButton.East, PadButton.South,
+            PadButton.North, PadButton.DpadUp, PadButton.RightShoulder, PadButton.Select, PadButton.None, PadButton.None,
+            PadButton.None, PadButton.None, PadButton.DpadLeft, PadButton.DpadRight, PadButton.None, PadButton.Start, PadButton.LeftShoulder, PadButton.RightStick, PadButton.DpadDown, PadButton.None,
+            PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
+        };
+
+        static readonly string[] PadNames = { "", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Start", "View", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right" };
+
+        // True while a gamepad was the last device used (switches back on mouse or keyboard input).
+        public static bool UsingGamepad { get; private set; }
+        public static PadButton PadBinding(InputAction action) { return PadBindings[(int)action]; }
+        public static string PadName(PadButton button) { return PadNames[(int)button]; }
+
+        // The key or button to show in prompts for the device in use.
+        public static string PromptKey(InputAction action)
+        {
+            var pad = PadBindings[(int)action];
+            if (UsingGamepad && pad != PadButton.None) return PadNames[(int)pad];
+            return KeyName(Binding(action));
+        }
+
+        public static bool GamepadConnected
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+                return Gamepad.current != null;
+#else
+                return false;
+#endif
+            }
+        }
 
         public static int ActionCount { get { return Defaults.Length; } }
         public static string DisplayName(InputAction action) { return Names[(int)action]; }
@@ -89,9 +130,9 @@ namespace Swat
             }
         }
 
-        public static bool Down(InputAction action) { return KeyDown(bindings[(int)action]); }
-        public static bool Held(InputAction action) { return KeyHeld(bindings[(int)action]); }
-        public static bool Released(InputAction action) { return KeyUp(bindings[(int)action]); }
+        public static bool Down(InputAction action) { return KeyDown(bindings[(int)action]) || PadDown(PadBindings[(int)action]); }
+        public static bool Held(InputAction action) { return KeyHeld(bindings[(int)action]) || PadHeld(PadBindings[(int)action]); }
+        public static bool Released(InputAction action) { return KeyUp(bindings[(int)action]) || PadUp(PadBindings[(int)action]); }
 
         public static Vector2 Move
         {
@@ -102,11 +143,25 @@ namespace Swat
                 if (Held(InputAction.MoveLeft) || KeyHeld(KeyCode.LeftArrow)) x -= 1f;
                 if (Held(InputAction.MoveUp) || KeyHeld(KeyCode.UpArrow)) y += 1f;
                 if (Held(InputAction.MoveDown) || KeyHeld(KeyCode.DownArrow)) y -= 1f;
-                return Vector2.ClampMagnitude(new Vector2(x, y), 1f);
+                var keys = new Vector2(x, y);
+                var stick = LeftStick;
+                return Vector2.ClampMagnitude(stick.sqrMagnitude > keys.sqrMagnitude ? stick : keys, 1f);
             }
         }
 
+        // The pointer used for aiming and the radial menus: the system cursor, the
+        // sensitivity-scaled software cursor, or (on a gamepad) the aim point on screen.
         public static Vector2 MousePosition
+        {
+            get
+            {
+                if (UsingGamepad && padPointerValid) return padPointer;
+                if (softwareCursor) return softCursor;
+                return SystemMousePosition;
+            }
+        }
+
+        public static Vector2 SystemMousePosition
         {
             get
             {
@@ -118,6 +173,190 @@ namespace Swat
 #endif
             }
         }
+
+        // ---- Per-frame device handling ----
+
+        static bool softwareCursor, padPointerValid;
+        static Vector2 softCursor, padPointer;
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+        static Vector2 lastMouse;
+        const bool mouseAxisMissing = false;
+#else
+        static bool mouseAxisMissing;
+#endif
+
+        // The player sets this each frame so gamepad radial menus and the camera know where the aim is.
+        public static void SetGamepadPointer(Vector2 screen)
+        {
+            padPointer = screen;
+            padPointerValid = true;
+        }
+
+        // Called once per frame by the UI manager. "aiming" is true while the
+        // player is aiming in a mission (not in menus, planning or consoles).
+        public static void Tick(bool aiming, float dt)
+        {
+            UpdateDevice();
+            if (!aiming) padPointerValid = false;
+
+            // Mouse sensitivity other than 1.0 uses a locked, hidden cursor and a
+            // software pointer moved by scaled mouse deltas (1.0 keeps the system cursor).
+            float sensitivity = SaveManager.Settings.mouseSensitivity;
+            bool wantSoftware = aiming && !UsingGamepad && !mouseAxisMissing && Mathf.Abs(sensitivity - 1f) > 0.02f;
+            if (wantSoftware != softwareCursor)
+            {
+                softwareCursor = wantSoftware;
+                if (wantSoftware) softCursor = SystemMousePosition;
+                Cursor.lockState = wantSoftware ? CursorLockMode.Locked : aiming ? CursorLockMode.Confined : CursorLockMode.None;
+            }
+            if (softwareCursor)
+            {
+                softCursor += MouseDelta * sensitivity;
+                softCursor.x = Mathf.Clamp(softCursor.x, 0f, Screen.width - 1f);
+                softCursor.y = Mathf.Clamp(softCursor.y, 0f, Screen.height - 1f);
+            }
+            if (UsingGamepad && !aiming) MoveMenuCursor(dt);
+        }
+
+        static Vector2 MouseDelta
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+                var mouse = Mouse.current;
+                return mouse != null ? mouse.delta.ReadValue() : Vector2.zero;
+#else
+                // The default "Mouse X/Y" axes report pixel deltas multiplied by their 0.1 sensitivity.
+                try { return new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) * 10f; }
+                catch (System.ArgumentException)
+                {
+                    mouseAxisMissing = true;
+                    return Vector2.zero;
+                }
+#endif
+            }
+        }
+
+        static void UpdateDevice()
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var pad = Gamepad.current;
+            Vector2 mouse = SystemMousePosition;
+            bool mouseMoved = (mouse - lastMouse).sqrMagnitude > 16f && !softwareCursor;
+            lastMouse = mouse;
+            var keyboard = Keyboard.current;
+            var pointer = Mouse.current;
+            bool desktopInput = mouseMoved || (keyboard != null && keyboard.anyKey.wasPressedThisFrame)
+                || (pointer != null && (pointer.leftButton.wasPressedThisFrame || pointer.rightButton.wasPressedThisFrame || (softwareCursor && pointer.delta.ReadValue().sqrMagnitude > 4f)));
+            if (pad == null) { UsingGamepad = false; return; }
+            bool padInput = pad.leftStick.ReadValue().sqrMagnitude > 0.25f || pad.rightStick.ReadValue().sqrMagnitude > 0.25f;
+            for (int i = 1; i < PadNames.Length && !padInput; i++) padInput = PadDown((PadButton)i);
+            if (padInput) UsingGamepad = true;
+            else if (desktopInput) UsingGamepad = false;
+#else
+            UsingGamepad = false;
+#endif
+        }
+
+        // In menus the left stick moves the system cursor and A clicks (see UITheme.Button).
+        static void MoveMenuCursor(float dt)
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var mouse = Mouse.current;
+            Vector2 stick = LeftStick;
+            if (mouse == null || stick.sqrMagnitude < 0.01f) return;
+            float speed = 900f * Mathf.Max(1f, Screen.height / 1080f) * Mathf.Clamp(SaveManager.Settings.controllerSensitivity, 0.3f, 2f);
+            Vector2 next = mouse.position.ReadValue() + stick * stick.magnitude * speed * dt;
+            next.x = Mathf.Clamp(next.x, 0f, Screen.width - 1f);
+            next.y = Mathf.Clamp(next.y, 0f, Screen.height - 1f);
+            mouse.WarpCursorPosition(next);
+            lastMouse = next;
+#endif
+        }
+
+        // ---- Gamepad ----
+
+        const float StickDeadZone = 0.2f;
+
+        public static Vector2 LeftStick { get { return ReadStick(true); } }
+        public static Vector2 RightStick { get { return ReadStick(false); } }
+
+        static Vector2 ReadStick(bool left)
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var pad = Gamepad.current;
+            if (pad == null) return Vector2.zero;
+            Vector2 v = left ? pad.leftStick.ReadValue() : pad.rightStick.ReadValue();
+            float m = v.magnitude;
+            if (m < StickDeadZone) return Vector2.zero;
+            return v / m * Mathf.Clamp01((m - StickDeadZone) / (1f - StickDeadZone));
+#else
+            return Vector2.zero;
+#endif
+        }
+
+        // Gamepad "click" for menus: A pressed this frame.
+        public static bool PadSubmit { get { return PadDown(PadButton.South); } }
+        // D-pad left/right this frame, for adjusting sliders with a gamepad.
+        public static int PadHorizontal { get { return PadDown(PadButton.DpadRight) ? 1 : PadDown(PadButton.DpadLeft) ? -1 : 0; } }
+
+        public static bool PadDown(PadButton button)
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var control = PadControl(button);
+            return control != null && control.wasPressedThisFrame;
+#else
+            return false;
+#endif
+        }
+
+        public static bool PadHeld(PadButton button)
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var control = PadControl(button);
+            return control != null && control.isPressed;
+#else
+            return false;
+#endif
+        }
+
+        public static bool PadUp(PadButton button)
+        {
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+            var control = PadControl(button);
+            return control != null && control.wasReleasedThisFrame;
+#else
+            return false;
+#endif
+        }
+
+#if ENABLE_INPUT_SYSTEM && SWAT_INPUT_SYSTEM
+        static UnityEngine.InputSystem.Controls.ButtonControl PadControl(PadButton button)
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return null;
+            switch (button)
+            {
+                case PadButton.South: return pad.buttonSouth;
+                case PadButton.East: return pad.buttonEast;
+                case PadButton.West: return pad.buttonWest;
+                case PadButton.North: return pad.buttonNorth;
+                case PadButton.LeftShoulder: return pad.leftShoulder;
+                case PadButton.RightShoulder: return pad.rightShoulder;
+                case PadButton.LeftTrigger: return pad.leftTrigger;
+                case PadButton.RightTrigger: return pad.rightTrigger;
+                case PadButton.LeftStick: return pad.leftStickButton;
+                case PadButton.RightStick: return pad.rightStickButton;
+                case PadButton.Start: return pad.startButton;
+                case PadButton.Select: return pad.selectButton;
+                case PadButton.DpadUp: return pad.dpad.up;
+                case PadButton.DpadDown: return pad.dpad.down;
+                case PadButton.DpadLeft: return pad.dpad.left;
+                case PadButton.DpadRight: return pad.dpad.right;
+                default: return null;
+            }
+        }
+#endif
 
         // +1 for one wheel notch away from you, -1 towards you.
         public static float Scroll
@@ -137,8 +376,8 @@ namespace Swat
 
         public static bool LeftClick { get { return KeyDown(KeyCode.Mouse0); } }
         public static bool RightClick { get { return KeyDown(KeyCode.Mouse1); } }
-        public static bool Confirm { get { return KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter); } }
-        public static bool Cancel { get { return KeyDown(KeyCode.Escape); } }
+        public static bool Confirm { get { return KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter) || PadDown(PadButton.South) || PadDown(PadButton.Start); } }
+        public static bool Cancel { get { return KeyDown(KeyCode.Escape) || PadDown(PadButton.East); } }
 
         // Number keys pressed this frame (1-9, 0 = 10). Used by the command wheel. Returns -1 if none.
         public static int NumberPressed

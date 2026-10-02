@@ -30,6 +30,7 @@ namespace Swat
             public float aiThinkInterval; // seconds between AI decisions
             public int targetFps;
             public bool vSync;
+            public int textures;          // generated surface texture size: 0 low, 1 medium, 2 high
         }
 
         public static readonly string[] ShadowNames = { "Off", "Low", "Medium", "High", "Very High" };
@@ -37,11 +38,11 @@ namespace Swat
 
         static readonly Profile[] Profiles =
         {
-            new Profile { name = "Potato", renderScale = 0.5f, shadows = 0, msaa = 0, pixelLights = 0, particleScale = 0.35f, dynamicLights = false, fixtureLights = false, contactShadows = false, post = false, bloom = false, aiThinkInterval = 0.3f, targetFps = 60, vSync = false },
-            new Profile { name = "Low", renderScale = 0.75f, shadows = 1, msaa = 0, pixelLights = 1, particleScale = 0.6f, dynamicLights = false, fixtureLights = false, contactShadows = true, post = false, bloom = false, aiThinkInterval = 0.22f, targetFps = 60, vSync = false },
-            new Profile { name = "Medium", renderScale = 1f, shadows = 2, msaa = 0, pixelLights = 2, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = false, aiThinkInterval = 0.15f, targetFps = 60, vSync = false },
-            new Profile { name = "High", renderScale = 1f, shadows = 3, msaa = 2, pixelLights = 4, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.12f, targetFps = 0, vSync = true },
-            new Profile { name = "Ultra", renderScale = 1f, shadows = 4, msaa = 4, pixelLights = 6, particleScale = 1.3f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.1f, targetFps = 0, vSync = true },
+            new Profile { name = "Potato", renderScale = 0.5f, shadows = 0, msaa = 0, pixelLights = 0, particleScale = 0.35f, dynamicLights = false, fixtureLights = false, contactShadows = false, post = false, bloom = false, aiThinkInterval = 0.3f, targetFps = 60, vSync = false, textures = 0 },
+            new Profile { name = "Low", renderScale = 0.75f, shadows = 1, msaa = 0, pixelLights = 1, particleScale = 0.6f, dynamicLights = false, fixtureLights = false, contactShadows = false, post = false, bloom = false, aiThinkInterval = 0.22f, targetFps = 60, vSync = false, textures = 0 },
+            new Profile { name = "Medium", renderScale = 1f, shadows = 2, msaa = 0, pixelLights = 2, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = false, aiThinkInterval = 0.15f, targetFps = 60, vSync = false, textures = 1 },
+            new Profile { name = "High", renderScale = 1f, shadows = 3, msaa = 2, pixelLights = 4, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.12f, targetFps = 0, vSync = true, textures = 2 },
+            new Profile { name = "Ultra", renderScale = 1f, shadows = 4, msaa = 4, pixelLights = 6, particleScale = 1.3f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.1f, targetFps = 0, vSync = true, textures = 2 },
         };
 
         const float LowFpsThreshold = 40f;
@@ -52,8 +53,11 @@ namespace Swat
         public static Profile Current { get { return Instance != null ? Instance.effective : Profiles[(int)QualityTier.Medium]; } }
         public static int TierCount { get { return Profiles.Length; } }
         public static string TierName(int tier) { return Profiles[tier].name; }
+        public static Profile PresetProfile(QualityTier tier) { return Profiles[(int)tier]; }
         public static bool AmbientOcclusionOn { get { return Current.contactShadows && SaveManager.Settings.ambientOcclusion; } }
         public static bool PostProcessingOn { get { return Current.post && SaveManager.Settings.postProcessing; } }
+        // Texture detail: the setting when overridden, otherwise the preset's.
+        public static int TextureLevel { get { int s = SaveManager.Settings.textureQuality; return s >= 0 ? Mathf.Clamp(s, 0, 2) : Current.textures; } }
 
         public QualityTier Tier { get; private set; }
         public bool IsAuto { get; private set; }
@@ -152,7 +156,7 @@ namespace Swat
             ApplyShadows(p.shadows);
             QualitySettings.softParticles = false;
             QualitySettings.realtimeReflectionProbes = false;
-            QualitySettings.anisotropicFiltering = SaveManager.Settings.textureQuality >= 2 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable;
+            QualitySettings.anisotropicFiltering = p.textures >= 2 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable;
             Time.fixedDeltaTime = (int)Tier <= (int)QualityTier.Low ? 0.04f : 0.02f;
             if (worldCamera != null) worldCamera.allowMSAA = p.msaa > 0;
 
@@ -168,6 +172,7 @@ namespace Swat
             if (s.antiAliasing >= 0) p.msaa = s.antiAliasing >= 8 ? 8 : s.antiAliasing >= 4 ? 4 : s.antiAliasing >= 2 ? 2 : 0;
             if (s.effectsQuality >= 0) p.particleScale = s.effectsQuality == 0 ? 0.4f : s.effectsQuality == 1 ? 0.8f : 1.2f;
             if (s.vSync >= 0) p.vSync = s.vSync == 1;
+            if (s.textureQuality >= 0) p.textures = Mathf.Clamp(s.textureQuality, 0, 2);
             if (s.performanceMode)
             {
                 // Same look, less work: low shadows, no AO or post-processing, fewer effects,

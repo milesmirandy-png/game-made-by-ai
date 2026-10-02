@@ -415,7 +415,7 @@ namespace Swat
         void StartReload()
         {
             reloadEnd = Time.time + Inventory.Current.Data.reloadTime;
-            AudioManager.Play(Sound.Reload, transform.position, 0.6f);
+            AudioManager.Play(Sound.Reload, transform.position, 0.6f, 1f, SoundCategory.Weapons);
         }
 
         void FinishReload()

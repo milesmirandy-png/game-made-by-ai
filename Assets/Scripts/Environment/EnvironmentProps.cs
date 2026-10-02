@@ -171,6 +171,16 @@ namespace Swat
             return root;
         }
 
+        // Wall-mounted fire alarm pull station.
+        public static Transform FireAlarm(Transform parent, Vector3 position, float yaw)
+        {
+            var root = Root("Fire Alarm", parent, position, yaw);
+            Part("Box", root, new Vector3(0f, 1.3f, 0.03f), new Vector3(0.13f, 0.18f, 0.05f), SafetyRed);
+            Part("Handle", root, new Vector3(0f, 1.28f, 0.06f), new Vector3(0.08f, 0.03f, 0.02f), new Color(0.95f, 0.95f, 0.92f));
+            Part("Strobe", root, new Vector3(0f, 2.05f, 0.04f), new Vector3(0.12f, 0.07f, 0.06f), new Color(0.95f, 0.95f, 0.95f), 0.6f);
+            return root;
+        }
+
         public static Transform Clock(Transform parent, Vector3 position, float yaw)
         {
             var root = Root("Wall Clock", parent, position, yaw);

@@ -43,10 +43,10 @@ namespace Swat
             {
                 switch (State)
                 {
-                    case CivilianState.Injured: return "[E] Treat injuries (hold)";
-                    case CivilianState.Captive: return "[E] Free hostage (hold)";
-                    case CivilianState.Following: return "[E] Tell them to wait here";
-                    default: return "[E] \"Follow me!\"";
+                    case CivilianState.Injured: return "[E] Treat Injuries (hold)";
+                    case CivilianState.Captive: return "[E] Rescue Hostage (hold)";
+                    case CivilianState.Following: return "[E] Tell Them to Wait Here";
+                    default: return "[E] Rescue Civilian (\"Follow me!\")";
                 }
             }
         }

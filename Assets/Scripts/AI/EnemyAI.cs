@@ -37,7 +37,7 @@ namespace Swat
         public int Area { get; set; }
         public EnemyController Body { get { return body; } }
 
-        public string Prompt { get { return Data.armed ? "[E] Restrain suspect (hold)" : "[E] Restrain and question suspect (hold)"; } }
+        public string Prompt { get { return Data.armed ? "[E] Secure Suspect (hold)" : "[E] Secure and Question Suspect (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up; } }
 
         AgentMover mover;

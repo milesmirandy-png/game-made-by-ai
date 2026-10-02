@@ -121,6 +121,12 @@ namespace Swat
         // The mission's lighting profile (day, evening or night): sun, ambient
         // light, haze and color grading. Room fixtures, light pools and
         // emergency lights are set up by MapDresser.
+        // Re-applies view distance and the lighting profile after a settings change.
+        public void RefreshLighting()
+        {
+            if (Level != null && Plan != null) ApplyLighting();
+        }
+
         void ApplyLighting()
         {
             Lighting = LightingProfile.For(Plan.timeOfDay);
@@ -366,6 +372,7 @@ namespace Swat
 
             van = VanBuilder.Build(missionRoot, Level.vanArrivalStart, Level.vanYaw);
             arrival = VehicleArrival.Begin(van, Level.vanArrivalStart, Level.vanParking);
+            VanSupply.Attach(van);
             SetTeamVisible(false);
 
             MissionManager.Instance.Begin(plan);
@@ -458,7 +465,7 @@ namespace Swat
                 civilian.TeleportTo(SquadFormation.Spread(stairs.Destination, ++slot), area);
             }
             CameraRig.Snap();
-            AudioManager.Play2D(Sound.Footstep, 0.4f);
+            AudioManager.Play2D(Sound.StepConcrete, 0.4f);
             UIManager.Notify(stairs.Label);
         }
 

@@ -8,15 +8,45 @@ namespace Swat
     // and Replay / Headquarters / Main menu.
     public class MissionDebriefUI
     {
+        MissionResult shown;
+        float openedAt;
+        const float IntroTime = 1.3f;
+
         public void Draw(GameManager game)
         {
             var result = game.LastResult;
             if (result == null) return;
             float w = UITheme.Width, h = UITheme.Height;
-            UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.015f, 0.02f, 0.04f, 0.93f));
+            if (result != shown)
+            {
+                shown = result;
+                openedAt = Time.unscaledTime;
+            }
+            // A short intro: the result is stamped in the middle of the screen, then the report fades in.
+            float t = Time.unscaledTime - openedAt;
+            if (t < IntroTime - 0.35f && t > 0.2f && (GameInput.LeftClick || GameInput.Confirm || GameInput.KeyDown(KeyCode.Space)))
+            {
+                // Skip to the quick fade-in; buttons stay disabled until it finishes so the same click can't press one.
+                openedAt = Time.unscaledTime - (IntroTime - 0.35f);
+                t = IntroTime - 0.35f;
+            }
+            UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.015f, 0.02f, 0.04f, 0.93f * Mathf.Clamp01(t / 0.3f + 0.4f)));
 
             string title = result.mission.isTraining ? (result.success ? "Training Complete" : "Training Incomplete") : (result.success ? "Mission Complete" : "Mission Failed");
-            UITheme.Text(new Rect(60f, 34f, w - 400f, 50f), title.ToUpperInvariant(), 40, result.success ? UITheme.Good : UITheme.Bad, TextAnchor.UpperLeft, true);
+            Color titleColor = result.success ? UITheme.Good : UITheme.Bad;
+            float reveal = Mathf.Clamp01((t - IntroTime + 0.4f) / 0.4f);
+            if (reveal < 1f)
+            {
+                float stamp = Mathf.Clamp01(t / 0.25f) * (1f - reveal);
+                float line = Mathf.Clamp01(t / 0.6f) * 520f;
+                UITheme.Fill(new Rect(w * 0.5f - line, h * 0.42f + 52f, line * 2f, 2f), new Color(titleColor.r, titleColor.g, titleColor.b, stamp));
+                UITheme.ShadowText(new Rect(0f, h * 0.42f - 30f, w, 80f), title.ToUpperInvariant(), 60, new Color(titleColor.r, titleColor.g, titleColor.b, stamp), TextAnchor.MiddleCenter, true);
+                UITheme.Text(new Rect(0f, h * 0.42f + 62f, w, 28f), result.mission.displayName, 20, new Color(1f, 1f, 1f, 0.8f * stamp), TextAnchor.UpperCenter);
+            }
+            UITheme.Alpha = reveal;
+            bool wasEnabled = GUI.enabled;
+            GUI.enabled = wasEnabled && reveal >= 1f;
+            UITheme.Text(new Rect(60f, 34f, w - 400f, 50f), title.ToUpperInvariant(), 40, titleColor, TextAnchor.UpperLeft, true);
             string sub = result.mission.displayName + "  -  " + result.mission.location + "   |   Time " + MissionScoring.FormatTime(result.time) + "   |   " + OfficerSelectionManager.DifficultyNames[result.plan.difficulty] + "   |   Seed " + result.plan.seed;
             UITheme.Text(new Rect(62f, 86f, w - 400f, 24f), sub, 17, UITheme.Dim);
             if (!result.success && !string.IsNullOrEmpty(result.reason)) UITheme.Text(new Rect(62f, 112f, w - 400f, 24f), result.reason, 17, UITheme.Warn);
@@ -44,6 +74,8 @@ namespace Swat
             }
             if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Headquarters", true, true, 19)) game.GoToHeadquarters();
             if (UITheme.Button(new Rect(w - 300f, by, 240f, 50f), "Main menu", true, false, 18)) game.GoToMainMenu();
+            GUI.enabled = wasEnabled;
+            UITheme.Alpha = 1f;
         }
 
         static Color RatingColor(string rating)

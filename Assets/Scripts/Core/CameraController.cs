@@ -172,7 +172,7 @@ namespace Swat
                 ahead.y = 0f;
                 desired += Vector3.ClampMagnitude(ahead * Mathf.Clamp(settings.lookAhead, 0f, 0.5f), maxLookAhead);
             }
-            UpdateEdgeScroll(live && settings.edgeScrolling, dt);
+            UpdateEdgeScroll(live && settings.edgeScrolling && !GameInput.UsingGamepad, dt);
             desired += edgeOffset;
             if (hasBounds)
             {

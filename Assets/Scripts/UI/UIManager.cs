@@ -51,11 +51,14 @@ namespace Swat
         readonly LoadoutUI loadout = new LoadoutUI();
         readonly HUDController hud = new HUDController();
         readonly CommandWheelUI wheel = new CommandWheelUI();
+        readonly WeaponWheelUI weaponWheel = new WeaponWheelUI();
         readonly TacticalMapUI map = new TacticalMapUI();
         readonly PauseMenuController pause = new PauseMenuController();
         readonly MissionDebriefUI debrief = new MissionDebriefUI();
 
         SecurityConsole console;
+        GameState lastState = GameState.MainMenu;
+        float fadeStart = -10f;
         List<string> reconLines;
         float reconTime = -10f;
         string shoutText;
@@ -112,6 +115,8 @@ namespace Swat
         {
             var game = GameManager.Instance;
             if (game == null) return;
+            bool aiming = game.State == GameState.Playing && !game.PlanningMode && !game.ConsoleOpen && game.Player != null && game.Player.IsAlive;
+            GameInput.Tick(aiming, Time.unscaledDeltaTime);
             bool preview = game.State == GameState.OfficerSelection || game.State == GameState.Loadout;
             if (!preview) CharacterPreview.Hide();
             else CharacterPreview.Tick(Time.unscaledDeltaTime);
@@ -155,11 +160,13 @@ namespace Swat
                     if (game.PlanningMode) map.Draw(game, true);
                     else if (game.MapOpen) map.Draw(game, false);
                     if (SquadCommandManager.Instance.WheelOpen) wheel.Draw(game);
+                    bool weaponWheelOpen = game.Player != null && game.Player.Weapons.WheelOpen;
+                    if (weaponWheelOpen) weaponWheel.Draw(game);
                     if (console != null) DrawConsole(game);
                     DrawRecon();
                     DrawShout();
                     DrawBanner();
-                    if (!game.PlanningMode && !SquadCommandManager.Instance.WheelOpen && console == null) hud.DrawCrosshair(game);
+                    if (!game.PlanningMode && !SquadCommandManager.Instance.WheelOpen && !weaponWheelOpen && console == null) hud.DrawCrosshair(game);
                     break;
                 case GameState.Paused:
                     hud.Draw(game);
@@ -172,6 +179,21 @@ namespace Swat
             if (Settings.Open) Settings.Draw(game);
             DrawNotes(game);
             DrawPerformance(quality);
+            DrawTransition(game);
+        }
+
+        // A quick fade from black when moving between screens (not for pausing, which should feel instant).
+        void DrawTransition(GameManager game)
+        {
+            if (game.State != lastState)
+            {
+                bool pauseToggle = (game.State == GameState.Paused && lastState == GameState.Playing) || (game.State == GameState.Playing && lastState == GameState.Paused);
+                if (!pauseToggle) fadeStart = Time.unscaledTime;
+                lastState = game.State;
+            }
+            float age = Time.unscaledTime - fadeStart;
+            if (age >= 0.35f) return;
+            UITheme.Fill(new Rect(0f, 0f, UITheme.Width, UITheme.Height), new Color(0f, 0f, 0f, 0.65f * (1f - age / 0.35f)));
         }
 
         // ---- Shared overlays ----
@@ -185,8 +207,9 @@ namespace Swat
                 float age = Time.unscaledTime - note.time;
                 if (age > 4.5f || age < 0f) continue;
                 var color = note.bad ? UITheme.Bad : UITheme.TextColor;
-                color.a = Mathf.Clamp01(4.5f - age);
-                var rect = new Rect(w * 0.3f, y, w * 0.4f, 30f);
+                color.a = Mathf.Clamp01(4.5f - age) * Mathf.Clamp01(age / 0.15f);
+                float slide = (1f - Mathf.Clamp01(age / 0.18f)) * -10f;
+                var rect = new Rect(w * 0.3f, y + slide, w * 0.4f, 30f);
                 UITheme.Fill(new Rect(rect.x + rect.width * 0.1f, rect.y, rect.width * 0.8f, rect.height), new Color(0f, 0f, 0f, 0.45f * color.a));
                 UITheme.Text(rect, note.text, 19, color, TextAnchor.MiddleCenter);
                 y += 32f;
@@ -228,7 +251,8 @@ namespace Swat
         {
             float age = Time.unscaledTime - reconTime;
             if (reconLines == null || age > 7f) return;
-            var rect = new Rect(UITheme.Width - 420f, 330f, 390f, 40f + reconLines.Count * 26f);
+            float height = 40f + reconLines.Count * 26f;
+            var rect = new Rect(18f, UITheme.Height - 170f - height, 420f, height);
             UITheme.Panel(rect);
             UITheme.Text(new Rect(rect.x + 14f, rect.y + 8f, rect.width - 28f, 24f), "RECON CAMERA - " + reconLines[0].ToUpperInvariant(), 16, UITheme.Accent, TextAnchor.UpperLeft, true);
             for (int i = 1; i < reconLines.Count; i++)

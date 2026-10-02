@@ -25,7 +25,7 @@ namespace Swat
         public int shadowQuality = -1;     // -1 = preset, 0 off, 1 low, 2 medium, 3 high, 4 very high
         public int antiAliasing = -1;      // -1 = preset, otherwise 0/2/4/8 MSAA samples
         public int effectsQuality = -1;    // -1 = preset, 0 low, 1 medium, 2 high
-        public int textureQuality = 2;     // 0 low, 1 medium, 2 high (size of generated surface textures)
+        public int textureQuality = -1;    // -1 = preset, 0 low, 1 medium, 2 high (size of generated surface textures)
         public int vSync = -1;             // -1 = preset, 0 off, 1 on
         public bool postProcessing = true;
         public bool ambientOcclusion = true;

@@ -107,9 +107,13 @@ namespace Swat
             return texture;
         }
 
+        // Multiplies the alpha of everything drawn (minimap opacity, screen fades). Reset by Begin().
+        public static float Alpha = 1f;
+
         // Call at the start of OnGUI.
         public static void Begin()
         {
+            Alpha = 1f;
             float s = Scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
             if (invisible == null) invisible = new GUIStyle();
@@ -144,6 +148,7 @@ namespace Swat
         {
             if (Event.current.type != EventType.Repaint) return;
             var old = GUI.color;
+            color.a *= Alpha;
             GUI.color = color;
             GUI.DrawTexture(rect, Texture2D.whiteTexture);
             GUI.color = old;
@@ -161,6 +166,7 @@ namespace Swat
         {
             if (Event.current.type != EventType.Repaint) return;
             var old = GUI.color;
+            color.a *= Alpha;
             GUI.color = color;
             if (upward) GUI.DrawTexture(rect, Gradient);
             else GUI.DrawTextureWithTexCoords(rect, Gradient, new Rect(0f, 1f, 1f, -1f));
@@ -171,6 +177,7 @@ namespace Swat
         {
             if (Event.current.type != EventType.Repaint) return;
             var old = GUI.color;
+            color.a *= Alpha;
             GUI.color = color;
             GUI.DrawTexture(new Rect(center.x - radius, center.y - radius, radius * 2f, radius * 2f), CircleTexture);
             GUI.color = old;
@@ -188,6 +195,7 @@ namespace Swat
                 rings[ratio] = texture;
             }
             var old = GUI.color;
+            color.a *= Alpha;
             GUI.color = color;
             float r = radius + thickness * 0.5f;
             GUI.DrawTexture(new Rect(center.x - r, center.y - r, r * 2f, r * 2f), texture);
@@ -233,6 +241,7 @@ namespace Swat
             if (string.IsNullOrEmpty(text)) return;
             var style = Style(size, anchor, bold);
             var old = GUI.color;
+            color.a *= Alpha;
             GUI.color = color;
             GUI.Label(rect, text, style);
             GUI.color = old;
@@ -242,6 +251,26 @@ namespace Swat
         {
             Text(new Rect(rect.x + 1.5f, rect.y + 1.5f, rect.width, rect.height), text, size, new Color(0f, 0f, 0f, color.a * 0.85f), anchor, bold);
             Text(rect, text, size, color, anchor, bold);
+        }
+
+        static readonly GUIContent measure = new GUIContent();
+
+        public static float TextWidth(string text, int size, bool bold = false)
+        {
+            measure.text = text;
+            return Style(size, TextAnchor.MiddleLeft, bold, false).CalcSize(measure).x;
+        }
+
+        // A key cap ("E", "LMB", "A") used by interaction prompts and hints. Returns its width.
+        public static float KeyCap(Vector2 position, string key, float height)
+        {
+            int size = Mathf.RoundToInt(height * 0.55f);
+            float width = Mathf.Max(height, TextWidth(key, size, true) + 14f);
+            var rect = new Rect(position.x, position.y, width, height);
+            Fill(rect, new Color(0.9f, 0.92f, 0.96f, 0.95f));
+            Fill(new Rect(rect.x, rect.yMax - 3f, rect.width, 3f), new Color(0.55f, 0.6f, 0.7f, 0.95f));
+            Text(new Rect(rect.x, rect.y - 1f, rect.width, rect.height), key, size, new Color(0.05f, 0.07f, 0.1f), TextAnchor.MiddleCenter, true);
+            return width;
         }
 
         public static float TextHeight(string text, int size, float width)
@@ -290,12 +319,19 @@ namespace Swat
             if (hover || selected) Fill(new Rect(rect.x, rect.y, 3f, rect.height), Accent);
             Text(new Rect(rect.x + 12f, rect.y, rect.width - 20f, rect.height), label, size, enabled ? TextColor : Faint, TextAnchor.MiddleLeft, selected);
             if (!enabled) return false;
-            if (GUI.Button(rect, GUIContent.none, invisible))
+            if (GUI.Button(rect, GUIContent.none, invisible) || PadClick(rect))
             {
                 AudioManager.Ui(Sound.UiSelect, 0.45f);
                 return true;
             }
             return false;
+        }
+
+        // A gamepad "click": A pressed while the (stick-driven) cursor is over the control.
+        // Checked once per frame, on the repaint event.
+        static bool PadClick(Rect rect)
+        {
+            return GameInput.UsingGamepad && Event.current.type == EventType.Repaint && GameInput.PadSubmit && Hover(rect);
         }
 
         // A button with a second line of small text.
@@ -315,7 +351,8 @@ namespace Swat
             Frame(box, hover ? Accent : Line);
             if (value) Fill(new Rect(box.x + 5f, box.y + 5f, 12f, 12f), Accent);
             Text(new Rect(rect.x + 32f, rect.y, rect.width - 32f, rect.height), label, 17, TextColor, TextAnchor.MiddleLeft);
-            if (GUI.Button(rect, GUIContent.none, invisible))
+            if (!GUI.enabled) return value;
+            if (GUI.Button(rect, GUIContent.none, invisible) || PadClick(rect))
             {
                 AudioManager.Ui(Sound.UiSelect, 0.4f);
                 return !value;
@@ -323,10 +360,10 @@ namespace Swat
             return value;
         }
 
-        public static float Slider(Rect rect, string label, float value, float min, float max, string valueText)
+        public static float Slider(Rect rect, string label, float value, float min, float max, string valueText, float labelFraction = 0.36f)
         {
-            Text(new Rect(rect.x, rect.y, rect.width * 0.36f, rect.height), label, 17, TextColor, TextAnchor.MiddleLeft);
-            Rect track = new Rect(rect.x + rect.width * 0.38f, rect.y + rect.height * 0.5f - 3f, rect.width * 0.46f, 6f);
+            Text(new Rect(rect.x, rect.y, rect.width * labelFraction, rect.height), label, 17, TextColor, TextAnchor.MiddleLeft);
+            Rect track = new Rect(rect.x + rect.width * (labelFraction + 0.02f), rect.y + rect.height * 0.5f - 3f, rect.width * (0.82f - labelFraction), 6f);
             Fill(track, new Color(0f, 0f, 0f, 0.6f));
             float t = Mathf.InverseLerp(min, max, value);
             Fill(new Rect(track.x, track.y, track.width * t, track.height), Accent);
@@ -336,6 +373,12 @@ namespace Swat
             Rect hit = new Rect(track.x - 8f, rect.y, track.width + 16f, rect.height);
             var e = Event.current;
             if (!GUI.enabled) return value;
+            // Gamepad: d-pad left/right nudges the slider under the cursor.
+            if (GameInput.UsingGamepad && e.type == EventType.Repaint && Hover(rect))
+            {
+                int step = GameInput.PadHorizontal;
+                if (step != 0) return Mathf.Clamp(value + step * (max - min) * 0.05f, min, max);
+            }
             int id = GUIUtility.GetControlID(FocusType.Passive, hit);
             if (e.type == EventType.MouseDown && hit.Contains(e.mousePosition) && e.button == 0)
             {
@@ -356,20 +399,21 @@ namespace Swat
         }
 
         // Left/right arrows around a value.
-        public static int Stepper(Rect rect, string label, int index, string[] options)
+        public static int Stepper(Rect rect, string label, int index, string[] options, float labelFraction = 0.36f)
         {
-            Text(new Rect(rect.x, rect.y, rect.width * 0.36f, rect.height), label, 17, TextColor, TextAnchor.MiddleLeft);
-            float x = rect.x + rect.width * 0.38f;
-            float w = rect.width * 0.62f;
+            Text(new Rect(rect.x, rect.y, rect.width * labelFraction, rect.height), label, 17, TextColor, TextAnchor.MiddleLeft);
+            float x = rect.x + rect.width * (labelFraction + 0.02f);
+            float w = rect.width * (0.98f - labelFraction);
             if (Button(new Rect(x, rect.y + 2f, 34f, rect.height - 4f), "<", true, false, 18)) index = (index - 1 + options.Length) % options.Length;
             Text(new Rect(x + 40f, rect.y, w - 80f, rect.height), options[Mathf.Clamp(index, 0, options.Length - 1)], 17, TextColor, TextAnchor.MiddleCenter, true);
             if (Button(new Rect(x + w - 34f, rect.y + 2f, 34f, rect.height - 4f), ">", true, false, 18)) index = (index + 1) % options.Length;
             return index;
         }
 
+        // The key (or gamepad button, while a gamepad is in use) for an action.
         public static string KeyFor(InputAction action)
         {
-            return GameInput.KeyName(GameInput.Binding(action));
+            return GameInput.PromptKey(action);
         }
 
         // Converts a world position to virtual GUI coordinates. Returns false if behind the camera.

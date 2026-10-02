@@ -201,6 +201,16 @@ namespace Swat
             Shapes.Make(PrimitiveType.Cylinder, "Mug", desk.transform, new Vector3(0.32f, 0.56f, -0.1f), new Vector3(0.05f / width, 0.07f, 0.08f), new Color(0.85f, 0.85f, 0.8f), false);
             Shapes.Box("Papers", desk.transform, new Vector3(-0.3f, 0.51f, -0.05f), new Vector3(0.18f / width, 0.02f, 0.3f), new Color(0.92f, 0.92f, 0.88f), false)
                 .transform.localRotation = Quaternion.Euler(0f, 12f, 0f);
+            // Some desks also get a phone or a forgotten ID badge (picked from the position, so it's stable).
+            int pick = Mathf.Abs(Mathf.RoundToInt(position.x * 7f + position.z * 13f)) % 3;
+            if (pick != 1)
+            {
+                Shapes.Box("Phone", desk.transform, new Vector3(0.3f, 0.535f, 0.22f), new Vector3(0.13f / width, 0.06f, 0.14f), new Color(0.1f, 0.1f, 0.11f), false);
+                Shapes.Box("Phone Light", desk.transform, new Vector3(0.3f, 0.57f, 0.17f), new Vector3(0.02f / width, 0.01f, 0.02f), new Color(0.3f, 1f, 0.4f), false, 1.5f);
+            }
+            if (pick != 0)
+                Shapes.Box("ID Badge", desk.transform, new Vector3(-0.12f, 0.51f, -0.3f), new Vector3(0.05f / width, 0.01f, 0.08f), new Color(0.85f, 0.9f, 1f), false)
+                    .transform.localRotation = Quaternion.Euler(0f, -20f, 0f);
         }
 
         public void Couch(Vector3 position, float yaw, Color color)

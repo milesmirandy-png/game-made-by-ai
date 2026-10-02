@@ -26,7 +26,7 @@ namespace Swat
         {
             get
             {
-                int quality = SaveManager.Settings.textureQuality;
+                int quality = QualityManager.TextureLevel;
                 return quality <= 0 ? 32 : quality == 1 ? 64 : 128;
             }
         }

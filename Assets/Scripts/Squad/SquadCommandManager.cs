@@ -36,6 +36,9 @@ namespace Swat
         public Vector3 Heading { get; private set; }
         public string LastOrder { get; private set; }
         public float LastOrderTime { get; private set; }
+        // Where the last order points (shown as a short confirmation ping in the world).
+        public Vector3 LastOrderPoint { get; private set; }
+        public bool LastOrderHasPoint { get; private set; }
 
         // Team Leader: squad reacts faster permanently, and much faster while Coordinate is active.
         public float ResponseBoost
@@ -177,6 +180,8 @@ namespace Swat
 
             LastOrder = OrderText(order, action) + "  (" + SelectionLabel + ")";
             LastOrderTime = Time.unscaledTime;
+            LastOrderHasPoint = order == SquadOrder.MoveTo || order == SquadOrder.Cover || order == SquadOrder.Stack || order == SquadOrder.Hold;
+            LastOrderPoint = order == SquadOrder.Stack && door != null ? door.transform.position : point;
             AudioManager.Play2D(Sound.RadioOrder, 0.5f, 1f, SoundCategory.Interface);
             SayPlayer(PlayerLine(order, action));
             Acknowledge(targets[0], order, action);
@@ -197,6 +202,7 @@ namespace Swat
             }
             LastOrder = (append ? "Waypoint added" : "Move to waypoint") + "  (" + SelectionLabel + ")";
             LastOrderTime = Time.unscaledTime;
+            LastOrderHasPoint = false;
             AudioManager.RadioChirp(1.1f);
         }
 
@@ -562,7 +568,13 @@ namespace Swat
             Vector2 gui = new Vector2(mouse.x, Screen.height - mouse.y);
             Vector2 offset = gui - WheelCenter;
             int previous = Hovered;
-            if (offset.magnitude < 45f * UITheme.Scale) Hovered = -1;
+            if (GameInput.UsingGamepad)
+            {
+                // The right stick points at an option; letting go keeps the last one highlighted.
+                Vector2 stick = GameInput.RightStick;
+                offset = stick.sqrMagnitude > 0.25f ? new Vector2(stick.x, -stick.y) * 100f * UITheme.Scale : Vector2.zero;
+            }
+            if (offset.magnitude < 45f * UITheme.Scale) { if (!GameInput.UsingGamepad) Hovered = -1; }
             else
             {
                 // Option 0 at the top, clockwise.

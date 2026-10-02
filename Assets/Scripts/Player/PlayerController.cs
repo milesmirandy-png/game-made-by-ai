@@ -48,7 +48,8 @@ namespace Swat
 
         CharacterController controller;
         float verticalVelocity, stepTimer, abilityReadyAt, treatUntil;
-        bool exhausted;
+        bool exhausted, sprintLatch;
+        Vector3 aimTarget;
 
         public static PlayerController Spawn(Transform parent, Vector3 position, float yaw, OfficerData officer, OfficerLoadout loadout, System.Collections.Generic.List<EquipmentCount> bonus)
         {
@@ -76,7 +77,7 @@ namespace Swat
             player.Loadout = loadout;
             player.Stamina = player.maxStamina;
             player.AimDirection = go.transform.forward;
-            player.AimPoint = position + go.transform.forward * 3f;
+            player.AimPoint = player.aimTarget = position + go.transform.forward * 3f;
 
             var armor = GameData.Armor(loadout.armorId);
             player.Parts = CharacterFactory.Build(go.transform, OfficerAppearance(officer, loadout, true));
@@ -127,9 +128,10 @@ namespace Swat
             bool active = game != null && game.AcceptsGameplayInput && Health.IsAlive;
             if (active)
             {
-                Aim();
+                // Aim holds still while the weapon wheel is open (the mouse is picking an entry).
+                if (!Weapons.WheelOpen) Aim(dt);
                 Move(dt);
-                if (GameInput.Down(InputAction.Crouch)) SetCrouch(!IsCrouched);
+                if (GameInput.Down(InputAction.Crouch) && !Weapons.WheelOpen) SetCrouch(!IsCrouched);
                 if (GameInput.Down(InputAction.Flashlight)) Flashlight.Toggle();
                 if (GameInput.Down(InputAction.Ability)) UseAbility();
             }
@@ -155,7 +157,7 @@ namespace Swat
             controller.enabled = true;
             verticalVelocity = 0f;
             AimDirection = transform.forward;
-            AimPoint = position + transform.forward * 3f;
+            AimPoint = aimTarget = position + transform.forward * 3f;
         }
 
         // Short "applying a bandage" pose used by the medical kit.
@@ -164,15 +166,24 @@ namespace Swat
             treatUntil = Time.time + seconds;
         }
 
-        void Aim()
+        void Aim(float dt)
         {
             var cam = GameManager.Instance.CameraRig.Cam;
-            Vector2 mouse = GameInput.MousePosition;
-            // Viewport coordinates keep aiming correct when the world is drawn at reduced resolution.
-            Ray ray = cam.ViewportPointToRay(new Vector3(mouse.x / Screen.width, mouse.y / Screen.height, 0f));
-            var plane = new Plane(Vector3.up, new Vector3(0f, aimHeight, 0f));
-            float enter;
-            if (plane.Raycast(ray, out enter)) AimPoint = ray.GetPoint(enter);
+            var settings = SaveManager.Settings;
+            if (GameInput.UsingGamepad) AimWithStick(dt, settings);
+            else
+            {
+                Vector2 mouse = GameInput.MousePosition;
+                // Viewport coordinates keep aiming correct when the world is drawn at reduced resolution.
+                Ray ray = cam.ViewportPointToRay(new Vector3(mouse.x / Screen.width, mouse.y / Screen.height, 0f));
+                var plane = new Plane(Vector3.up, new Vector3(0f, aimHeight, 0f));
+                float enter;
+                if (plane.Raycast(ray, out enter)) aimTarget = ray.GetPoint(enter);
+            }
+
+            // Optional aim smoothing (0 = the aim follows the pointer exactly).
+            float smoothing = Mathf.Clamp01(settings.aimSmoothing);
+            AimPoint = smoothing <= 0.01f ? aimTarget : Vector3.Lerp(AimPoint, aimTarget, 1f - Mathf.Exp(-Mathf.Lerp(40f, 7f, smoothing) * dt));
 
             Vector3 flat = AimPoint - transform.position;
             flat.y = 0f;
@@ -181,6 +192,60 @@ namespace Swat
                 AimDirection = flat.normalized;
                 transform.rotation = Quaternion.LookRotation(AimDirection);
             }
+            if (GameInput.UsingGamepad)
+            {
+                // Lets the crosshair, radial menus and camera follow the stick aim.
+                Vector3 screen = cam.WorldToViewportPoint(AimPoint);
+                GameInput.SetGamepadPointer(new Vector2(screen.x * Screen.width, screen.y * Screen.height));
+            }
+        }
+
+        // Twin-stick aiming: the right stick points the weapon (screen up is world +z),
+        // turning at a speed set by controller sensitivity, with optional light aim assist.
+        void AimWithStick(float dt, SettingsData settings)
+        {
+            Vector2 stick = GameInput.RightStick;
+            Vector3 current = aimTarget - transform.position;
+            current.y = 0f;
+            if (current.sqrMagnitude < 0.01f) current = transform.forward;
+            Vector3 wanted = current.normalized;
+            float reach = Mathf.Max(3f, current.magnitude);
+            if (stick.sqrMagnitude > 0.04f)
+            {
+                wanted = new Vector3(stick.x, 0f, stick.y).normalized;
+                reach = Mathf.Lerp(3f, 9f, stick.magnitude);
+                if (settings.controllerAimAssist) wanted = AimAssist(wanted);
+            }
+            else if (IsMoving)
+            {
+                Vector2 move = GameInput.Move;
+                wanted = new Vector3(move.x, 0f, move.y).normalized;
+            }
+            float turn = 720f * Mathf.Clamp(settings.controllerSensitivity, 0.3f, 2f) * Mathf.Deg2Rad * dt;
+            Vector3 direction = Vector3.RotateTowards(current.normalized, wanted, turn, 0f);
+            aimTarget = transform.position + direction * reach;
+            aimTarget.y = aimHeight;
+        }
+
+        // Nudges the stick direction onto a visible, armed suspect within a narrow cone.
+        Vector3 AimAssist(Vector3 direction)
+        {
+            var intel = TacticalIntel.Instance;
+            Vector3 best = direction;
+            float bestAngle = 9f;
+            foreach (var enemy in AIManager.Instance.Enemies)
+            {
+                if (enemy == null || !enemy.IsArmedThreat || (intel != null && !intel.IsRevealed(enemy))) continue;
+                Vector3 to = enemy.Position - transform.position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 16f * 16f || to.sqrMagnitude < 0.25f) continue;
+                float angle = Vector3.Angle(direction, to);
+                if (angle >= bestAngle) continue;
+                bestAngle = angle;
+                best = to.normalized;
+            }
+            // Full snap only when very close to the target; otherwise a partial pull.
+            return bestAngle < 3f ? best : Vector3.Slerp(direction, best, 0.5f).normalized;
         }
 
         void Move(float dt)
@@ -189,7 +254,11 @@ namespace Swat
             IsMoving = input.sqrMagnitude > 0.01f;
             IsSteadyAiming = GameInput.Held(InputAction.AltAim) && !Health.Bracing;
 
-            bool wantsSprint = GameInput.Held(InputAction.Sprint) && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing;
+            // On a gamepad, clicking the left stick toggles sprint until you stop moving.
+            if (GameInput.UsingGamepad && GameInput.PadDown(GameInput.PadBinding(InputAction.Sprint))) sprintLatch = !sprintLatch;
+            if (!IsMoving || !GameInput.UsingGamepad) sprintLatch = false;
+            bool sprintInput = sprintLatch || GameInput.KeyHeld(GameInput.Binding(InputAction.Sprint));
+            bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing;
             if (Stamina <= 0f) exhausted = true;
             if (exhausted && Stamina > maxStamina * 0.25f) exhausted = false;
             IsSprinting = wantsSprint && !exhausted;
@@ -210,9 +279,18 @@ namespace Swat
             stepTimer -= dt;
             if (stepTimer > 0f) return;
             stepTimer = IsSprinting ? 0.3f : IsCrouched ? 0.6f : 0.45f;
-            AudioManager.Play2D(Sound.Footstep, IsSprinting ? 0.3f : IsCrouched ? 0.1f : 0.18f, Random.Range(0.9f, 1.1f));
+            // The step sound matches what's underfoot (carpet, tile, concrete, grass, asphalt, metal).
+            AudioManager.Play2D(AudioManager.StepFor(GroundSurface()), IsSprinting ? 0.34f : IsCrouched ? 0.1f : 0.2f, Random.Range(0.9f, 1.1f));
             // Sprinting is loud; walking and crouching let you get close quietly.
             Noise.Emit(transform.position, IsSprinting ? 7f : IsCrouched ? 1f : 2.5f, NoiseKind.Footstep);
+        }
+
+        Surface GroundSurface()
+        {
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position + Vector3.up * 0.3f, Vector3.down, out hit, 1f, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                return SurfaceTag.Of(hit.collider);
+            return Surface.Concrete;
         }
 
         void SetCrouch(bool crouch)

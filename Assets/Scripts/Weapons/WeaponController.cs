@@ -26,7 +26,10 @@ namespace Swat
             public string label;
             public int weapon;     // 0 primary, 1 sidearm, -1 equipment
             public int equipment;  // index into Inventory.Equipment
-            public bool enabled;
+            public bool enabled, current;
+            public string detail;
+            public WeaponData weaponData;
+            public EquipmentKind kind;
         }
         public bool WheelOpen { get; private set; }
         public Vector2 WheelCenter { get; private set; } // GUI pixels (y down)
@@ -72,6 +75,7 @@ namespace Swat
             }
 
             // Tap the switch key to swap weapons; hold it for the weapon wheel.
+            bool wheelWasOpen = WheelOpen;
             if (GameInput.Down(InputAction.SwitchWeapon)) switchHeldSince = Time.unscaledTime;
             if (switchHeldSince >= 0f && !WheelOpen && GameInput.Held(InputAction.SwitchWeapon) && Time.unscaledTime - switchHeldSince > 0.25f) OpenWheel();
             if (WheelOpen) UpdateWheel();
@@ -81,7 +85,8 @@ namespace Swat
                 else if (switchHeldSince >= 0f) Switch(Inventory.CurrentIndex == 0 ? 1 : 0);
                 switchHeldSince = -1f;
             }
-            if (WheelOpen)
+            // The click that picks a wheel entry must not also fire.
+            if (WheelOpen || wheelWasOpen)
             {
                 laser.gameObject.SetActive(false);
                 return;
@@ -115,7 +120,7 @@ namespace Swat
             switchEnd = Time.time + Current.Data.switchTime;
             lowAmmoWarned = Current.Magazine <= Current.Data.magazineSize / 4;
             ApplyWeaponModel();
-            AudioManager.Play(Sound.WeaponRaise, player.Position, 0.45f);
+            AudioManager.Play(Sound.WeaponRaise, player.Position, 0.45f, 1f, SoundCategory.Weapons);
             AudioManager.Play(Sound.Equip, player.Position, 0.35f);
             MissionManager.Instance.Report(ObjectiveType.TrainingSwitchWeapon, index);
         }
@@ -124,13 +129,18 @@ namespace Swat
         {
             WheelEntries.Clear();
             if (Inventory.Primary != null)
-                WheelEntries.Add(new WheelEntry { label = Inventory.Primary.Data.displayName, weapon = 0, equipment = -1, enabled = !Inventory.PrimaryBlocked });
+                WheelEntries.Add(WeaponEntry(Inventory.Primary, 0, !Inventory.PrimaryBlocked));
             if (Inventory.Sidearm != null)
-                WheelEntries.Add(new WheelEntry { label = Inventory.Sidearm.Data.displayName, weapon = 1, equipment = -1, enabled = true });
+                WheelEntries.Add(WeaponEntry(Inventory.Sidearm, 1, true));
             for (int i = 0; i < Inventory.Equipment.Count; i++)
             {
                 var slot = Inventory.Equipment[i];
-                WheelEntries.Add(new WheelEntry { label = slot.Data.displayName + (slot.Data.consumable ? " x" + slot.Count : ""), weapon = -1, equipment = i, enabled = slot.Count > 0 });
+                WheelEntries.Add(new WheelEntry
+                {
+                    label = slot.Data.displayName, weapon = -1, equipment = i, enabled = slot.Count > 0, kind = slot.Data.kind,
+                    current = slot == Inventory.SelectedSlot,
+                    detail = slot.Data.consumable ? slot.Count + " left" : "equipment",
+                });
             }
             if (WheelEntries.Count == 0) return;
             Vector2 mouse = GameInput.MousePosition;
@@ -141,12 +151,28 @@ namespace Swat
             AudioManager.Ui(Sound.UiHover, 0.4f);
         }
 
+        WheelEntry WeaponEntry(Weapon weapon, int index, bool usable)
+        {
+            return new WheelEntry
+            {
+                label = weapon.Data.displayName, weapon = index, equipment = -1, enabled = usable, weaponData = weapon.Data,
+                current = Inventory.CurrentIndex == index,
+                detail = usable ? weapon.Magazine + " / " + weapon.Reserve : "blocked by shield",
+            };
+        }
+
         void UpdateWheel()
         {
             Vector2 mouse = GameInput.MousePosition;
             Vector2 offset = new Vector2(mouse.x, Screen.height - mouse.y) - WheelCenter;
             int previous = WheelHovered;
-            if (offset.magnitude < 40f * UITheme.Scale) WheelHovered = -1;
+            if (GameInput.UsingGamepad)
+            {
+                // The right stick points at an entry; letting go keeps the last one highlighted.
+                Vector2 stick = GameInput.RightStick;
+                offset = stick.sqrMagnitude > 0.25f ? new Vector2(stick.x, -stick.y) * 100f * UITheme.Scale : Vector2.zero;
+            }
+            if (offset.magnitude < 40f * UITheme.Scale) { if (!GameInput.UsingGamepad) WheelHovered = -1; }
             else
             {
                 float angle = Mathf.Atan2(offset.x, -offset.y) * Mathf.Rad2Deg;
@@ -210,7 +236,7 @@ namespace Swat
             }
             else
             {
-                AudioManager.Play2D(Sound.Empty, 0.6f);
+                AudioManager.Play2D(Sound.Empty, 0.6f, 1f, SoundCategory.Weapons);
                 nextFireTime = Time.time + 0.3f;
                 if (weapon.CanReload) StartReload();
             }
@@ -220,7 +246,7 @@ namespace Swat
         {
             reloadEnd = Time.time + Current.Data.reloadTime;
             lowAmmoWarned = false;
-            AudioManager.Play(Sound.Reload, player.Position, 0.7f);
+            AudioManager.Play(Sound.Reload, player.Position, 0.7f, 1f, SoundCategory.Weapons);
             MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
         }
 
@@ -253,7 +279,7 @@ namespace Swat
             if (!hitSomeone) return;
             ShotsHit++;
             LastHitTime = Time.time;
-            if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f);
+            if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f, 1f, SoundCategory.Interface);
         }
 
         // Low-ammo cue, automatic reload when the magazine runs dry, optional switch to the sidearm.
@@ -263,7 +289,7 @@ namespace Swat
             if (!lowAmmoWarned && weapon.Magazine > 0 && weapon.Magazine <= weapon.Data.magazineSize / 4)
             {
                 lowAmmoWarned = true;
-                AudioManager.Play2D(Sound.Empty, 0.25f, 1.4f);
+                AudioManager.Play2D(Sound.Empty, 0.25f, 1.4f, SoundCategory.Weapons);
             }
             if (weapon.Magazine > 0) return;
             if (weapon.CanReload)
@@ -289,7 +315,7 @@ namespace Swat
             if (slot.Count <= 0)
             {
                 UIManager.Notify("No " + slot.Data.displayName + " left");
-                AudioManager.Play2D(Sound.Empty, 0.6f);
+                AudioManager.Play2D(Sound.Empty, 0.6f, 1f, SoundCategory.Weapons);
                 return;
             }
             TacticalEquipment.UseByPlayer(player, slot);

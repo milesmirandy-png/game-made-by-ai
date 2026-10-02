@@ -272,10 +272,12 @@ namespace Swat
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
                     break;
                 case RoomKind.Hallway:
                 case RoomKind.Stairwell:
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     break;
@@ -286,6 +288,7 @@ namespace Swat
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.Toolbox(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
+                    items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
                     break;
                 case RoomKind.Security:
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.MonitorBank(p, at, yaw)));

@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Resume, Restart mission, Settings, Controls, Return to headquarters, Quit.
+    // Resume, Restart mission, Settings, Controls, Quit mission (back to headquarters), Quit to desktop.
+    // The world is fully paused underneath (AI, timers, physics and world audio).
     public class PauseMenuController
     {
         string confirm; // which destructive action is waiting for a second click
@@ -15,6 +16,18 @@ namespace Swat
             var rect = new Rect(w * 0.5f - 230f, h * 0.5f - 280f, 460f, 560f);
             UITheme.Panel(rect);
             UITheme.Header(new Rect(rect.x + 30f, rect.y + 24f, rect.width - 60f, 50f), "Paused", game.Plan != null ? game.Plan.mission.displayName : null);
+            var mission = MissionManager.Instance;
+            if (mission != null && mission.Mission != null)
+            {
+                int done = 0, total = 0;
+                foreach (var objective in mission.Objectives)
+                {
+                    if (objective.Optional) continue;
+                    total++;
+                    if (objective.State == ObjectiveState.Completed) done++;
+                }
+                UITheme.Text(new Rect(rect.x + 30f, rect.yMax - 58f, rect.width - 60f, 22f), "Mission time " + MissionScoring.FormatTime(mission.Elapsed) + "   |   Objectives " + done + "/" + total, 14, UITheme.Dim, TextAnchor.UpperCenter);
+            }
             float x = rect.x + 30f, bw = rect.width - 60f, y = rect.y + 100f, bh = 52f, gap = 10f;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Resume")) { confirm = null; game.Resume(); }
             y += bh + gap;
@@ -26,9 +39,9 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Settings")) ui.Settings.Show(0);
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(3);
+            if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(4);
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? "Click again: abandon mission" : "Return to headquarters", true, confirm == "hq"))
+            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? "Click again to quit the mission" : "Quit mission", true, confirm == "hq"))
             {
                 if (confirm == "hq") { confirm = null; game.GoToHeadquarters(); }
                 else confirm = "hq";
