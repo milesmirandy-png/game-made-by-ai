@@ -23,6 +23,11 @@ import every capture as a texture.
    to `<persistentDataPath>/Screenshots/`.
 4. Any OS screen capture of the Game view also works.
 
+The game now starts in the **pixel-art** style (Settings -> Graphics -> Art
+style). Capture the required shots in that style; a few extra shots in
+**Smooth** are useful for comparison. Note that the browser preview of the
+pixel style is not a screenshot and doesn't belong in this folder.
+
 The **Lighting** selector on the briefing screen (Mission default / Day /
 Evening / Night) lets you pick the time of day for any mission.
 

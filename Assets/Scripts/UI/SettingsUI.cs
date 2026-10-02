@@ -231,6 +231,18 @@ namespace Swat
                 if (next == 0) quality.SetTier(QualityManager.DetectTier(), true);
                 else quality.SetTier((QualityTier)(next - 1), false);
             }
+            int style = s.artStyle;
+            if (Choice(ref y, lx, colW, "Art style", ref style, QualityManager.ArtStyleNames))
+            {
+                s.artStyle = style;
+                apply = true;
+                message = style == 0 ? "Pixel art: low-resolution, crisp pixels and a flat top-down camera. Textures switch on the next mission." : "Smooth: full-resolution 3D with a perspective camera.";
+            }
+            if (s.artStyle == 0)
+            {
+                int pixelSize = s.pixelSize;
+                if (Choice(ref y, lx, colW, "Pixel size", ref pixelSize, QualityManager.PixelSizeNames)) { s.pixelSize = pixelSize; apply = true; }
+            }
 
             var resolutionNames = new string[resolutions.Count + 1];
             resolutionNames[0] = "Current (" + Screen.width + " x " + Screen.height + ")";
@@ -274,7 +286,9 @@ namespace Swat
                 quality.SaveFpsSetting();
             }
             y += 8f;
-            string summary = "Drawing at " + Mathf.RoundToInt(preset.renderScale * 100f) + "% resolution, " + QualityManager.ShadowNames[Mathf.Clamp(preset.shadows, 0, 4)].ToLowerInvariant() + " shadows, "
+            string drawing = QualityManager.PixelArt && quality.ScaledView != null ? "Pixel art at " + quality.ScaledView.width + " x " + quality.ScaledView.height + " game pixels (each " + quality.PixelFactor + "x" + quality.PixelFactor + " on screen)"
+                : "Drawing at " + Mathf.RoundToInt(preset.renderScale * 100f) + "% resolution";
+            string summary = drawing + ", " + QualityManager.ShadowNames[Mathf.Clamp(preset.shadows, 0, 4)].ToLowerInvariant() + " shadows, "
                 + (preset.fixtureLights ? "real fixture lights" : "light pools only") + ", AI every " + Mathf.RoundToInt(preset.aiThinkInterval * 1000f) + " ms.";
             UITheme.Text(new Rect(lx, y, colW, 44f), summary, 14, UITheme.Dim);
             y += 48f;
@@ -286,7 +300,8 @@ namespace Swat
             apply |= Choice(ref y, rx, colW, "Shadows", ref shadows, WithPreset(QualityManager.ShadowNames, QualityManager.ShadowNames[Mathf.Clamp(basis.shadows, 0, 4)]));
             s.shadowQuality = shadows - 1;
             int aa = Mathf.Max(0, System.Array.IndexOf(AaValues, s.antiAliasing));
-            if (Choice(ref y, rx, colW, "Anti-aliasing", ref aa, new[] { "Preset (" + (basis.msaa > 0 ? basis.msaa + "x" : "off") + ")", "Off", "2x MSAA", "4x MSAA", "8x MSAA" }))
+            string aaPreset = QualityManager.PixelArt ? "off in pixel art" : basis.msaa > 0 ? basis.msaa + "x" : "off";
+            if (Choice(ref y, rx, colW, "Anti-aliasing", ref aa, new[] { "Preset (" + aaPreset + ")", "Off", "2x MSAA", "4x MSAA", "8x MSAA" }))
             {
                 s.antiAliasing = AaValues[aa];
                 apply = true;
@@ -310,6 +325,15 @@ namespace Swat
                 apply = true;
             }
             bool ao = s.ambientOcclusion;
+            if (s.artStyle == 0)
+            {
+                bool outlines = s.pixelOutlines;
+                if (Check(ref y, rx, colW, "Pixel outlines" + (UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null ? " (Built-in pipeline only)" : ""), ref outlines))
+                {
+                    s.pixelOutlines = outlines;
+                    changed = true;
+                }
+            }
             string aoNote = !basis.contactShadows ? " (off on this preset)" : s.performanceMode ? " (off in performance mode)" : "";
             if (Check(ref y, rx, colW, "Ambient occlusion" + aoNote, ref ao))
             {

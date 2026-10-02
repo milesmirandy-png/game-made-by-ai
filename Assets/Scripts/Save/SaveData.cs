@@ -33,6 +33,9 @@ namespace Swat
         public int resolutionWidth, resolutionHeight; // 0 = keep current
         public int fullscreenMode = -1;    // -1 = keep current, otherwise UnityEngine.FullScreenMode
         public float flashlightBrightness = 1f;
+        public int artStyle;               // 0 pixel art (default), 1 smooth
+        public int pixelSize = 1;          // pixel art: 0 chunky, 1 medium, 2 fine
+        public bool pixelOutlines = true;  // pixel art: dark outlines around objects
 
         // Audio
         public float masterVolume = 0.8f;

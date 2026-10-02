@@ -22,13 +22,24 @@ namespace Swat
             radial = edge = cone = dot = null;
         }
 
+        // Pixel art uses small textures with hard-edged texels so they match the chunky screen pixels.
         public static int Size
         {
             get
             {
                 int quality = QualityManager.TextureLevel;
+                if (QualityManager.PixelArt) return quality <= 0 ? 16 : 32;
                 return quality <= 0 ? 32 : quality == 1 ? 64 : 128;
             }
+        }
+
+        static FilterMode Filter { get { return QualityManager.PixelArt ? FilterMode.Point : FilterMode.Bilinear; } }
+
+        // Switches already-made surface textures between crisp and smooth sampling.
+        public static void ApplyFilter()
+        {
+            foreach (var texture in surfaces.Values)
+                if (texture != null) texture.filterMode = Filter;
         }
 
         public static Texture2D Surface(SurfaceKind kind)
@@ -66,7 +77,7 @@ namespace Swat
             {
                 name = "SWAT " + kind,
                 wrapMode = TextureWrapMode.Repeat,
-                filterMode = FilterMode.Bilinear,
+                filterMode = Filter,
                 anisoLevel = 2,
                 hideFlags = HideFlags.DontSave,
             };

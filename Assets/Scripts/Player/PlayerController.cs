@@ -175,7 +175,8 @@ namespace Swat
             {
                 Vector2 mouse = GameInput.MousePosition;
                 // Viewport coordinates keep aiming correct when the world is drawn at reduced resolution.
-                Ray ray = cam.ViewportPointToRay(new Vector3(mouse.x / Screen.width, mouse.y / Screen.height, 0f));
+                Vector2 viewport = QualityManager.ScreenToViewport(mouse);
+                Ray ray = cam.ViewportPointToRay(new Vector3(viewport.x, viewport.y, 0f));
                 var plane = new Plane(Vector3.up, new Vector3(0f, aimHeight, 0f));
                 float enter;
                 if (plane.Raycast(ray, out enter)) aimTarget = ray.GetPoint(enter);
@@ -195,8 +196,8 @@ namespace Swat
             if (GameInput.UsingGamepad)
             {
                 // Lets the crosshair, radial menus and camera follow the stick aim.
-                Vector3 screen = cam.WorldToViewportPoint(AimPoint);
-                GameInput.SetGamepadPointer(new Vector2(screen.x * Screen.width, screen.y * Screen.height));
+                Vector3 viewportAim = cam.WorldToViewportPoint(AimPoint);
+                GameInput.SetGamepadPointer(QualityManager.ViewportToScreen(new Vector2(viewportAim.x, viewportAim.y)));
             }
         }
 

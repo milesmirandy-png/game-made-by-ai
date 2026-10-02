@@ -420,6 +420,10 @@ namespace Swat
         public static bool WorldToGui(Camera cam, Vector3 world, out Vector2 gui)
         {
             Vector3 v = cam.WorldToViewportPoint(world);
+            // Account for the pixel-art view being drawn slightly larger than the screen.
+            Vector2 screen = QualityManager.ViewportToScreen(new Vector2(v.x, v.y));
+            v.x = screen.x / Mathf.Max(1, Screen.width);
+            v.y = screen.y / Mathf.Max(1, Screen.height);
             gui = new Vector2(v.x * Width, (1f - v.y) * Height);
             return v.z > 0f;
         }

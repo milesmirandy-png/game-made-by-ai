@@ -1,16 +1,80 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has three parts: the **ten levels, main
-menu and Level Creator** (newest, first), the **quality-of-life, graphics,
-lighting and polish update**, and the original build (updated where later
-work changed something).
+and what is still unverified. It has four parts: the **pixel-art style** (newest,
+first), the **ten levels, main menu and Level Creator**, the
+**quality-of-life, graphics, lighting and polish update**, and the original
+build (updated where later work changed something).
 
 The short version: everything is implemented in C# (plus four small shaders),
 compiles in three configurations and the shaders pass a syntax check, but
 **the game has not been run inside the Unity editor yet**. No play-testing, no
 profiling or performance measurements, and no screenshots exist. Treat
 everything below as "implemented in code" unless it says otherwise.
+
+# Part 0a: Pixel-art style
+
+## What was added
+
+The default look is now pixel art: "top-down sprites, but somewhat 3D". The
+scene is still the same 3D world (no art was replaced); only how it is drawn
+changed. The previous look is kept as **Art style: Smooth**.
+
+- **Low-resolution view** (`QualityManager.UpdateRenderTarget`): the 3D camera
+  renders into a point-filtered render texture about 240, 320 or 420 pixels
+  tall (Settings -> Graphics -> Pixel size). The texture is a whole-number
+  fraction of the screen (each game pixel is k x k screen pixels) plus a
+  one-pixel border, and `UIManager` draws it under the IMGUI interface, which
+  stays at full resolution.
+- **Orthographic, pixel-snapped camera** (`CameraController.ApplyProjection`,
+  `SnapToPixels`): the same pitch and follow behaviour, with an orthographic
+  size matched to the old framing. The camera position is rounded to whole
+  game pixels along the view's right and up axes so static edges don't crawl
+  while it moves; the leftover fraction shifts the drawn image by up to one
+  game pixel (`QualityManager.ViewRect`), so motion stays smooth.
+- **Screen mapping** (`QualityManager.ScreenToViewport` / `ViewportToScreen`):
+  mouse aiming, ground picking, the gamepad pointer and world-anchored UI
+  (prompts, markers, `UITheme.WorldToGui`) go through the shifted view rect,
+  so clicks and labels still line up.
+- **Post pass** (`SwatPostFX.shader` pass 2, `PostEffects`): optional dark
+  outlines where depth jumps by about half a metre (uses the camera depth
+  texture, enabled only when needed), slightly stronger saturation, and an
+  18-level posterize with a 2x2 ordered dither. These run even when the rest of
+  post-processing is off (with a neutral grade then).
+- **Textures and shadows**: procedural surface textures are made at 16-32 px
+  with point filtering (`ProceduralTextures`); sun shadows are hard; MSAA is
+  disabled in pixel art.
+- **Settings** (`SettingsUI`, `SaveData`): Art style, Pixel size and Pixel
+  outlines, saved and sanitised like the other options; the Graphics summary
+  shows the pixel resolution and scale.
+
+## Limitations
+
+- **URP:** the pixel view, camera and snapping work, but outlines and the
+  dithered palette come from the Built-in pipeline's `OnRenderImage` pass, so
+  they are skipped under URP (the settings label says so).
+- Texture size and filter changes apply to textures made after the change;
+  switching style mid-mission updates the filter immediately but texture
+  resolution only on the next mission.
+- Characters are still 3D figures; the "sprite" feel comes from the low
+  resolution, outlines and palette, not from hand-drawn sprites.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings), and
+  the post shader passes the HLSL syntax check.
+- **Not done:** running it in Unity. The pixel view, snapping, outlines and
+  mouse mapping have never been seen on screen. Things to check first: that
+  the outline threshold isn't too strong or too weak, that the camera doesn't
+  jitter when following, that mouse aim lines up exactly, and how the HQ menu
+  scene frames in orthographic view.
+- **Browser preview:** to show roughly what the style looks like, the ten
+  built-in maps' `LevelBuilder` calls were recorded (by compiling the real map
+  files against a recording stand-in for `LevelBuilder`) and rebuilt in a
+  three.js web page with the same camera angle, lighting profile values,
+  low-resolution render and an equivalent outline/dither pass. That page is an
+  approximation made outside Unity, not a screenshot of the game, and is not
+  part of the project.
 
 # Part 0: Levels, main menu and Level Creator
 

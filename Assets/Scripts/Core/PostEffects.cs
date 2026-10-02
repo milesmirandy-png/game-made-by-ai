@@ -7,6 +7,8 @@ namespace Swat
     // bloom on light sources, gentle color grading per lighting profile and a
     // mild vignette (see Resources/SWAT/Shaders/SwatPostFX.shader). Turned
     // off by the Post Processing setting, Performance Mode and low presets.
+    // In the pixel-art style it always adds sprite outlines (optional) and a
+    // reduced, dithered palette, even when the rest of post-processing is off.
     // Under URP this component isn't used; UIManager draws a vignette overlay instead.
     [RequireComponent(typeof(Camera))]
     public class PostEffects : MonoBehaviour
@@ -44,6 +46,24 @@ namespace Swat
         void OnEnable() { Active = material != null; }
         void OnDisable() { Active = false; }
 
+        bool Outlines
+        {
+            get
+            {
+                var cam = GetComponent<Camera>();
+                return material != null && QualityManager.PixelArt && SaveManager.Settings.pixelOutlines && cam != null && cam.orthographic;
+            }
+        }
+
+        // The outline pass needs the camera's depth texture (one extra cheap depth pass at pixel resolution).
+        void Update()
+        {
+            var cam = GetComponent<Camera>();
+            if (cam == null) return;
+            if (Outlines) cam.depthTextureMode |= DepthTextureMode.Depth;
+            else cam.depthTextureMode &= ~DepthTextureMode.Depth;
+        }
+
         static Grade Neutral()
         {
             return new Grade { exposure = 1f, contrast = 1.04f, saturation = 1f, vignette = 0.18f, vignetteSize = 0.55f, lift = new Color(0.98f, 0.99f, 1.02f), gain = new Color(1.01f, 1f, 0.99f) };
@@ -68,13 +88,15 @@ namespace Swat
 
         void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            if (material == null || !QualityManager.PostProcessingOn)
+            bool post = QualityManager.PostProcessingOn;
+            bool pixel = QualityManager.PixelArt;
+            if (material == null || (!post && !pixel))
             {
                 Graphics.Blit(source, destination);
                 return;
             }
             RenderTexture bloom = null;
-            if (QualityManager.Current.bloom)
+            if (post && QualityManager.Current.bloom)
             {
                 int w = Mathf.Max(16, source.width / 4), h = Mathf.Max(16, source.height / 4);
                 var a = RenderTexture.GetTemporary(w, h, 0, source.format);
@@ -95,13 +117,21 @@ namespace Swat
                 material.SetTexture("_BloomTex", Texture2D.blackTexture);
                 material.SetFloat("_BloomIntensity", 0f);
             }
-            material.SetFloat("_Exposure", grade.exposure);
-            material.SetFloat("_Contrast", grade.contrast);
-            material.SetFloat("_Saturation", grade.saturation);
-            material.SetVector("_Lift", grade.lift);
-            material.SetVector("_Gain", grade.gain);
-            material.SetFloat("_VignetteStrength", grade.vignette);
-            material.SetFloat("_VignetteSize", grade.vignetteSize);
+            // Without post-processing the grade is neutral and only the pixel-art steps apply.
+            var g = post ? grade : new Grade { exposure = 1f, contrast = 1f, saturation = 1f, vignette = 0f, vignetteSize = 1f, lift = Color.white, gain = Color.white };
+            material.SetFloat("_Exposure", g.exposure);
+            material.SetFloat("_Contrast", g.contrast);
+            material.SetFloat("_Saturation", g.saturation * (pixel ? 1.12f : 1f));
+            material.SetVector("_Lift", g.lift);
+            material.SetVector("_Gain", g.gain);
+            material.SetFloat("_VignetteStrength", g.vignette);
+            material.SetFloat("_VignetteSize", g.vignetteSize);
+            var cam = GetComponent<Camera>();
+            material.SetFloat("_PixelArt", pixel ? 1f : 0f);
+            material.SetFloat("_Levels", 18f);
+            material.SetFloat("_Outline", Outlines ? 1f : 0f);
+            // About half a metre of depth difference, in 0-1 depth units.
+            material.SetFloat("_OutlineDepth", cam != null ? 0.45f / Mathf.Max(1f, cam.farClipPlane - cam.nearClipPlane) : 0.003f);
             Graphics.Blit(source, destination, material, 2);
             if (bloom != null) RenderTexture.ReleaseTemporary(bloom);
         }

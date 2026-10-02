@@ -133,7 +133,7 @@ namespace Swat
             var quality = QualityManager.Instance;
             GUI.matrix = Matrix4x4.identity;
             if (quality != null && quality.ScaledView != null && Event.current.type == EventType.Repaint)
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), quality.ScaledView, ScaleMode.StretchToFill, false);
+                GUI.DrawTexture(quality.ViewRect, quality.ScaledView, ScaleMode.StretchToFill, false);
             // Vignette overlay when post-processing is on but the Built-in effect isn't running (URP projects).
             bool inMission = game.State == GameState.Playing || game.State == GameState.Paused || game.State == GameState.Deploying;
             if (inMission && QualityManager.PostProcessingOn && !PostEffects.Active && Event.current.type == EventType.Repaint)

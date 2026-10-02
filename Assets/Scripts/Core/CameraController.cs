@@ -20,6 +20,12 @@ namespace Swat
         public Camera Cam { get; private set; }
         public int Preset { get; private set; }
 
+        // Pixel art: how far (in game pixels) the true camera position is from the
+        // pixel-snapped one this frame; the UI shifts the image by this much.
+        public static Vector2 PixelOffset { get; private set; }
+        // Orthographic half-height per metre of follow distance (matches the 50 degree perspective framing).
+        const float OrthoPerDistance = 0.4663f;
+
         PlayerController player;
         Vector3 focus, focusVelocity;
         float distance, targetDistance, shake;
@@ -121,7 +127,8 @@ namespace Swat
         // Where a screen point (pixels, origin bottom-left) hits the horizontal plane at the given height.
         public bool ScreenToGround(Vector2 screen, float height, out Vector3 point)
         {
-            Ray ray = Cam.ViewportPointToRay(new Vector3(screen.x / Mathf.Max(1, Screen.width), screen.y / Mathf.Max(1, Screen.height), 0f));
+            Vector2 viewport = QualityManager.ScreenToViewport(screen);
+            Ray ray = Cam.ViewportPointToRay(new Vector3(viewport.x, viewport.y, 0f));
             var plane = new Plane(Vector3.up, new Vector3(0f, height, 0f));
             float enter;
             if (plane.Raycast(ray, out enter))
@@ -145,6 +152,8 @@ namespace Swat
                 Vector3 position = Vector3.Lerp(showFromPosition, showPosition, t) + drift;
                 Vector3 target = Vector3.Lerp(showFromTarget, showTarget, t);
                 transform.SetPositionAndRotation(position, Quaternion.LookRotation(target - position));
+                ApplyProjection(Vector3.Distance(position, target));
+                SnapToPixels();
                 return;
             }
             if (player == null) return;
@@ -189,6 +198,33 @@ namespace Swat
                 transform.position += Random.insideUnitSphere * shake * 0.35f;
                 shake = Mathf.MoveTowards(shake, 0f, dt * 3f);
             }
+            ApplyProjection(distance);
+            SnapToPixels();
+        }
+
+        // Pixel art uses an orthographic camera (a flat, sprite-like top-down view);
+        // smooth keeps the 50 degree perspective camera.
+        void ApplyProjection(float viewDistance)
+        {
+            bool pixel = QualityManager.PixelArt;
+            if (Cam.orthographic != pixel) Cam.orthographic = pixel;
+            if (pixel) Cam.orthographicSize = Mathf.Max(2f, viewDistance * OrthoPerDistance);
+        }
+
+        // Moves the camera onto the game-pixel grid so still scenery never shimmers
+        // as it scrolls; the leftover fraction is applied when the image is drawn.
+        void SnapToPixels()
+        {
+            PixelOffset = Vector2.zero;
+            var quality = QualityManager.Instance;
+            if (!Cam.orthographic || quality == null || quality.ScaledView == null || quality.PixelFactor <= 0) return;
+            float unit = 2f * Cam.orthographicSize / quality.ScaledView.height;
+            if (unit <= 0f) return;
+            Vector3 p = transform.position, right = transform.right, up = transform.up;
+            float x = Vector3.Dot(p, right), y = Vector3.Dot(p, up);
+            float sx = Mathf.Round(x / unit) * unit, sy = Mathf.Round(y / unit) * unit;
+            transform.position = p + right * (sx - x) + up * (sy - y);
+            PixelOffset = new Vector2((x - sx) / unit, (y - sy) / unit);
         }
 
         // Optional edge scrolling: pushing the cursor against a screen edge pans

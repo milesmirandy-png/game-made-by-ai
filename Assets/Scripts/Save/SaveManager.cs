@@ -89,6 +89,8 @@ namespace Swat
             s.minimapOpacity = Mathf.Clamp(s.minimapOpacity, 0.3f, 1f);
             s.viewDistance = Mathf.Clamp(s.viewDistance, 0.5f, 1.5f);
             s.flashlightBrightness = Mathf.Clamp(s.flashlightBrightness, 0.4f, 1.6f);
+            s.artStyle = Mathf.Clamp(s.artStyle, 0, 1);
+            s.pixelSize = Mathf.Clamp(s.pixelSize, 0, 2);
             s.textureQuality = Mathf.Clamp(s.textureQuality, -1, 2);
             s.difficulty = Mathf.Clamp(s.difficulty, 0, 2);
             s.zoomPreset = Mathf.Clamp(s.zoomPreset, 0, 2);

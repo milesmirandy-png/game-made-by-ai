@@ -54,6 +54,52 @@ namespace Swat
         public static int TierCount { get { return Profiles.Length; } }
         public static string TierName(int tier) { return Profiles[tier].name; }
         public static Profile PresetProfile(QualityTier tier) { return Profiles[(int)tier]; }
+
+        // ---- Art style ----
+
+        // Pixel art (the default look): the world is drawn into a small texture
+        // (about 240, 320 or 420 pixels tall) through an orthographic camera and
+        // scaled up with hard edges by a whole-number factor, with outlines and
+        // a reduced palette added in post. Smooth draws at full resolution.
+        public static bool PixelArt { get { return SaveManager.Settings.artStyle == 0; } }
+        public static readonly string[] ArtStyleNames = { "Pixel art", "Smooth" };
+        public static readonly string[] PixelSizeNames = { "Chunky", "Medium", "Fine" };
+        static readonly int[] PixelHeights = { 240, 320, 420 };
+        public int PixelFactor { get; private set; }
+
+        // Where the world image is drawn, in screen pixels with y down (GUI space).
+        // In pixel art it is a pixel larger than the screen on every side and is
+        // shifted by the camera's sub-pixel offset so scrolling stays smooth.
+        public Rect ViewRect
+        {
+            get
+            {
+                if (ScaledView == null || PixelFactor <= 0) return new Rect(0f, 0f, Screen.width, Screen.height);
+                float k = PixelFactor;
+                Vector2 offset = CameraController.PixelOffset;
+                return new Rect(-k - offset.x * k, -k + offset.y * k, ScaledView.width * k, ScaledView.height * k);
+            }
+        }
+
+        // Screen pixels (origin bottom-left, like Input.mousePosition) to camera viewport (0-1).
+        public static Vector2 ScreenToViewport(Vector2 screen)
+        {
+            var q = Instance;
+            if (q == null) return new Vector2(screen.x / Mathf.Max(1, Screen.width), screen.y / Mathf.Max(1, Screen.height));
+            Rect r = q.ViewRect;
+            float guiY = Screen.height - screen.y;
+            return new Vector2((screen.x - r.x) / r.width, 1f - (guiY - r.y) / r.height);
+        }
+
+        // Camera viewport (0-1) to screen pixels (origin bottom-left).
+        public static Vector2 ViewportToScreen(Vector2 viewport)
+        {
+            var q = Instance;
+            if (q == null) return new Vector2(viewport.x * Screen.width, viewport.y * Screen.height);
+            Rect r = q.ViewRect;
+            float guiY = r.y + (1f - viewport.y) * r.height;
+            return new Vector2(r.x + viewport.x * r.width, Screen.height - guiY);
+        }
         public static bool AmbientOcclusionOn { get { return Current.contactShadows && SaveManager.Settings.ambientOcclusion; } }
         public static bool PostProcessingOn { get { return Current.post && SaveManager.Settings.postProcessing; } }
         // Texture detail: the setting when overridden, otherwise the preset's.
@@ -158,7 +204,8 @@ namespace Swat
             QualitySettings.realtimeReflectionProbes = false;
             QualitySettings.anisotropicFiltering = p.textures >= 2 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable;
             Time.fixedDeltaTime = (int)Tier <= (int)QualityTier.Low ? 0.04f : 0.02f;
-            if (worldCamera != null) worldCamera.allowMSAA = p.msaa > 0;
+            if (worldCamera != null) worldCamera.allowMSAA = p.msaa > 0 && !PixelArt;
+            ProceduralTextures.ApplyFilter();
 
             UpdateRenderTarget(true);
             settleUntil = Time.unscaledTime + 3f;
@@ -222,8 +269,10 @@ namespace Swat
                     QualitySettings.shadowCascades = 4;
                     break;
             }
+            // Hard-edged shadows suit pixel art; soft ones just blur at low resolution.
+            if (PixelArt && level > 0) QualitySettings.shadows = ShadowQuality.HardOnly;
             if (sun != null)
-                sun.shadows = level == 0 ? LightShadows.None : level <= 2 ? LightShadows.Hard : LightShadows.Soft;
+                sun.shadows = level == 0 ? LightShadows.None : level <= 2 || PixelArt ? LightShadows.Hard : LightShadows.Soft;
         }
 
         // Resolution and window mode (only meaningful in a built game).
@@ -274,9 +323,24 @@ namespace Swat
             int width = Mathf.Max(64, Mathf.RoundToInt(Screen.width * scale));
             int height = Mathf.Max(64, Mathf.RoundToInt(Screen.height * scale));
             bool wantScaled = scale < 0.99f;
+            bool pixel = PixelArt;
+            int factor = 0;
+            if (pixel)
+            {
+                // A whole-number scale so every game pixel is the same size on screen,
+                // plus a one-pixel border used for smooth sub-pixel scrolling.
+                int target = PixelHeights[Mathf.Clamp(SaveManager.Settings.pixelSize, 0, PixelHeights.Length - 1)];
+                factor = Mathf.Max(1, Mathf.RoundToInt(Screen.height / (float)target));
+                width = Mathf.CeilToInt(Screen.width / (float)factor) + 2;
+                height = Mathf.CeilToInt(Screen.height / (float)factor) + 2;
+                wantScaled = true;
+            }
+            var filter = pixel ? FilterMode.Point : FilterMode.Bilinear;
 
-            if (!force && wantScaled == (ScaledView != null) && (!wantScaled || (ScaledView.width == width && ScaledView.height == height)))
+            if (!force && wantScaled == (ScaledView != null) && factor == PixelFactor
+                && (!wantScaled || (ScaledView.width == width && ScaledView.height == height && ScaledView.filterMode == filter)))
                 return;
+            PixelFactor = factor;
 
             worldCamera.targetTexture = null;
             if (ScaledView != null)
@@ -287,7 +351,7 @@ namespace Swat
             }
             if (wantScaled)
             {
-                ScaledView = new RenderTexture(width, height, 24) { name = "Scaled View", filterMode = FilterMode.Bilinear };
+                ScaledView = new RenderTexture(width, height, 24) { name = pixel ? "Pixel View" : "Scaled View", filterMode = filter, antiAliasing = 1 };
                 worldCamera.targetTexture = ScaledView;
             }
             presentCamera.enabled = wantScaled;
