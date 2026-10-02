@@ -1,0 +1,766 @@
+-- Kill Popups: a Ravenfield mutator that shows popups when you get kills.
+--
+-- HEADSHOT, GRENADE KILL, DOUBLE KILL, TRIPLE KILL, OVERKILL, SQUAD KILL,
+-- LONGSHOT, KILLING SPREE and more, with points and sounds.
+--
+-- The popups are Text objects inside the mutator prefab (Headline, Score and
+-- Feed/Line1..Line5). The "Tools > Kill Popups > Build Mutator Prefab" menu
+-- in Unity makes them for you. If they're missing, the script falls back to
+-- Ravenfield's own message text in the middle of the screen.
+
+behaviour("KillPopups")
+
+-- ============================================================================
+-- SETTINGS: change these to tweak the mutator
+-- ============================================================================
+
+local SETTINGS = {
+	-- Kills less than this many seconds apart count as a multi-kill
+	-- (DOUBLE KILL, TRIPLE KILL, OVERKILL...).
+	multiKillWindow = 4.0,
+
+	-- LONGSHOT for kills from at least this far away (meters).
+	longShotDistance = 150,
+
+	-- POINT BLANK for kills from closer than this (meters).
+	pointBlankDistance = 3,
+
+	-- How long the big popup stays on screen (seconds).
+	headlineTime = 1.6,
+
+	-- How long each small line under it stays on screen (seconds).
+	feedLineTime = 3.0,
+
+	-- How long the "+350" points counter waits before resetting (seconds).
+	scoreTime = 3.0,
+
+	-- Show a "KILLED EAGLE 12 +100" line for every kill.
+	showKillLines = true,
+
+	-- Show points ("+50") next to popups and the points counter.
+	showPoints = true,
+
+	-- Play sounds (only if the prefab has the Sounds objects).
+	playSounds = true,
+	soundVolume = 0.9,
+}
+
+-- Popup text, points and color for each kind of kill. Change the words here.
+local MEDALS = {
+	kill        = { text = "KILLED",           points = 100, priority = 10, sound = "Kill",      color = { 1.00, 1.00, 1.00 } },
+	headshot    = { text = "HEADSHOT",         points = 50,  priority = 40, sound = "Headshot",  color = { 1.00, 0.82, 0.25 } },
+	grenade     = { text = "GRENADE KILL",     points = 50,  priority = 40, sound = "Medal",     color = { 1.00, 0.55, 0.15 } },
+	explosive   = { text = "EXPLOSIVE KILL",   points = 25,  priority = 35, sound = "Medal",     color = { 1.00, 0.55, 0.15 } },
+	melee       = { text = "MELEE KILL",       points = 75,  priority = 35, sound = "Medal",     color = { 1.00, 0.45, 0.45 } },
+	roadkill    = { text = "ROADKILL",         points = 50,  priority = 35, sound = "Medal",     color = { 1.00, 0.55, 0.15 } },
+	longshot    = { text = "LONGSHOT",         points = 50,  priority = 42, sound = "Medal",     color = { 0.35, 0.85, 1.00 } },
+	pointBlank  = { text = "POINT BLANK",      points = 25,  priority = 30, sound = "Medal",     color = { 0.35, 0.85, 1.00 } },
+	collateral  = { text = "COLLATERAL",       points = 75,  priority = 45, sound = "Medal",     color = { 1.00, 0.82, 0.25 } },
+	firstBlood  = { text = "FIRST BLOOD",      points = 100, priority = 50, sound = "Medal",     color = { 1.00, 0.25, 0.20 } },
+	revenge     = { text = "REVENGE",          points = 75,  priority = 45, sound = "Medal",     color = { 1.00, 0.25, 0.20 } },
+	fromTheGrave = { text = "FROM THE GRAVE",  points = 75,  priority = 45, sound = "Medal",     color = { 0.80, 0.45, 1.00 } },
+	vehicle     = { text = "DESTROYED",        points = 150, priority = 50, sound = "Medal",     color = { 1.00, 0.55, 0.15 } },
+	squadKill   = { text = "SQUAD KILL",       points = 250, priority = 90, sound = "SquadKill", color = { 0.40, 1.00, 0.45 } },
+	teamKill    = { text = "TEAM KILL",        points = -100, priority = 95, sound = "Bad",      color = { 1.00, 0.20, 0.20 } },
+	suicide     = { text = "SUICIDE",          points = 0,   priority = 95, sound = "Bad",       color = { 1.00, 0.20, 0.20 } },
+}
+
+-- Multi-kills (Halo style). 2 kills = first name, 3 kills = second name, ...
+-- Every name after the last one repeats the last name.
+local MULTIKILLS = {
+	"DOUBLE KILL",
+	"TRIPLE KILL",
+	"OVERKILL",
+	"KILLTACULAR",
+	"KILLTROCITY",
+	"KILLIMANJARO",
+	"KILLTASTROPHE",
+	"KILLPOCALYPSE",
+	"KILLIONAIRE",
+}
+local MULTIKILL_COLOR = { 1.00, 0.35, 0.20 }
+
+-- Kill streaks (kills without dying). After the last one you get a
+-- "<number> KILL STREAK" popup every 25 kills.
+local STREAKS = {
+	[5] = "KILLING SPREE",
+	[10] = "KILLING FRENZY",
+	[15] = "RUNNING RIOT",
+	[20] = "RAMPAGE",
+	[25] = "UNTOUCHABLE",
+	[30] = "INVINCIBLE",
+	[40] = "INCONCEIVABLE",
+	[50] = "UNFRIGGENBELIEVABLE",
+}
+local STREAK_COLOR = { 0.80, 0.45, 1.00 }
+
+-- ============================================================================
+
+local FEED_LINES = 5
+local SQUAD_SCAN_INTERVAL = 0.3
+local SQUAD_GROUP_TIMEOUT = 30
+local SQUAD_KILL_MEMORY = 30
+local HEADLINE_KEEP_TIME = 0.6
+local FADE_TIME = 0.4
+
+-- Reads obj[key] without throwing if the field doesn't exist in this game version.
+local function tryGet(obj, key)
+	if obj == nil then
+		return nil
+	end
+	local ok, value = pcall(function() return obj[key] end)
+	if ok then
+		return value
+	end
+	return nil
+end
+
+local function isPlayerActor(actor)
+	return actor ~= nil and tryGet(actor, "isPlayer") == true
+end
+
+local function damageTypeIs(info, typeName)
+	local wanted = tryGet(DamageSourceType, typeName)
+	return wanted ~= nil and tryGet(info, "type") == wanted
+end
+
+-- Lower case name of the weapon that did the damage, or "" if unknown.
+local function weaponName(info)
+	local entry = tryGet(info, "sourceWeaponEntry")
+	local weapon = tryGet(info, "sourceWeapon")
+	if entry == nil then
+		entry = tryGet(weapon, "weaponEntry")
+	end
+
+	local name = tryGet(entry, "name")
+	if name == nil then
+		name = tryGet(tryGet(weapon, "gameObject"), "name")
+	end
+	if name == nil then
+		return ""
+	end
+	return string.lower(name)
+end
+
+local function weaponSlot(info)
+	local entry = tryGet(info, "sourceWeaponEntry")
+	if entry == nil then
+		entry = tryGet(tryGet(info, "sourceWeapon"), "weaponEntry")
+	end
+	return tryGet(entry, "slot")
+end
+
+local function contains(text, words)
+	for _, word in ipairs(words) do
+		if string.find(text, word, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local GRENADE_WORDS = { "grenade", "frag", "nade", "thumper", "molotov" }
+local NOT_GRENADE_WORDS = { "c4", "rocket", "missile", "launcher", "rpg", "mine", "claymore", "mortar" }
+
+local function isGrenade(info)
+	local name = weaponName(info)
+	if contains(name, GRENADE_WORDS) then
+		return true
+	end
+	if contains(name, NOT_GRENADE_WORDS) then
+		return false
+	end
+	-- Small gear slot explosives are almost always grenades.
+	local gearSlot = tryGet(WeaponSlot, "Gear")
+	local slot = weaponSlot(info)
+	return gearSlot ~= nil and slot ~= nil and slot == gearSlot
+end
+
+local function distance(a, b)
+	local ok, d = pcall(function() return Vector3.Distance(a, b) end)
+	if ok then
+		return d
+	end
+	return nil
+end
+
+local function clamp01(x)
+	if x < 0 then return 0 end
+	if x > 1 then return 1 end
+	return x
+end
+
+local function formatPoints(points)
+	if points > 0 then
+		return "+" .. math.floor(points)
+	end
+	return tostring(math.floor(points))
+end
+
+local function findText(transform, path)
+	local child = transform.Find(path)
+	if child == nil then
+		return nil
+	end
+	return child.gameObject.GetComponent(Text)
+end
+
+local function findAudio(transform, path)
+	local child = transform.Find(path)
+	if child == nil then
+		return nil
+	end
+	return child.gameObject.GetComponent(AudioSource)
+end
+
+-- ============================================================================
+-- Setup
+-- ============================================================================
+
+function KillPopups:Start()
+	self.headlineText = nil
+	self.scoreText = nil
+	self.feedTexts = {}
+	self.sounds = {}
+
+	local ok, err = pcall(function() self:FindUi() end)
+	if not ok then
+		print("Kill Popups: couldn't set up the popup text, using the built in message text instead. " .. tostring(err))
+	end
+	if self.headlineText == nil then
+		print("Kill Popups: no Headline text found in the prefab, using the built in message text instead.")
+	end
+
+	self.drawFailed = false
+	self.feed = {}
+	self.headline = nil
+	self.pendingHeadline = nil
+	self.pendingSound = nil
+
+	self.score = 0
+	self.scoreChangedAt = -1000
+
+	self.chain = 0
+	self.lastKillTime = -1000
+	self.lastProjectileKillTime = -1000
+	self.streak = 0
+	self.firstBloodDone = false
+	self.nemesisIndex = nil
+
+	self.squadGroups = {}
+	self.groupOfActor = {}
+	self.diedSinceScan = {}
+	self.playerKillTime = {}
+	self.scanId = 0
+	self.nextSquadScan = 0
+
+	local hasInfoEvent = pcall(function() GameEvents.onActorDiedInfo.AddListener(self, "OnActorDiedInfo") end)
+	if not hasInfoEvent then
+		-- Older game versions: no headshot or grenade info, but everything else works.
+		GameEvents.onActorDied.AddListener(self, "OnActorDiedOld")
+	end
+	pcall(function() GameEvents.onVehicleDestroyed.AddListener(self, "OnVehicleDestroyed") end)
+end
+
+function KillPopups:FindUi()
+	local root = self.transform
+
+	self.headlineText = findText(root, "Headline")
+	self.scoreText = findText(root, "Score")
+	for i = 1, FEED_LINES do
+		self.feedTexts[i] = findText(root, "Feed/Line" .. i)
+	end
+
+	for _, name in ipairs({ "Kill", "Headshot", "Medal", "Multikill", "Streak", "SquadKill", "Bad" }) do
+		local source = findAudio(root, "Sounds/" .. name)
+		if source ~= nil then
+			-- Use the game's sound effect volume setting, if this version supports it.
+			pcall(function() source.SetOutputAudioMixer(AudioMixer.Important) end)
+			self.sounds[name] = source
+		end
+	end
+
+	self:HideText(self.headlineText)
+	self:HideText(self.scoreText)
+	for i = 1, FEED_LINES do
+		self:HideText(self.feedTexts[i])
+	end
+end
+
+function KillPopups:HideText(text)
+	if text ~= nil then
+		text.text = ""
+	end
+end
+
+-- ============================================================================
+-- Game events
+-- ============================================================================
+
+function KillPopups:OnActorDiedInfo(actor, info, isSilentKill)
+	local ok, err = pcall(function() self:HandleDeath(actor, info, isSilentKill) end)
+	if not ok then
+		print("Kill Popups error: " .. tostring(err))
+	end
+end
+
+function KillPopups:OnActorDiedOld(actor, killer, isSilentKill)
+	self:OnActorDiedInfo(actor, { sourceActor = killer }, isSilentKill)
+end
+
+function KillPopups:OnVehicleDestroyed(vehicle, info)
+	local ok, err = pcall(function() self:HandleVehicleDestroyed(vehicle, info) end)
+	if not ok then
+		print("Kill Popups error: " .. tostring(err))
+	end
+end
+
+function KillPopups:HandleDeath(actor, info, isSilentKill)
+	if isSilentKill or actor == nil then
+		return
+	end
+
+	local killer = tryGet(info, "sourceActor")
+	local now = Time.time
+	self.diedSinceScan[actor.actorIndex] = true
+
+	if isPlayerActor(actor) then
+		self:HandlePlayerDeath(killer)
+		if isPlayerActor(killer) then
+			self:Award(MEDALS.suicide)
+		end
+		self.firstBloodDone = true
+		return
+	end
+
+	if not isPlayerActor(killer) then
+		if killer ~= nil then
+			self.firstBloodDone = true
+		end
+		return
+	end
+
+	-- The player killed someone.
+	if actor.team == Player.team then
+		self:Award(MEDALS.teamKill)
+		return
+	end
+
+	self:HandlePlayerKill(actor, killer, info, now)
+end
+
+function KillPopups:HandlePlayerDeath(killer)
+	self.streak = 0
+	if killer ~= nil and not isPlayerActor(killer) and killer.team ~= Player.team then
+		self.nemesisIndex = killer.actorIndex
+	end
+end
+
+function KillPopups:HandlePlayerKill(victim, killer, info, now)
+	local victimIndex = victim.actorIndex
+	self.playerKillTime[victimIndex] = now
+
+	-- Basic kill line: "KILLED EAGLE 12 +100"
+	local victimName = tryGet(victim, "name")
+	local killLabel = MEDALS.kill.text
+	if victimName ~= nil and victimName ~= "" then
+		killLabel = killLabel .. " " .. string.upper(victimName)
+	end
+	self:Award(MEDALS.kill, killLabel, not SETTINGS.showKillLines)
+
+	-- How they died
+	local isProjectile = damageTypeIs(info, "Projectile") or damageTypeIs(info, "ProjectileShatter")
+	local isExplosion = damageTypeIs(info, "Explosion") or damageTypeIs(info, "StickyExplosive")
+	local isMelee = damageTypeIs(info, "Melee")
+	local isRam = damageTypeIs(info, "VehicleRam")
+
+	if isExplosion then
+		if isGrenade(info) then
+			self:Award(MEDALS.grenade)
+		else
+			self:Award(MEDALS.explosive)
+		end
+	elseif not isMelee and not isRam and tryGet(info, "isCriticalHit") == true then
+		self:Award(MEDALS.headshot)
+	end
+
+	if isMelee then
+		self:Award(MEDALS.melee)
+	elseif isRam then
+		self:Award(MEDALS.roadkill)
+	end
+
+	-- Distance
+	local shooter = Player.actor
+	local dist = nil
+	if shooter ~= nil then
+		dist = distance(shooter.position, victim.position)
+	end
+	if dist ~= nil and not isMelee and not isRam then
+		if isProjectile and dist >= SETTINGS.longShotDistance then
+			self:Award(MEDALS.longshot, MEDALS.longshot.text .. " " .. math.floor(dist) .. "m")
+		elseif dist < SETTINGS.pointBlankDistance then
+			self:Award(MEDALS.pointBlank)
+		end
+	end
+
+	-- One bullet, two kills
+	if isProjectile then
+		if now - self.lastProjectileKillTime <= 0.02 then
+			self:Award(MEDALS.collateral)
+		end
+		self.lastProjectileKillTime = now
+	end
+
+	if not self.firstBloodDone then
+		self.firstBloodDone = true
+		self:Award(MEDALS.firstBlood)
+	end
+
+	if self.nemesisIndex ~= nil and self.nemesisIndex == victimIndex then
+		self.nemesisIndex = nil
+		self:Award(MEDALS.revenge)
+	end
+
+	if shooter ~= nil and shooter.isDead then
+		self:Award(MEDALS.fromTheGrave)
+	end
+
+	-- Multi-kills
+	if now - self.lastKillTime <= SETTINGS.multiKillWindow then
+		self.chain = self.chain + 1
+	else
+		self.chain = 1
+	end
+	self.lastKillTime = now
+
+	if self.chain >= 2 then
+		local name = MULTIKILLS[math.min(self.chain - 1, #MULTIKILLS)]
+		self:Award({
+			text = name,
+			points = 50 * (self.chain - 1),
+			priority = 60 + math.min(self.chain, 20),
+			sound = "Multikill",
+			pitch = 1 + 0.06 * math.min(self.chain - 2, 8),
+			color = MULTIKILL_COLOR,
+		})
+	end
+
+	-- Kill streaks
+	self.streak = self.streak + 1
+	local streakName = STREAKS[self.streak]
+	if streakName == nil and self.streak > 50 and self.streak % 25 == 0 then
+		streakName = self.streak .. " KILL STREAK"
+	end
+	if streakName ~= nil then
+		self:Award({
+			text = streakName,
+			points = 20 * self.streak,
+			priority = 75,
+			sound = "Streak",
+			color = STREAK_COLOR,
+		})
+	end
+
+	self:CheckSquadKill(victim, now)
+end
+
+function KillPopups:HandleVehicleDestroyed(vehicle, info)
+	if vehicle == nil or not isPlayerActor(tryGet(info, "sourceActor")) then
+		return
+	end
+	if tryGet(vehicle, "team") == Player.team then
+		return
+	end
+
+	local label = MEDALS.vehicle.text
+	local name = tryGet(vehicle, "name")
+	if name ~= nil and name ~= "" then
+		label = label .. " " .. string.upper(name)
+	end
+	self:Award(MEDALS.vehicle, label)
+end
+
+-- ============================================================================
+-- Squad kills
+--
+-- Every few frames we remember who is in each enemy squad, because by the
+-- time someone dies the game may already have taken them out of their squad.
+-- A SQUAD KILL is when a whole squad (2+ soldiers) is dead, you got the last
+-- kill, and you got at least half of the kills (and at least 2).
+--
+-- Squads are recognised by who is in them: a squad belongs to the same group
+-- as last time if one of its soldiers was in that group and hasn't died since.
+-- ============================================================================
+
+function KillPopups:ScanSquads(now)
+	local squads = ActorManager.GetSquadsOnTeam(Player.enemyTeam)
+	if squads == nil then
+		return
+	end
+
+	self.scanId = self.scanId + 1
+
+	for _, squad in ipairs(squads) do
+		local alive = {}
+		local members = squad.members
+		if members ~= nil then
+			for _, member in ipairs(members) do
+				if not member.isDead then
+					table.insert(alive, member)
+				end
+			end
+		end
+
+		if #alive > 0 then
+			local group = self:FindGroup(alive)
+			if group == nil then
+				group = { members = {}, memberSet = {}, lastSeen = now, scanId = 0, done = false }
+				table.insert(self.squadGroups, group)
+			end
+			group.scanId = self.scanId
+			group.lastSeen = now
+
+			for _, member in ipairs(alive) do
+				local index = member.actorIndex
+				self.diedSinceScan[index] = nil
+				if not group.memberSet[index] then
+					group.memberSet[index] = true
+					table.insert(group.members, member)
+				end
+				self.groupOfActor[index] = group
+			end
+		end
+	end
+
+	-- Forget squads that are gone.
+	for i = #self.squadGroups, 1, -1 do
+		if now - self.squadGroups[i].lastSeen > SQUAD_GROUP_TIMEOUT then
+			table.remove(self.squadGroups, i)
+		end
+	end
+end
+
+function KillPopups:FindGroup(alive)
+	for _, member in ipairs(alive) do
+		local index = member.actorIndex
+		local group = self.groupOfActor[index]
+		-- Someone who died and respawned is in a new squad now.
+		if group ~= nil and not group.done and group.scanId ~= self.scanId and not self.diedSinceScan[index] then
+			return group
+		end
+	end
+	return nil
+end
+
+function KillPopups:CheckSquadKill(victim, now)
+	local victimIndex = victim.actorIndex
+	local group = self.groupOfActor[victimIndex]
+	if group == nil or group.done or #group.members < 2 then
+		return
+	end
+
+	local playerKills = 0
+	for _, member in ipairs(group.members) do
+		local index = member.actorIndex
+		if index ~= victimIndex and not member.isDead then
+			return
+		end
+		local killedAt = self.playerKillTime[index]
+		if killedAt ~= nil and now - killedAt <= SQUAD_KILL_MEMORY then
+			playerKills = playerKills + 1
+		end
+	end
+
+	if playerKills >= 2 and playerKills * 2 >= #group.members then
+		group.done = true
+		self:Award(MEDALS.squadKill, MEDALS.squadKill.text .. " x" .. #group.members)
+	end
+end
+
+-- ============================================================================
+-- Popups
+-- ============================================================================
+
+-- Shows a popup line, adds the points and queues the headline and sound.
+-- Only the most important headline and sound of each frame are used, so a
+-- grenade that kills 4 people doesn't play 8 sounds at once.
+function KillPopups:Award(medal, label, hideLine)
+	label = label or medal.text
+	local points = medal.points or 0
+	local now = Time.time
+
+	if points ~= 0 then
+		if now - self.scoreChangedAt > SETTINGS.scoreTime then
+			self.score = 0
+		end
+		self.score = self.score + points
+		self.scoreChangedAt = now
+	end
+
+	if not hideLine then
+		local line = label
+		if SETTINGS.showPoints and points ~= 0 then
+			line = line .. "  " .. formatPoints(points)
+		end
+		table.insert(self.feed, 1, { text = line, color = medal.color, born = now })
+		while #self.feed > FEED_LINES do
+			table.remove(self.feed)
+		end
+	end
+
+	-- Plain kills only get a line, not the big popup.
+	if medal.priority >= 30 then
+		if self.pendingHeadline == nil or medal.priority >= self.pendingHeadline.priority then
+			self.pendingHeadline = { text = label, color = medal.color, priority = medal.priority }
+		end
+	end
+
+	if medal.sound ~= nil then
+		if self.pendingSound == nil or medal.priority >= self.pendingSound.priority then
+			self.pendingSound = { name = medal.sound, pitch = medal.pitch or 1, priority = medal.priority }
+		end
+	end
+end
+
+function KillPopups:PlaySound(name, pitch)
+	if not SETTINGS.playSounds then
+		return
+	end
+	local source = self.sounds[name]
+	if source == nil or source.clip == nil then
+		return
+	end
+	source.pitch = pitch
+	source.PlayOneShot(source.clip, SETTINGS.soundVolume)
+end
+
+function KillPopups:ShowHeadline(pending, now)
+	local current = self.headline
+	-- Don't let a small popup instantly replace a big one.
+	if current ~= nil and now - current.born < HEADLINE_KEEP_TIME and pending.priority < current.priority then
+		return
+	end
+
+	self.headline = { text = pending.text, color = pending.color, priority = pending.priority, born = now }
+
+	if self.headlineText == nil then
+		Overlay.ShowMessage(pending.text, SETTINGS.headlineTime)
+	end
+end
+
+function KillPopups:Update()
+	local now = Time.time
+
+	if now >= self.nextSquadScan then
+		self.nextSquadScan = now + SQUAD_SCAN_INTERVAL
+		local ok, err = pcall(function() self:ScanSquads(now) end)
+		if not ok then
+			print("Kill Popups squad scan error: " .. tostring(err))
+		end
+	end
+
+	if self.pendingHeadline ~= nil then
+		self:ShowHeadline(self.pendingHeadline, now)
+		self.pendingHeadline = nil
+	end
+	if self.pendingSound ~= nil then
+		local sound = self.pendingSound
+		self.pendingSound = nil
+		pcall(function() self:PlaySound(sound.name, sound.pitch) end)
+	end
+
+	if not self.drawFailed then
+		local ok, err = pcall(self.Draw, self, now)
+		if not ok then
+			-- Fall back to the game's message text instead of erroring every frame.
+			self.drawFailed = true
+			self.headlineText = nil
+			print("Kill Popups: stopped drawing popups because of an error, using the built in message text instead. " .. tostring(err))
+		end
+	end
+end
+
+function KillPopups:Draw(now)
+	self:DrawHeadline(now)
+	self:DrawScore(now)
+	self:DrawFeed(now)
+end
+
+function KillPopups:SetText(text, value, color, alpha, scale)
+	text.text = value
+	text.color = Color(color[1], color[2], color[3], alpha)
+	if scale ~= nil then
+		text.rectTransform.localScale = Vector3(scale, scale, 1)
+	end
+end
+
+function KillPopups:DrawHeadline(now)
+	local text = self.headlineText
+	local headline = self.headline
+	if text == nil then
+		return
+	end
+	if headline == nil then
+		return
+	end
+
+	local age = now - headline.born
+	if age > SETTINGS.headlineTime + FADE_TIME then
+		self.headline = nil
+		text.text = ""
+		return
+	end
+
+	local alpha = 1 - clamp01((age - SETTINGS.headlineTime) / FADE_TIME)
+	-- Pops in big and shrinks to normal size.
+	local punch = 1 - clamp01(age / 0.15)
+	local scale = 1 + 0.6 * punch * punch
+	self:SetText(text, headline.text, headline.color, alpha, scale)
+end
+
+function KillPopups:DrawScore(now)
+	local text = self.scoreText
+	local age = now - self.scoreChangedAt
+	if age > SETTINGS.scoreTime then
+		self.score = 0
+	end
+	if text == nil then
+		return
+	end
+	if not SETTINGS.showPoints or self.score == 0 or age > SETTINGS.scoreTime then
+		text.text = ""
+		return
+	end
+
+	local alpha = 1 - clamp01((age - (SETTINGS.scoreTime - FADE_TIME)) / FADE_TIME)
+	local punch = 1 - clamp01(age / 0.12)
+	local scale = 1 + 0.3 * punch
+	local color = { 1.00, 0.90, 0.40 }
+	if self.score < 0 then
+		color = { 1.00, 0.25, 0.20 }
+	end
+	self:SetText(text, formatPoints(self.score), color, alpha, scale)
+end
+
+function KillPopups:DrawFeed(now)
+	for i = #self.feed, 1, -1 do
+		if now - self.feed[i].born > SETTINGS.feedLineTime then
+			table.remove(self.feed, i)
+		end
+	end
+
+	for i = 1, FEED_LINES do
+		local text = self.feedTexts[i]
+		if text ~= nil then
+			local line = self.feed[i]
+			if line == nil then
+				text.text = ""
+			else
+				local age = now - line.born
+				local alpha = clamp01(age / 0.08) * (1 - clamp01((age - (SETTINGS.feedLineTime - FADE_TIME)) / FADE_TIME))
+				self:SetText(text, line.text, line.color, alpha, nil)
+			end
+		end
+	end
+end
