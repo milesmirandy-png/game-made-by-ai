@@ -41,6 +41,7 @@ namespace Swat
             Layout.root.SetParent(parent, false);
             Geometry = Group("Geometry");
             Props = Group("Props");
+            ExteriorWall = mapId == "warehouse" || mapId == "training" ? SurfaceKind.Concrete : SurfaceKind.Brick;
         }
 
         Transform Group(string name)
@@ -72,9 +73,17 @@ namespace Swat
 
         // ---- Floors and rooms ----
 
-        public void Slab(string name, float x0, float z0, float x1, float z1, float bottom, float top, Color color)
+        public GameObject Slab(string name, float x0, float z0, float x1, float z1, float bottom, float top, Color color)
         {
-            Shapes.Box(name, Geometry, new Vector3((x0 + x1) * 0.5f, (bottom + top) * 0.5f, (z0 + z1) * 0.5f), new Vector3(x1 - x0, top - bottom, z1 - z0), color);
+            var slab = Shapes.Box(name, Geometry, new Vector3((x0 + x1) * 0.5f, (bottom + top) * 0.5f, (z0 + z1) * 0.5f), new Vector3(x1 - x0, top - bottom, z1 - z0), color);
+            // Open ground: grass if it's green, otherwise asphalt.
+            if (name.Contains("Ground"))
+            {
+                bool grass = color.g > color.r * 1.12f && color.g > color.b * 1.12f;
+                Shapes.ApplySurface(slab, color, grass ? SurfaceKind.Grass : SurfaceKind.Asphalt);
+                SurfaceTag.Set(slab, grass ? Swat.Surface.Grass : Swat.Surface.Asphalt);
+            }
+            return slab;
         }
 
         public void Decal(Vector3 position, Vector3 size, Color color, float glow = 0f)
@@ -84,12 +93,15 @@ namespace Swat
 
         public RoomController Room(string id, string name, float x0, float z0, float x1, float z1, Color floor, bool indoor = true)
         {
-            Slab(name + " Floor", x0, z0, x1, z1, -0.05f, indoor ? 0.03f : 0.015f, floor);
+            var slab = Slab(name + " Floor", x0, z0, x1, z1, -0.05f, indoor ? 0.03f : 0.015f, floor);
             var bounds = new Bounds(new Vector3((x0 + x1) * 0.5f, 1f, (z0 + z1) * 0.5f), new Vector3(x1 - x0, 4f, z1 - z0));
             var room = RoomController.Create(Geometry, id, name, bounds, CurrentArea, indoor);
+            room.Style = RoomStyle.For(RoomStyle.Classify(id, name, indoor));
+            room.Floor = slab;
+            Shapes.ApplySurface(slab, floor, room.Style.floor);
+            SurfaceTag.Set(slab, room.Style.footsteps);
             if (indoor)
             {
-                Shapes.Box("Ceiling Lamp", room.transform, new Vector3(0f, 1.38f, 0f), new Vector3(0.8f, 0.04f, 0.25f), new Color(1f, 0.95f, 0.85f), false, 1.5f);
                 room.Fixture = Shapes.PointLight(room.transform, new Vector3(0f, 2.6f, 0f), new Color(1f, 0.93f, 0.8f), 1.6f, Mathf.Max(x1 - x0, z1 - z0) * 0.9f + 2f);
                 room.Fixture.enabled = false;
             }
@@ -144,6 +156,8 @@ namespace Swat
             var wall = Shapes.Box("Wall", Geometry, Vector3.zero, new Vector3(WallThickness, height, delta.magnitude), color);
             wall.transform.localPosition = (from + to) * 0.5f + Vector3.up * height * 0.5f;
             wall.transform.localRotation = Quaternion.LookRotation(delta);
+            Shapes.ApplySurface(wall, color, exterior ? ExteriorWall : SurfaceKind.PaintedWall);
+            SurfaceTag.Set(wall, Swat.Surface.Concrete);
             var box = wall.GetComponent<BoxCollider>();
             box.size = new Vector3(1f, WallSolidHeight / height, 1f);
             box.center = new Vector3(0f, box.size.y * 0.5f - 0.5f, 0f);
@@ -153,10 +167,16 @@ namespace Swat
 
         // ---- Props ----
 
+        // Brick for offices and homes, plain concrete for industrial buildings.
+        public SurfaceKind ExteriorWall { get; set; }
+
         public GameObject Prop(string name, Vector3 position, Vector3 size, Color color, bool cover, float yaw = 0f)
         {
             var go = Shapes.Box(name, Props, position + Vector3.up * size.y * 0.5f, size, color);
             go.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            var surface = RoomStyle.ForProp(name);
+            if (surface != SurfaceKind.Plain) Shapes.ApplySurface(go, color, surface);
+            SurfaceTag.Set(go, RoomStyle.ImpactFor(surface));
             if (cover)
             {
                 bool turned = Mathf.Abs(Mathf.DeltaAngle(yaw, 90f)) < 45f || Mathf.Abs(Mathf.DeltaAngle(yaw, 270f)) < 45f;
@@ -176,6 +196,11 @@ namespace Swat
             if (!monitor) return;
             var screen = Shapes.Box("Monitor", desk.transform, new Vector3(0f, 0.85f, 0.15f), new Vector3(0.35f / width, 0.5f, 0.06f), new Color(0.08f, 0.08f, 0.1f), false);
             Shapes.Box("Screen", screen.transform, new Vector3(0f, 0f, -0.6f), new Vector3(0.9f, 0.8f, 0.2f), new Color(0.35f, 0.6f, 0.9f), false, 1.2f);
+            // Desk clutter: keyboard, mug, papers (visual only).
+            Shapes.Box("Keyboard", desk.transform, new Vector3(0f, 0.53f, -0.15f), new Vector3(0.28f / width, 0.04f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false);
+            Shapes.Make(PrimitiveType.Cylinder, "Mug", desk.transform, new Vector3(0.32f, 0.56f, -0.1f), new Vector3(0.05f / width, 0.07f, 0.08f), new Color(0.85f, 0.85f, 0.8f), false);
+            Shapes.Box("Papers", desk.transform, new Vector3(-0.3f, 0.51f, -0.05f), new Vector3(0.18f / width, 0.02f, 0.3f), new Color(0.92f, 0.92f, 0.88f), false)
+                .transform.localRotation = Quaternion.Euler(0f, 12f, 0f);
         }
 
         public void Couch(Vector3 position, float yaw, Color color)

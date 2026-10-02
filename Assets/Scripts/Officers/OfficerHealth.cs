@@ -5,7 +5,7 @@ namespace Swat
         protected override void OnDamaged(DamageInfo info, float amount)
         {
             var squad = GetComponent<SquadAI>();
-            if (squad != null) squad.NotifyHurt();
+            if (squad != null) squad.NotifyHurt(info.direction);
         }
 
         protected override void OnDowned()

@@ -9,6 +9,13 @@ namespace Swat
         public static MissionData Mission { get; set; }
         public static int Seed { get; set; }
         public static bool KeepSeed { get; set; }
+        // -1 = the mission's own lighting, otherwise a TimeOfDay chosen on the briefing screen.
+        public static int TimeOverride { get; set; }
+
+        static OfficerSelectionManager()
+        {
+            TimeOverride = -1;
+        }
 
         public static int Difficulty
         {

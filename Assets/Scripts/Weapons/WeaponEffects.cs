@@ -7,8 +7,6 @@ namespace Swat
     // muzzle flash, sound and the noise the AI can hear.
     public static class WeaponEffects
     {
-        static readonly Color Dust = new Color(0.75f, 0.72f, 0.65f);
-
         // Returns the damageable that was hit (or null).
         public static IDamageable Shoot(Vector3 origin, Vector3 direction, float range, DamageInfo damage, Vector3 muzzle, Color tracer)
         {
@@ -30,7 +28,9 @@ namespace Swat
                 else
                 {
                     victim = null;
-                    EffectsManager.Instance.Burst(hit.point, hit.normal, Dust, 3, 2.5f, 0.05f);
+                    // Doors swing, so they get sparks or splinters but no lasting mark.
+                    bool door = hit.collider.GetComponentInParent<DoorController>() != null;
+                    EffectsManager.Instance.Impact(hit.point, hit.normal, SurfaceTag.Of(hit.collider), !door);
                 }
             }
             EffectsManager.Instance.SpawnTracer(muzzle, end, tracer);
@@ -40,8 +40,15 @@ namespace Swat
         public static void MuzzleFlash(Vector3 muzzle, Sound sound, float volume, float noiseRadius, NoiseKind kind)
         {
             EffectsManager.Instance.FlashLight(muzzle, new Color(1f, 0.8f, 0.45f), 2.5f, 6f, 0.06f);
-            AudioManager.Play(sound, muzzle, volume, Random.Range(0.94f, 1.06f));
+            // A brief bright flash at the muzzle, visible on every tier (the light above needs dynamic lights).
+            EffectsManager.Instance.Burst(muzzle, Vector3.up, new Color(1f, 0.85f, 0.5f), 2, 0.6f, 0.08f, 2f);
+            AudioManager.Play(sound, muzzle, volume, Random.Range(0.94f, 1.06f), SoundCategory.Weapons);
             Noise.Emit(muzzle, noiseRadius, kind);
+        }
+
+        public static void EjectShell(Vector3 gun, Vector3 right, bool shotgun)
+        {
+            EffectsManager.Instance.Shell(gun + right * 0.08f + Vector3.up * 0.05f, right, shotgun);
         }
 
         // Rotates a direction by a random angle within the spread cone (flat, for top-down aiming).

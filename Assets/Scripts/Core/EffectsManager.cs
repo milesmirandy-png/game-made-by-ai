@@ -40,10 +40,10 @@ namespace Swat
             tracers.Add(new Tracer { go = go, until = Time.time + duration });
         }
 
-        public void Burst(Vector3 position, Vector3 normal, Color color, int count, float speed, float size = 0.07f)
+        public void Burst(Vector3 position, Vector3 normal, Color color, int count, float speed, float size = 0.07f, float glow = 0f)
         {
             count = Mathf.Max(count > 0 ? 1 : 0, Mathf.RoundToInt(count * QualityManager.Current.particleScale));
-            var material = Shapes.Mat(color);
+            var material = Shapes.Mat(color, glow);
             for (int i = 0; i < count; i++)
             {
                 Transform piece;
@@ -62,6 +62,95 @@ namespace Swat
                     size = pieceSize,
                 });
             }
+        }
+
+        // ---- Surface impacts, bullet marks and shell casings ----
+
+        const int MaxMarks = 48;
+        readonly List<MeshRenderer> marks = new List<MeshRenderer>();
+        int nextMark;
+
+        public void Impact(Vector3 point, Vector3 normal, Surface surface, bool leaveMark = true)
+        {
+            if (!leaveMark)
+            {
+                Burst(point, normal, surface == Surface.Metal ? new Color(1f, 0.85f, 0.4f) : new Color(0.55f, 0.4f, 0.24f), 3, 2.5f, 0.04f, surface == Surface.Metal ? 2f : 0f);
+                return;
+            }
+            switch (surface)
+            {
+                case Surface.Metal:
+                    Burst(point, normal, new Color(1f, 0.85f, 0.4f), 4, 4f, 0.035f, 2f);
+                    if (Random.value < 0.3f) AudioManager.Play(Sound.RicochetMetal, point, 0.35f, Random.Range(0.9f, 1.15f));
+                    Mark(point, normal, new Color(0.15f, 0.15f, 0.16f, 0.7f));
+                    break;
+                case Surface.Wood:
+                    Burst(point, normal, new Color(0.55f, 0.4f, 0.24f), 3, 2.5f, 0.05f);
+                    Mark(point, normal, new Color(0.18f, 0.12f, 0.07f, 0.75f));
+                    break;
+                case Surface.Glass:
+                    Burst(point, normal, new Color(0.75f, 0.9f, 1f), 4, 3f, 0.04f, 0.6f);
+                    AudioManager.Play(Sound.ImpactGlass, point, 0.4f, Random.Range(0.9f, 1.1f));
+                    Mark(point, normal, new Color(0.85f, 0.92f, 1f, 0.6f));
+                    break;
+                case Surface.Carpet:
+                case Surface.Grass:
+                    Burst(point, normal, new Color(0.6f, 0.58f, 0.55f), 2, 1.5f, 0.04f);
+                    break;
+                default:
+                    Burst(point, normal, new Color(0.75f, 0.72f, 0.65f), 3, 2.5f, 0.05f);
+                    Mark(point, normal, new Color(0.1f, 0.1f, 0.1f, 0.65f));
+                    break;
+            }
+        }
+
+        // Small marks where bullets hit walls and props; the oldest is reused after 48.
+        void Mark(Vector3 point, Vector3 normal, Color color)
+        {
+            if (QualityManager.Current.particleScale < 0.5f) return;
+            MeshRenderer mark;
+            if (marks.Count < MaxMarks)
+            {
+                mark = DecalMesh.Single("Bullet Mark", transform, Vector3.zero, new Vector2(0.09f, 0.09f), 0f, Color.white, Shapes.DecalMaterial(ProceduralTextures.Dot));
+                marks.Add(mark);
+            }
+            else
+            {
+                mark = marks[nextMark];
+                nextMark = (nextMark + 1) % MaxMarks;
+            }
+            mark.transform.SetPositionAndRotation(point + normal * 0.01f, Quaternion.FromToRotation(Vector3.up, normal) * Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+            var block = new MaterialPropertyBlock();
+            block.SetColor("_Color", color);
+            mark.SetPropertyBlock(block);
+            mark.gameObject.SetActive(true);
+        }
+
+        public void ClearMarks()
+        {
+            foreach (var mark in marks) if (mark != null) mark.gameObject.SetActive(false);
+        }
+
+        // A spent casing flipping out to the right of the gun.
+        public void Shell(Vector3 position, Vector3 right, bool shotgun)
+        {
+            if (QualityManager.Current.particleScale < 0.5f) return;
+            Transform piece;
+            if (debrisPool.Count > 0) piece = debrisPool.Pop();
+            else piece = Shapes.Box("Debris", transform, Vector3.zero, Vector3.one, Color.white, false).transform;
+            piece.GetComponent<Renderer>().sharedMaterial = Shapes.Mat(shotgun ? new Color(0.7f, 0.12f, 0.1f) : new Color(0.85f, 0.65f, 0.25f));
+            piece.SetPositionAndRotation(position, Random.rotation);
+            float size = shotgun ? 0.05f : 0.035f;
+            piece.localScale = new Vector3(size * 0.6f, size * 0.6f, size * 1.6f);
+            piece.gameObject.SetActive(true);
+            debris.Add(new Debris
+            {
+                transform = piece,
+                velocity = (right * Random.Range(1.6f, 2.4f) + Vector3.up * Random.Range(1.5f, 2.3f) + Random.insideUnitSphere * 0.3f),
+                life = 0.9f,
+                size = size,
+            });
+            if (Random.value < 0.35f) AudioManager.Play(Sound.Shell, position + right * 0.6f, 0.18f, Random.Range(0.9f, 1.15f));
         }
 
         public void FlashLight(Vector3 position, Color color, float intensity, float range, float duration)
@@ -86,6 +175,7 @@ namespace Swat
 
         public void ClearAll()
         {
+            ClearMarks();
             for (int i = tracers.Count - 1; i >= 0; i--) ReleaseTracer(i);
             for (int i = debris.Count - 1; i >= 0; i--) ReleaseDebris(i);
             for (int i = flashes.Count - 1; i >= 0; i--) ReleaseFlash(i);

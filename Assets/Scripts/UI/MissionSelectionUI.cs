@@ -92,7 +92,9 @@ namespace Swat
                     UITheme.Fill(new Rect(x + w * 0.3f, y + h * 0.5f, 2f, h * 0.32f), line);
                     break;
             }
-            if (mission.night) UITheme.Dot(new Vector2(x + w * 0.86f, y + h * 0.16f), h * 0.07f, new Color(0.9f, 0.92f, 1f, 0.8f));
+            var time = mission.DefaultTime;
+            if (time == TimeOfDay.Night) UITheme.Dot(new Vector2(x + w * 0.86f, y + h * 0.16f), h * 0.07f, new Color(0.9f, 0.92f, 1f, 0.8f));
+            else if (time == TimeOfDay.Evening) UITheme.Dot(new Vector2(x + w * 0.86f, y + h * 0.16f), h * 0.07f, new Color(1f, 0.6f, 0.3f, 0.85f));
             UITheme.Frame(rect, new Color(0f, 0f, 0f, 0.5f));
             if (!available) UITheme.Fill(rect, new Color(0f, 0f, 0f, 0.55f));
         }
@@ -105,7 +107,7 @@ namespace Swat
             float tx = x + 280f, tw = w - 280f;
             UITheme.Text(new Rect(tx, y, tw, 34f), mission.displayName, 28, UITheme.TextColor, TextAnchor.UpperLeft, true);
             UITheme.Text(new Rect(tx, y + 38f, tw, 22f), mission.location, 17, UITheme.Accent);
-            UITheme.Text(new Rect(tx, y + 64f, tw, 22f), MissionBriefing.TypeName(mission.missionType) + "  |  " + MissionBriefing.MapName(mission.mapId) + (mission.night ? "  |  Night" : "  |  Day"), 16, UITheme.Dim);
+            UITheme.Text(new Rect(tx, y + 64f, tw, 22f), MissionBriefing.TypeName(mission.missionType) + "  |  " + MissionBriefing.MapName(mission.mapId) + ("  |  " + LightingProfile.Names[(int)mission.DefaultTime]), 16, UITheme.Dim);
             UITheme.Text(new Rect(tx, y + 92f, 90f, 22f), "Difficulty", 16, UITheme.Dim);
             Stars(new Rect(tx + 86f, y + 92f, 80f, 22f), mission.difficulty);
             UITheme.Text(new Rect(tx, y + 120f, tw, 22f), "Squad: up to " + mission.maxSquad + " officers  |  Par time " + MissionScoring.FormatTime(mission.parTime), 16, UITheme.Dim);

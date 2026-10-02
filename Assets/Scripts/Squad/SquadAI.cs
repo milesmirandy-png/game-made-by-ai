@@ -29,6 +29,8 @@ namespace Swat
         public bool HoldsDoorsClosed { get { return Order == SquadOrder.StayBehind; } }
         public int Area { get; set; }
         public EnemyAI RestrainTarget { get { return restrainTarget; } }
+        // +1 = stacking on the door's front side, -1 = back side.
+        public float StackSide { get { return stackSide; } }
         public float HealthFraction { get { return Health.Fraction; } }
 
         // ICombatTarget
@@ -743,9 +745,10 @@ namespace Swat
             body.Parts.SetVisible(visible);
         }
 
-        public void NotifyHurt()
+        public void NotifyHurt(Vector3 direction)
         {
             lastHurt = Time.time;
+            body.Animator.Hit(direction);
         }
     }
 }

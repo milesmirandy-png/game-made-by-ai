@@ -7,29 +7,81 @@ namespace Swat
     [Serializable]
     public class SaveData
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public int version = CurrentVersion;
         public SettingsData settings = new SettingsData();
         public ProgressData progress = new ProgressData();
     }
 
+    // Version 2 added the graphics, camera, aiming, audio-mix and accessibility
+    // options. Older files load fine: missing fields keep the defaults below.
     [Serializable]
     public class SettingsData
     {
-        public int qualityTier = -1; // -1 = Auto
+        // Graphics
+        public int qualityTier = -1;       // -1 = Auto
         public bool showFps;
+        public bool performanceMode;
+        public int shadowQuality = -1;     // -1 = preset, 0 off, 1 low, 2 medium, 3 high, 4 very high
+        public int antiAliasing = -1;      // -1 = preset, otherwise 0/2/4/8 MSAA samples
+        public int effectsQuality = -1;    // -1 = preset, 0 low, 1 medium, 2 high
+        public int textureQuality = 2;     // 0 low, 1 medium, 2 high (size of generated surface textures)
+        public int vSync = -1;             // -1 = preset, 0 off, 1 on
+        public bool postProcessing = true;
+        public bool ambientOcclusion = true;
+        public float viewDistance = 1f;
+        public int resolutionWidth, resolutionHeight; // 0 = keep current
+        public int fullscreenMode = -1;    // -1 = keep current, otherwise UnityEngine.FullScreenMode
+        public float flashlightBrightness = 1f;
+
+        // Audio
         public float masterVolume = 0.8f;
+        public float musicVolume = 0.45f;
         public float effectsVolume = 1f;
+        public float weaponsVolume = 0.9f;
         public float voiceVolume = 1f;
-        public float ambienceVolume = 0.6f;
+        public float ambienceVolume = 0.6f; // "Environment"
         public float interfaceVolume = 0.8f;
-        public bool muteEffects, muteVoice, muteAmbience, muteInterface;
+        public bool muteMusic, muteEffects, muteWeapons, muteVoice, muteAmbience, muteInterface;
+
+        // Camera and aiming
         public float zoomSpeed = 1f;
         public float lookAhead = 0.25f;
         public int zoomPreset = 1;
+        public bool autoIndoorZoom = true;
+        public float cameraSmoothing = 0.12f;
+        public bool edgeScrolling;
+        public int cameraShake = 1;        // 0 off, 1 low, 2 medium
+        public float mouseSensitivity = 1f;
+        public float aimSmoothing;         // 0 = off (direct)
+        public float controllerSensitivity = 1f;
+        public bool controllerAimAssist = true;
+
+        // Gameplay
         public bool planningPauses = true;
         public bool lineOfSight = true;
-        public int difficulty = 1; // 0 Recruit, 1 Regular, 2 Veteran
+        public int difficulty = 1;         // 0 Recruit, 1 Regular, 2 Veteran
+        public bool autoReload = true;
+        public bool autoSwitchWhenEmpty;
+        public bool autoFlashlight;
+        public bool minimap = true;
+        public float minimapScale = 1f;
+        public float minimapOpacity = 0.85f;
+
+        // Crosshair
+        public float crosshairSize = 1f;
+        public float crosshairOpacity = 1f;
+        public int crosshairColor;         // index into UITheme.CrosshairColors
+        public bool hitMarker = true;
+
+        // Accessibility
+        public float uiScale = 1f;
+        public float textSize = 1f;
+        public bool colorblindMode;
+        public bool subtitles = true;
+        public float subtitleSize = 1f;
+        public bool reduceFlashes;
+
         public List<KeyBinding> bindings = new List<KeyBinding>();
     }
 

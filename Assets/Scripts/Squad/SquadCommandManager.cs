@@ -86,6 +86,7 @@ namespace Swat
             foreach (var door in subscribed) if (door != null) door.Opened -= OnDoorOpened;
             subscribed.Clear();
             RadioLog.Clear();
+            pendingLines.Clear();
             coordinateUntil = 0f;
             LastOrder = null;
             var player = GameManager.Instance.Player;
@@ -176,6 +177,8 @@ namespace Swat
 
             LastOrder = OrderText(order, action) + "  (" + SelectionLabel + ")";
             LastOrderTime = Time.unscaledTime;
+            AudioManager.Play2D(Sound.RadioOrder, 0.5f, 1f, SoundCategory.Interface);
+            SayPlayer(PlayerLine(order, action));
             Acknowledge(targets[0], order, action);
             if (order == SquadOrder.Stack && door != null) MissionManager.Instance.ReportTarget(ObjectiveType.TrainingCommandSquad, door.Id);
             MissionManager.Instance.Stats.ordersGiven++;
@@ -217,7 +220,60 @@ namespace Swat
                     break;
                 default: text = "Copy."; break;
             }
-            Say(officer, text, true);
+            // The reply comes a moment after the order, like a real radio exchange.
+            pendingLines.Add(new PendingLine { officer = officer, text = text, at = Time.unscaledTime + 0.55f });
+        }
+
+        struct PendingLine
+        {
+            public SquadAI officer;
+            public string text;
+            public float at;
+        }
+
+        readonly List<PendingLine> pendingLines = new List<PendingLine>();
+        float lastCivilianCall = -100f;
+
+        static string PlayerLine(SquadOrder order, DoorAction action)
+        {
+            if (order == SquadOrder.Stack)
+                return action == DoorAction.Breach ? "Breach and clear." : action == DoorAction.Flash ? "Flash and clear." : action == DoorAction.Open ? "Open and clear." : "Stack up.";
+            switch (order)
+            {
+                case SquadOrder.Follow: return "On me.";
+                case SquadOrder.Hold: return "Hold here.";
+                case SquadOrder.Regroup: return "Regroup.";
+                case SquadOrder.MoveTo: return "Move.";
+                case SquadOrder.Cover: return "Cover that area.";
+                case SquadOrder.StayBehind: return "Stay back.";
+                case SquadOrder.ReturnToPlayer: return "Back to me.";
+                case SquadOrder.AssistCivilians: return "Help the civilians.";
+                default: return "Wait.";
+            }
+        }
+
+        // The team leader speaking on the radio.
+        public void SayPlayer(string text)
+        {
+            var player = GameManager.Instance != null ? GameManager.Instance.Player : null;
+            AddLine(player != null ? player.Officer.callsign : "Lead", text, 3);
+        }
+
+        // A squadmate who can see a newly found civilian reports it.
+        public void CivilianLocated(CivilianAI civilian)
+        {
+            if (Time.unscaledTime - lastCivilianCall < 6f) return;
+            SquadAI nearest = null;
+            float best = 15f;
+            foreach (var officer in Squad)
+            {
+                if (!officer.IsAlive) continue;
+                float distance = Vector3.Distance(officer.Position, civilian.Position);
+                if (distance < best) { best = distance; nearest = officer; }
+            }
+            if (nearest == null) return;
+            lastCivilianCall = Time.unscaledTime;
+            Say(nearest, civilian.State == CivilianState.Injured ? "Civilian located, they're hurt." : civilian.State == CivilianState.Captive ? "Hostage located!" : "Civilian located.", true);
         }
 
         public static string OrderText(SquadOrder order, DoorAction action)
@@ -255,12 +311,19 @@ namespace Swat
         void Say(SquadAI officer, string text, bool chirp)
         {
             string speaker = officer != null ? officer.Data.callsign : "TOC";
-            // Don't repeat the same line from the same officer within a few seconds.
+            if (!AddLine(speaker, text, officer != null ? officer.Index : 4)) return;
+            if (chirp) AudioManager.RadioChirp(officer != null ? 0.95f + officer.Index * 0.06f : 1f);
+        }
+
+        bool AddLine(string speaker, string text, int voice)
+        {
+            // Don't repeat the same line from the same speaker within a few seconds.
             for (int i = RadioLog.Count - 1; i >= 0; i--)
-                if (RadioLog[i].speaker == speaker && RadioLog[i].text == text && Time.unscaledTime - RadioLog[i].time < 4f) return;
+                if (RadioLog[i].speaker == speaker && RadioLog[i].text == text && Time.unscaledTime - RadioLog[i].time < 4f) return false;
             RadioLog.Add(new RadioLine { speaker = speaker, text = text, time = Time.unscaledTime });
             if (RadioLog.Count > 6) RadioLog.RemoveAt(0);
-            if (chirp) AudioManager.RadioChirp(officer != null ? 0.95f + officer.Index * 0.06f : 1f);
+            AudioManager.RadioVoice(voice);
+            return true;
         }
 
         // ---- Stacks and entries ----
@@ -296,6 +359,11 @@ namespace Swat
             foreach (var officer in Squad)
                 if (officer.IsAlive && officer.StackDoor == door && !officer.IsStacked) return false;
             return true;
+        }
+
+        public void NoteDoorAlreadyOpen(DoorController door)
+        {
+            openWhenOrdered.Add(door);
         }
 
         void OnDoorOpened(DoorController door)
@@ -363,6 +431,13 @@ namespace Swat
             }
             TrackHeading(game.Player);
             ProcessPendingClears();
+            for (int i = pendingLines.Count - 1; i >= 0; i--)
+            {
+                if (Time.unscaledTime < pendingLines[i].at) continue;
+                var line = pendingLines[i];
+                pendingLines.RemoveAt(i);
+                if (line.officer != null && line.officer.IsAlive) Say(line.officer, line.text, true);
+            }
 
             if (game.MapOpen || game.ConsoleOpen)
             {

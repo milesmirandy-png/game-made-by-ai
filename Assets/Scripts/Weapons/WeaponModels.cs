@@ -85,6 +85,16 @@ namespace Swat
                     break;
             }
 
+            // Small details on long guns: top rail, ejection port and a sling.
+            bool longGun = weapon.category == WeaponCategory.SMG || weapon.category == WeaponCategory.CompactRifle
+                || weapon.category == WeaponCategory.Rifle || weapon.category == WeaponCategory.Carbine;
+            if (longGun)
+            {
+                Box(parent, 0f, 0.062f, 0.16f, 0.028f, 0.012f, 0.3f, Polymer);
+                Box(parent, 0.037f, 0.015f, 0.12f, 0.006f, 0.03f, 0.07f, new Color(0.55f, 0.45f, 0.2f));
+                Box(parent, -0.042f, -0.05f, muzzleZ * 0.35f, 0.008f, 0.02f, muzzleZ * 0.7f, new Color(0.12f, 0.12f, 0.1f));
+            }
+
             if (attachments != null && !weapon.isSidearm)
             {
                 if (!string.IsNullOrEmpty(attachments.lightId))

@@ -134,9 +134,17 @@ namespace Swat
                 if (door.State != DoorState.Closed) continue;
                 foreach (var officer in Officers)
                 {
-                    // Officers stacking on a door wait for the entry order instead of walking it open.
-                    if (!officer.IsAlive || !officer.IsMoving || officer.HoldsDoorsClosed || officer.StackDoor == door) continue;
-                    if (FlatDistance(officer.Position, doorPosition) < 1.3f) { door.Open(officer.Position); break; }
+                    if (!officer.IsAlive || !officer.IsMoving || officer.HoldsDoorsClosed) continue;
+                    // Officers stacking on a door wait for the entry order instead of walking it open,
+                    // unless they are on the far side and have to come through it to reach the stack.
+                    if (officer.StackDoor == door && Vector3.Dot(officer.Position - doorPosition, door.transform.forward) * officer.StackSide > 0f) continue;
+                    if (FlatDistance(officer.Position, doorPosition) < 1.3f)
+                    {
+                        // Walking through to reach the stack isn't an entry signal.
+                        if (officer.StackDoor == door) SquadCommandManager.Instance.NoteDoorAlreadyOpen(door);
+                        door.Open(officer.Position);
+                        break;
+                    }
                 }
                 if (door.State != DoorState.Closed) continue;
                 foreach (var civilian in Civilians)

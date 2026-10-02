@@ -3,6 +3,8 @@ using UnityEngine;
 
 namespace Swat
 {
+    public enum BannerKind { Info, Good, Bad }
+
     // Draws every screen from a single OnGUI call (Unity's immediate-mode GUI,
     // so the project needs no UI packages, canvases or prefabs) and hosts the
     // shared overlays: notifications, the shout banner, the security console
@@ -14,6 +16,23 @@ namespace Swat
             public string text;
             public float time;
             public bool bad;
+        }
+
+        struct BannerItem
+        {
+            public string title, detail;
+            public BannerKind kind;
+        }
+
+        static readonly Queue<BannerItem> banners = new Queue<BannerItem>();
+        static BannerItem currentBanner;
+        static float bannerStart = -10f;
+        const float BannerTime = 2.6f;
+
+        public static void Banner(string title, string detail, BannerKind kind)
+        {
+            if (banners.Count > 4) return;
+            banners.Enqueue(new BannerItem { title = title, detail = detail, kind = kind });
         }
 
         static readonly string[] ShoutLines = { "POLICE! DROP THE WEAPON!", "POLICE! GET ON THE GROUND!", "SHOW ME YOUR HANDS!" };
@@ -46,6 +65,8 @@ namespace Swat
         {
             Instance = this;
             notes.Clear();
+            banners.Clear();
+            bannerStart = -10f;
             useGUILayout = false; // only GUI.* calls, which skips the layout pass
         }
 
@@ -107,6 +128,15 @@ namespace Swat
             GUI.matrix = Matrix4x4.identity;
             if (quality != null && quality.ScaledView != null && Event.current.type == EventType.Repaint)
                 GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), quality.ScaledView, ScaleMode.StretchToFill, false);
+            // Vignette overlay when post-processing is on but the Built-in effect isn't running (URP projects).
+            bool inMission = game.State == GameState.Playing || game.State == GameState.Paused || game.State == GameState.Deploying;
+            if (inMission && QualityManager.PostProcessingOn && !PostEffects.Active && Event.current.type == EventType.Repaint)
+            {
+                var old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, game.Lighting.time == TimeOfDay.Night ? 0.55f : 0.35f);
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), UITheme.Vignette, ScaleMode.StretchToFill, true);
+                GUI.color = old;
+            }
             UITheme.Begin();
 
             // While the settings window is open, the screen underneath is drawn but can't be clicked.
@@ -118,6 +148,7 @@ namespace Swat
                 case GameState.Briefing: briefing.Draw(game); break;
                 case GameState.OfficerSelection: officerSelection.Draw(game); break;
                 case GameState.Loadout: loadout.Draw(game); break;
+                case GameState.Loading: DrawLoading(game); break;
                 case GameState.Deploying: DrawDeploying(game); break;
                 case GameState.Playing:
                     hud.Draw(game);
@@ -127,6 +158,7 @@ namespace Swat
                     if (console != null) DrawConsole(game);
                     DrawRecon();
                     DrawShout();
+                    DrawBanner();
                     if (!game.PlanningMode && !SquadCommandManager.Instance.WheelOpen && console == null) hud.DrawCrosshair(game);
                     break;
                 case GameState.Paused:
@@ -159,6 +191,28 @@ namespace Swat
                 UITheme.Text(rect, note.text, 19, color, TextAnchor.MiddleCenter);
                 y += 32f;
             }
+        }
+
+        // Objective and danger banners: small, near the top, one at a time, fading in and out.
+        void DrawBanner()
+        {
+            float age = Time.unscaledTime - bannerStart;
+            if (age > BannerTime)
+            {
+                if (banners.Count == 0) return;
+                currentBanner = banners.Dequeue();
+                bannerStart = Time.unscaledTime;
+                age = 0f;
+            }
+            float alpha = Mathf.Clamp01(age / 0.15f) * Mathf.Clamp01((BannerTime - age) / 0.4f);
+            float slide = (1f - Mathf.Clamp01(age / 0.2f)) * -12f;
+            Color accent = currentBanner.kind == BannerKind.Good ? UITheme.Good : currentBanner.kind == BannerKind.Bad ? UITheme.Bad : UITheme.Accent;
+            float w = UITheme.Width;
+            var rect = new Rect(w * 0.5f - 300f, 196f + slide, 600f, 58f);
+            UITheme.Fill(rect, new Color(0.02f, 0.03f, 0.05f, 0.82f * alpha));
+            UITheme.Fill(new Rect(rect.x, rect.y, rect.width, 3f), new Color(accent.r, accent.g, accent.b, alpha));
+            UITheme.Text(new Rect(rect.x, rect.y + 6f, rect.width, 24f), currentBanner.title, 18, new Color(accent.r, accent.g, accent.b, alpha), TextAnchor.UpperCenter, true);
+            UITheme.Text(new Rect(rect.x + 10f, rect.y + 30f, rect.width - 20f, 22f), currentBanner.detail, 15, new Color(1f, 1f, 1f, 0.9f * alpha), TextAnchor.UpperCenter);
         }
 
         void DrawShout()
@@ -212,6 +266,37 @@ namespace Swat
             if (console.CanUnlockDoors) y += 54f;
             if (console.CanReviewFootage && UITheme.Button(new Rect(rect.x + 24f, y, rect.width - 48f, 46f), console.FootageReviewed ? "Footage reviewed" : "Review camera footage", !console.FootageReviewed)) console.ReviewFootage();
             if (UITheme.Button(new Rect(rect.x + rect.width - 184f, rect.yMax - 60f, 160f, 42f), "Close (" + UITheme.KeyFor(InputAction.Pause) + ")")) CloseConsole();
+        }
+
+        // Shown while the mission map builds. The spinner only moves between frames;
+        // there's no progress bar because the build happens in one step.
+        void DrawLoading(GameManager game)
+        {
+            float w = UITheme.Width, h = UITheme.Height;
+            UITheme.Fill(new Rect(0f, 0f, w, h), UITheme.Background);
+            var plan = game.Plan;
+            if (plan == null) return;
+            var mission = plan.mission;
+            float x = w * 0.5f - 560f, y = h * 0.5f - 210f;
+            MissionSelectionUI.Thumbnail(new Rect(x, y, 420f, 260f), mission, true);
+            float tx = x + 460f, tw = 660f;
+            UITheme.Text(new Rect(tx, y, tw, 26f), "DEPLOYING TO", 16, UITheme.Accent, TextAnchor.UpperLeft, true);
+            UITheme.Text(new Rect(tx, y + 28f, tw, 46f), mission.displayName.ToUpperInvariant(), 38, UITheme.TextColor, TextAnchor.UpperLeft, true);
+            UITheme.Text(new Rect(tx, y + 80f, tw, 24f), mission.location + "   |   " + LightingProfile.Names[(int)plan.timeOfDay] + "   |   " + OfficerSelectionManager.DifficultyNames[plan.difficulty], 17, UITheme.Dim);
+            float dh = UITheme.TextHeight(mission.description, 18, tw);
+            UITheme.Text(new Rect(tx, y + 118f, tw, dh), mission.description, 18, UITheme.TextColor);
+            UITheme.Fill(new Rect(x, y + 290f, 1120f, 1f), UITheme.Line);
+            UITheme.Text(new Rect(x, y + 304f, 1120f, 50f), "TIP:  " + game.LoadingTip, 17, UITheme.Dim);
+
+            Vector2 c = new Vector2(w - 90f, h - 80f);
+            float t = Time.unscaledTime * 6f;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI * 0.25f;
+                float fade = Mathf.Repeat(i / 8f - t / (Mathf.PI * 2f), 1f);
+                UITheme.Dot(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 18f, 4f, new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 0.2f + 0.8f * fade));
+            }
+            UITheme.Text(new Rect(w - 360f, h - 92f, 230f, 24f), "Loading", 17, UITheme.Dim, TextAnchor.MiddleRight);
         }
 
         void DrawDeploying(GameManager game)

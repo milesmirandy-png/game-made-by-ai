@@ -91,7 +91,8 @@ namespace Swat
         public List<EnemyGroup> enemies = new List<EnemyGroup>();
         public List<CivilianGroup> civilians = new List<CivilianGroup>();
         public List<EquipmentCount> bonusEquipment = new List<EquipmentCount>();
-        public bool night;
+        [Tooltip("Lighting profile: Day, Evening or Night")] public TimeOfDay timeOfDay;
+        [Tooltip("Old setting kept for compatibility: treated as Night if Time Of Day is left at Day")] public bool night;
         [Range(0f, 1f)] public float powerOutageChance;
         [Range(0f, 1f)] public float alarmArmedChance = 1f;
         [Range(0f, 1f)] public float camerasActiveChance = 1f;
@@ -101,5 +102,7 @@ namespace Swat
         public int sortOrder;
         public bool isTraining;
         public Color thumbnailColor = new Color(0.2f, 0.3f, 0.45f);
+
+        public TimeOfDay DefaultTime { get { return timeOfDay != TimeOfDay.Day ? timeOfDay : night ? TimeOfDay.Night : TimeOfDay.Day; } }
     }
 }

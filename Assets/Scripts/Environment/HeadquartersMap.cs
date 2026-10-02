@@ -8,6 +8,7 @@ namespace Swat
     public class HeadquartersMap
     {
         public Transform root;
+        public LevelLayout layout;
         public Vector3 menuCamera, menuTarget;
         public Vector3 missionsCamera, missionsTarget;
         public Vector3 rosterCamera, rosterTarget;
@@ -80,7 +81,7 @@ namespace Swat
             hq.rosterTarget = new Vector3(3f, 0.5f, 14f);
             hq.armoryCamera = new Vector3(19f, 8f, -3f);
             hq.armoryTarget = new Vector3(19f, 0.5f, 6f);
-            b.Finish();
+            hq.layout = b.Finish();
             return hq;
         }
     }

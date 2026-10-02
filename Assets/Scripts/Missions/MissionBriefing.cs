@@ -55,7 +55,7 @@ namespace Swat
             if (armored > 0) lines.Add("Body armor sighted on at least one suspect.");
             if (leader > 0) lines.Add("A known crew leader is believed to be on site.");
             lines.Add(plan.civilianCount > 0 ? "Civilians believed inside: about " + plan.civilianCount : "No civilians expected.");
-            lines.Add("Time of day: " + (mission.night ? "night" : "day"));
+            lines.Add("Time of day: " + LightingProfile.Names[(int)plan.timeOfDay].ToLowerInvariant());
             if (plan.powerOutage) lines.Add("POWER OUT: indoor rooms are dark. Flashlights and portable lights recommended.");
             if (plan.alarmArmed) lines.Add("The building alarm is armed. Cameras or guards may trigger it.");
             else if (mission.mapId != "training") lines.Add("The building alarm appears to be offline.");
@@ -68,7 +68,7 @@ namespace Swat
             var lines = new List<string>();
             var mission = plan.mission;
             if (mission.randomLockChance > 0.1f) lines.Add("Some doors may be locked: bring breaching charges or a Breacher.");
-            if (plan.powerOutage || mission.night) lines.Add("Low light: weapon lights and portable lights help.");
+            if (plan.powerOutage || plan.timeOfDay == TimeOfDay.Night) lines.Add("Low light: weapon lights and portable lights help.");
             if (plan.civilianCount > 0) lines.Add("Civilians present: shout before you shoot; consider a less-lethal option.");
             foreach (var group in mission.civilians)
                 if (group.type == CivilianType.Injured) { lines.Add("Injured civilians reported: bring medical kits or a Medic."); break; }

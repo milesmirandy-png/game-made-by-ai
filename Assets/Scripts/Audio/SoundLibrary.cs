@@ -8,6 +8,11 @@ namespace Swat
         Breach, Flashbang, Smoke, Throw, Detect, Hit, Hurt, Shout, Rescue, Click, Complete, Fail,
         CompactSmg, Carbine, HeavyPistol, LessLethal, Kick, Wedge, Lockpick, Medkit, Radio, CameraAlert,
         Console, Alarm, RoomTone, Wind, Gasp, UiHover, UiSelect, Unlock, LightPlace, TargetHit, Ability,
+        // Added in the polish update.
+        StepConcrete, StepCarpet, StepTile, StepMetal, StepGrass, StepAsphalt,
+        DoorClose, DoorOpenMetal, DoorHandle, Shell, RicochetMetal, ImpactGlass,
+        RadioVoice1, RadioVoice2, RadioVoice3, RadioOrder, ObjectiveTone, Warning, FlashlightClick,
+        MusicMenu, MusicMission, Hum, Equip, WeaponRaise,
     }
 
     // Placeholder sound effects synthesized from simple waveforms at startup,
@@ -66,6 +71,38 @@ namespace Swat
             clips[(int)Sound.Alarm] = Make("Alarm", 1.2f, t => Mathf.Sign(Mathf.Sin(Tau * (t < 0.6f ? 760f : 620f) * t)) * 0.25f);
             clips[(int)Sound.RoomTone] = Drone("Room Tone", 4f, 0.04f, 55f);
             clips[(int)Sound.Wind] = Drone("Wind", 4f, 0.12f, 0f);
+
+            // Footsteps per surface: same idea (filtered noise thump) with different tone and length.
+            clips[(int)Sound.StepConcrete] = Step("Step Concrete", 0.11f, 0.35f, 70f, 40f);
+            clips[(int)Sound.StepCarpet] = Step("Step Carpet", 0.09f, 0.08f, 55f, 60f);
+            clips[(int)Sound.StepTile] = Step("Step Tile", 0.1f, 0.6f, 110f, 45f);
+            clips[(int)Sound.StepMetal] = Make("Step Metal", 0.16f, t => (Mathf.Sin(Tau * 420f * t) * 0.5f + Mathf.Sin(Tau * 610f * t) * 0.3f + Noise() * 0.3f) * Mathf.Exp(-t * 28f));
+            clips[(int)Sound.StepGrass] = Hiss("Step Grass", 0.12f);
+            clips[(int)Sound.StepAsphalt] = Step("Step Asphalt", 0.1f, 0.25f, 60f, 42f);
+
+            clips[(int)Sound.DoorClose] = Make("Door Close", 0.3f, t => Thump(t, 0.05f, 70f) + Click(t, 0.06f) * 0.6f);
+            clips[(int)Sound.DoorOpenMetal] = Make("Metal Door", 0.5f, t => (Mathf.Sin(Tau * (520f + 60f * Mathf.Sin(t * 24f)) * t) * 0.35f + Noise() * 0.12f) * Mathf.Sin(Mathf.PI * t / 0.5f) + Click(t, 0f) * 0.5f);
+            clips[(int)Sound.DoorHandle] = Make("Door Handle", 0.12f, t => Click(t, 0f) * 0.7f + Click(t, 0.05f) * 0.5f);
+            clips[(int)Sound.Shell] = Make("Shell", 0.18f, t => (Mathf.Sin(Tau * 3200f * t) * 0.5f + Mathf.Sin(Tau * 4700f * t) * 0.3f) * Mathf.Exp(-t * 35f) + (t > 0.07f ? Mathf.Sin(Tau * 3000f * t) * 0.3f * Mathf.Exp(-(t - 0.07f) * 40f) : 0f));
+            clips[(int)Sound.RicochetMetal] = Make("Ricochet", 0.25f, t => Mathf.Sin(Tau * (2600f - 3000f * t) * t) * Mathf.Exp(-t * 14f) * 0.6f + Noise() * 0.3f * Mathf.Exp(-t * 60f));
+            clips[(int)Sound.ImpactGlass] = Make("Glass", 0.3f, t => (Noise() * 0.6f + Mathf.Sin(Tau * 5200f * t) * 0.3f) * Mathf.Exp(-t * 16f));
+
+            // Radio "voice" placeholders: band-limited noise in syllable-like bursts,
+            // clearly a stand-in for recorded voice lines.
+            clips[(int)Sound.RadioVoice1] = Babble("Radio Voice 1", 0.5f, 3, 520f);
+            clips[(int)Sound.RadioVoice2] = Babble("Radio Voice 2", 0.65f, 4, 440f);
+            clips[(int)Sound.RadioVoice3] = Babble("Radio Voice 3", 0.4f, 2, 600f);
+            clips[(int)Sound.RadioOrder] = Make("Order", 0.16f, t => Mathf.Sign(Mathf.Sin(Tau * (t < 0.07f ? 1250f : 1600f) * t)) * 0.18f * Mathf.Exp(-(t % 0.08f) * 18f));
+            clips[(int)Sound.ObjectiveTone] = Tones("Objective", new[] { 659.3f, 987.8f }, 0.12f);
+            clips[(int)Sound.Warning] = Make("Warning", 0.4f, t => Mathf.Sin(Tau * 520f * t) * (Mathf.Repeat(t, 0.2f) < 0.12f ? 0.5f : 0f));
+            clips[(int)Sound.FlashlightClick] = Make("Flashlight", 0.06f, t => Click(t, 0f) * 0.7f + Mathf.Sin(Tau * 3000f * t) * Mathf.Exp(-t * 120f) * 0.3f);
+            clips[(int)Sound.Equip] = Make("Equip", 0.2f, t => Click(t, 0f) * 0.5f + Click(t, 0.09f) * 0.4f + Noise() * 0.1f * Mathf.Exp(-t * 20f));
+            clips[(int)Sound.WeaponRaise] = Hiss("Weapon Raise", 0.18f);
+            clips[(int)Sound.Hum] = Drone("Fluorescent Hum", 3f, 0.02f, 120f);
+
+            // Music beds (loops): a calm minor pad for menus and a low pulse for missions.
+            clips[(int)Sound.MusicMenu] = Pad("Menu Theme", 16f, new[] { 110f, 87.31f, 98f, 82.41f }, 0f);
+            clips[(int)Sound.MusicMission] = Pad("Mission Tension", 16f, new[] { 73.42f, 69.3f, 73.42f, 65.41f }, 2f);
             return clips;
         }
 
@@ -133,6 +170,60 @@ namespace Swat
                 filtered = Mathf.Lerp(filtered, Noise(), smoothing);
                 float edge = Mathf.Clamp01(Mathf.Min(t, seconds - t) * 4f); // fade the ends so the loop seam is quiet
                 return (filtered + (hum > 0f ? Mathf.Sin(Tau * hum * t) * 0.3f : 0f)) * edge;
+            });
+        }
+
+        static float Thump(float t, float at, float pitch)
+        {
+            float local = t - at;
+            if (local < 0f) return 0f;
+            return Mathf.Sin(Tau * pitch * local) * Mathf.Exp(-local * 22f);
+        }
+
+        static AudioClip Step(string name, float seconds, float brightness, float pitch, float decay)
+        {
+            float filtered = 0f;
+            return Make(name, seconds, t =>
+            {
+                filtered = Mathf.Lerp(filtered, Noise(), brightness);
+                return (filtered * 0.8f + Mathf.Sin(Tau * pitch * t) * 0.5f) * Mathf.Exp(-t * decay);
+            });
+        }
+
+        static AudioClip Babble(string name, float seconds, int syllables, float formant)
+        {
+            float filtered = 0f, slow = 0f;
+            float syllable = (seconds - 0.12f) / syllables;
+            return Make(name, seconds, t =>
+            {
+                // Radio squelch at the start, then noise shaped into syllables.
+                if (t < 0.06f) return Mathf.Sign(Mathf.Sin(Tau * 1500f * t)) * 0.25f;
+                float local = t - 0.06f;
+                float env = Mathf.Max(0f, Mathf.Sin(Mathf.PI * Mathf.Repeat(local, syllable) / syllable));
+                float n = Noise();
+                filtered = Mathf.Lerp(filtered, n, 0.35f);
+                slow = Mathf.Lerp(slow, filtered, 0.2f);
+                float band = filtered - slow;
+                float pitch = formant * (1f + 0.15f * Mathf.Sin(local * 9f));
+                return (band * 0.7f + Mathf.Sin(Tau * pitch * t) * 0.25f) * env * (local < seconds - 0.1f ? 1f : 0f);
+            });
+        }
+
+        // Slow evolving chord pad; 'pulse' adds a soft rhythmic throb (beats per second).
+        static AudioClip Pad(string name, float seconds, float[] roots, float pulse)
+        {
+            float chordLength = seconds / roots.Length;
+            return Make(name, seconds, t =>
+            {
+                int i = Mathf.Min((int)(t / chordLength), roots.Length - 1);
+                float local = t - i * chordLength;
+                float root = roots[i];
+                float fade = Mathf.Clamp01(local * 1.5f) * Mathf.Clamp01((chordLength - local) * 1.5f);
+                float tone = Mathf.Sin(Tau * root * t) + 0.6f * Mathf.Sin(Tau * root * 1.5f * t) + 0.45f * Mathf.Sin(Tau * root * 2.4f * t)
+                    + 0.25f * Mathf.Sin(Tau * root * 4.01f * t) * (0.5f + 0.5f * Mathf.Sin(t * 0.7f));
+                float throb = pulse > 0f ? 0.6f + 0.4f * Mathf.Max(0f, Mathf.Sin(Tau * pulse * t)) : 1f;
+                float edge = Mathf.Clamp01(Mathf.Min(t, seconds - t) * 2f);
+                return tone * fade * throb * edge;
             });
         }
 

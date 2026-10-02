@@ -15,6 +15,7 @@ namespace Swat
         public float accuracyMultiplier = 1f, reactionMultiplier = 1f;
         public int enemyCount, civilianCount;
         public int lockedDoors; // filled in when the level is populated
+        public TimeOfDay timeOfDay;
     }
 
     // Lightweight replayability. Map layouts are fixed; the seed decides who
@@ -33,6 +34,7 @@ namespace Swat
             var rng = new System.Random(seed);
             var plan = new MissionPlan { mission = mission, seed = seed, difficulty = Mathf.Clamp(difficulty, 0, 2) };
             plan.powerOutage = rng.NextDouble() < mission.powerOutageChance;
+            plan.timeOfDay = OfficerSelectionManager.TimeOverride >= 0 ? (TimeOfDay)OfficerSelectionManager.TimeOverride : mission.DefaultTime;
             plan.alarmArmed = mission.mapId != "training" && rng.NextDouble() < mission.alarmArmedChance;
             plan.camerasActive = rng.NextDouble() < mission.camerasActiveChance;
             plan.accuracyMultiplier = AccuracyByDifficulty[plan.difficulty];

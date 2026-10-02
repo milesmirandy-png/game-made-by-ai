@@ -19,13 +19,26 @@ namespace Swat
         public static readonly Color TextColor = new Color(0.88f, 0.91f, 0.95f);
         public static readonly Color Dim = new Color(0.58f, 0.64f, 0.72f);
         public static readonly Color Faint = new Color(0.38f, 0.43f, 0.5f);
-        public static readonly Color Good = new Color(0.4f, 0.85f, 0.55f);
-        public static readonly Color Warn = new Color(1f, 0.76f, 0.3f);
-        public static readonly Color Bad = new Color(0.95f, 0.35f, 0.3f);
+        // Status colors. The colorblind-friendly palette swaps red/green for orange/blue.
+        public static Color Good { get { return SaveManager.Settings.colorblindMode ? new Color(0.35f, 0.65f, 1f) : new Color(0.4f, 0.85f, 0.55f); } }
+        public static Color Warn { get { return SaveManager.Settings.colorblindMode ? new Color(1f, 0.92f, 0.35f) : new Color(1f, 0.76f, 0.3f); } }
+        public static Color Bad { get { return SaveManager.Settings.colorblindMode ? new Color(1f, 0.55f, 0.1f) : new Color(0.95f, 0.35f, 0.3f); } }
+
+        public static readonly string[] CrosshairColorNames = { "White", "Green", "Cyan", "Yellow", "Magenta" };
+        public static readonly Color[] CrosshairColors = { Color.white, new Color(0.4f, 1f, 0.45f), new Color(0.35f, 0.95f, 1f), new Color(1f, 0.95f, 0.3f), new Color(1f, 0.4f, 0.95f) };
         public static readonly Color AlertRed = new Color(0.9f, 0.15f, 0.12f);
         public static readonly Color AlertBlue = new Color(0.2f, 0.4f, 1f);
 
-        public static float Scale { get { return Mathf.Max(0.5f, Screen.height / 1080f); } }
+        // UI scale setting on top of the resolution-based scale.
+        // (Capped so the layout always has at least 1440 virtual pixels of width.)
+        public static float Scale
+        {
+            get
+            {
+                float scale = Mathf.Max(0.5f, Screen.height / 1080f) * Mathf.Clamp(SaveManager.Settings.uiScale, 0.75f, 1.5f);
+                return Mathf.Max(0.4f, Mathf.Min(scale, Screen.width / 1440f));
+            }
+        }
         public static float Width { get { return Screen.width / Scale; } }
         public static float Height { get { return Screen.height / Scale; } }
 
@@ -41,6 +54,30 @@ namespace Swat
                 return circle;
             }
         }
+
+        // Dark screen edges, used as the vignette when the Built-in post-processing isn't available (URP).
+        public static Texture2D Vignette
+        {
+            get
+            {
+                if (vignette == null)
+                {
+                    const int size = 64;
+                    vignette = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
+                    for (int y = 0; y < size; y++)
+                        for (int x = 0; x < size; x++)
+                        {
+                            float d = Vector2.Distance(new Vector2((x + 0.5f) / size, (y + 0.5f) / size), new Vector2(0.5f, 0.5f)) * 1.414f;
+                            float a = Mathf.Clamp01((d - 0.55f) / 0.45f);
+                            vignette.SetPixel(x, y, new Color(0f, 0f, 0f, a * a));
+                        }
+                    vignette.Apply();
+                }
+                return vignette;
+            }
+        }
+
+        static Texture2D vignette;
 
         public static Texture2D Gradient
         {
@@ -80,6 +117,7 @@ namespace Swat
 
         public static GUIStyle Style(int size, TextAnchor anchor, bool bold, bool wrap = true)
         {
+            size = Mathf.RoundToInt(size * Mathf.Clamp(SaveManager.Settings.textSize, 0.85f, 1.4f));
             int key = size * 1000 + (int)anchor * 10 + (bold ? 1 : 0) + (wrap ? 5000000 : 0);
             GUIStyle style;
             if (!styles.TryGetValue(key, out style) || style == null)
@@ -138,16 +176,41 @@ namespace Swat
             GUI.color = old;
         }
 
+        // A ring drawn as one textured quad (textures cached per thickness ratio).
         public static void Ring(Vector2 center, float radius, Color color, float thickness)
         {
-            // Approximated with short segments.
-            int segments = Mathf.Clamp(Mathf.RoundToInt(radius), 12, 48);
-            for (int i = 0; i < segments; i++)
+            if (Event.current.type != EventType.Repaint || radius <= 0.5f) return;
+            int ratio = Mathf.Clamp(Mathf.RoundToInt(thickness / radius * 20f), 1, 10);
+            Texture2D texture;
+            if (!rings.TryGetValue(ratio, out texture) || texture == null)
             {
-                float a = i * Mathf.PI * 2f / segments;
-                Vector2 p = center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius;
-                Fill(new Rect(p.x - thickness * 0.5f, p.y - thickness * 0.5f, thickness, thickness), color);
+                texture = MakeRing(64, ratio / 20f);
+                rings[ratio] = texture;
             }
+            var old = GUI.color;
+            GUI.color = color;
+            float r = radius + thickness * 0.5f;
+            GUI.DrawTexture(new Rect(center.x - r, center.y - r, r * 2f, r * 2f), texture);
+            GUI.color = old;
+        }
+
+        static readonly Dictionary<int, Texture2D> rings = new Dictionary<int, Texture2D>();
+
+        static Texture2D MakeRing(int size, float thicknessRatio)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
+            float outer = size * 0.5f;
+            float width = outer * thicknessRatio / (1f + thicknessRatio * 0.5f);
+            float inner = outer - width;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(outer, outer));
+                    float a = Mathf.Clamp01(outer - d) * Mathf.Clamp01(d - inner);
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            texture.Apply();
+            return texture;
         }
 
         public static void LineTo(Vector2 a, Vector2 b, Color color, float thickness)

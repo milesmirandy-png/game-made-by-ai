@@ -17,6 +17,8 @@ namespace Swat
         public bool IsDark { get; set; }
         public RoomState State { get; private set; }
         public Light Fixture { get; set; }
+        public RoomStyle Style { get; set; }
+        public GameObject Floor { get; set; }
 
         public static RoomController Create(Transform parent, string id, string name, Bounds bounds, int area, bool indoor)
         {

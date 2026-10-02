@@ -79,6 +79,71 @@ namespace Swat
             if (mag > 0f) UITheme.Fill(new Rect(x + stock * scale + body * scale * 0.62f, y + bh, bh * 0.4f, mag * scale), color);
         }
 
+        // Simple glyphs for squad orders, used on the command wheel and squad panel.
+        public static void Order(Rect rect, SquadOrder order, DoorAction action, Color color)
+        {
+            Vector2 c = rect.center;
+            float r = Mathf.Min(rect.width, rect.height) * 0.42f;
+            float t = Mathf.Max(2f, r * 0.22f);
+            if (order == SquadOrder.Stack)
+            {
+                // Door frame with dots beside it; the action adds a mark.
+                UITheme.Frame(new Rect(c.x - r * 0.35f, c.y - r, r * 0.7f, r * 2f), color, t * 0.7f);
+                UITheme.Dot(c + new Vector2(-r * 0.75f, -r * 0.3f), t, color);
+                UITheme.Dot(c + new Vector2(-r * 0.75f, r * 0.3f), t, color);
+                if (action == DoorAction.Breach) UITheme.Dot(c, t * 1.3f, UITheme.Warn);
+                else if (action == DoorAction.Flash) UITheme.Dot(c, t * 1.3f, Color.white);
+                else if (action == DoorAction.Open) UITheme.LineTo(c + new Vector2(-r * 0.35f, r), c + new Vector2(r * 0.5f, r * 0.3f), color, t * 0.7f);
+                return;
+            }
+            switch (order)
+            {
+                case SquadOrder.Follow: // chevron pointing up
+                    UITheme.LineTo(c + new Vector2(-r * 0.8f, r * 0.4f), c + new Vector2(0f, -r * 0.5f), color, t);
+                    UITheme.LineTo(c + new Vector2(0f, -r * 0.5f), c + new Vector2(r * 0.8f, r * 0.4f), color, t);
+                    break;
+                case SquadOrder.Hold: // hand / stop bar
+                    UITheme.Fill(new Rect(c.x - r * 0.8f, c.y - t * 0.6f, r * 1.6f, t * 1.2f), color);
+                    UITheme.Fill(new Rect(c.x - t * 0.6f, c.y - r * 0.8f, t * 1.2f, r * 1.6f), color);
+                    break;
+                case SquadOrder.Regroup: // converging dots
+                    UITheme.Dot(c, t * 1.2f, color);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float a = i * Mathf.PI * 2f / 3f - Mathf.PI * 0.5f;
+                        UITheme.Dot(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r * 0.8f, t * 0.8f, color);
+                    }
+                    break;
+                case SquadOrder.MoveTo: // location pin
+                    UITheme.Ring(c + new Vector2(0f, -r * 0.25f), r * 0.45f, color, t * 0.8f);
+                    UITheme.LineTo(c + new Vector2(0f, r * 0.25f), c + new Vector2(0f, r * 0.9f), color, t);
+                    break;
+                case SquadOrder.Cover: // eye
+                    UITheme.Ring(c, r * 0.65f, color, t * 0.8f);
+                    UITheme.Dot(c, t * 1.1f, color);
+                    break;
+                case SquadOrder.StayBehind: // anchor bar
+                    UITheme.Fill(new Rect(c.x - r * 0.8f, c.y + r * 0.4f, r * 1.6f, t), color);
+                    UITheme.Fill(new Rect(c.x - t * 0.5f, c.y - r * 0.8f, t, r * 1.2f), color);
+                    break;
+                case SquadOrder.ReturnToPlayer: // arrow back
+                    UITheme.LineTo(c + new Vector2(r * 0.8f, 0f), c + new Vector2(-r * 0.8f, 0f), color, t);
+                    UITheme.LineTo(c + new Vector2(-r * 0.8f, 0f), c + new Vector2(-r * 0.2f, -r * 0.55f), color, t);
+                    UITheme.LineTo(c + new Vector2(-r * 0.8f, 0f), c + new Vector2(-r * 0.2f, r * 0.55f), color, t);
+                    break;
+                case SquadOrder.AssistCivilians: // person with cross
+                    UITheme.Dot(c + new Vector2(-r * 0.3f, -r * 0.45f), t * 1.1f, color);
+                    UITheme.Fill(new Rect(c.x - r * 0.55f, c.y - r * 0.15f, r * 0.5f, r * 0.9f), color);
+                    UITheme.Fill(new Rect(c.x + r * 0.35f, c.y - r * 0.35f, t * 0.8f, r * 0.8f), color);
+                    UITheme.Fill(new Rect(c.x + r * 0.15f, c.y - t * 0.4f, r * 0.6f + t * 0.4f, t * 0.8f), color);
+                    break;
+                default: // wait: pause bars
+                    UITheme.Fill(new Rect(c.x - r * 0.5f, c.y - r * 0.6f, t * 1.3f, r * 1.2f), color);
+                    UITheme.Fill(new Rect(c.x + r * 0.5f - t * 1.3f, c.y - r * 0.6f, t * 1.3f, r * 1.2f), color);
+                    break;
+            }
+        }
+
         public static void Equipment(Rect rect, EquipmentKind kind, Color color)
         {
             Vector2 c = rect.center;

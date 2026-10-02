@@ -46,16 +46,37 @@ namespace Swat
                 var player = GameManager.Instance.Player;
                 switch (State)
                 {
-                    case DoorState.Closed: return "[E] Open door";
-                    case DoorState.Open: return "[E] Close door";
-                    case DoorState.Wedged: return "[E] Remove wedge (hold)";
-                    case DoorState.Disabled: return "Sealed shut";
+                    case DoorState.Closed: return "[E] Open Door";
+                    case DoorState.Open: return "[E] Close Door";
+                    case DoorState.Wedged: return "[E] Remove Wedge (hold)";
                     case DoorState.Locked:
-                        if (Breachable && player != null && player.Weapons.Inventory.CountOf(EquipmentKind.BreachingCharge) > 0) return "[E] Place breaching charge (hold)";
-                        if (Pickable) return "[E] Pick the lock (hold)";
-                        if (Electronic) return "Electronic lock - use a security console";
-                        return Breachable ? "Locked - needs a breaching charge" : "Locked";
+                        if (Breachable && player != null && player.Weapons.Inventory.CountOf(EquipmentKind.BreachingCharge) > 0) return "[E] Place Breaching Charge (hold)";
+                        if (Pickable) return "[E] Pick Lock (hold)";
+                        return "[E] Try Door";
                     default: return string.Empty;
+                }
+            }
+        }
+
+        // What you can tell by looking at the door (shown under the prompt, and
+        // instead of a prompt for doors that can't be used).
+        public string StatusText
+        {
+            get
+            {
+                switch (State)
+                {
+                    case DoorState.Locked:
+                        if (Electronic) return "Electronic lock: use a security console or a breaching charge";
+                        if (Breachable && Pickable) return "Locked: breachable (yellow stripes), lock can be picked";
+                        if (Breachable) return "Locked: needs a breaching charge or a Breacher's kick";
+                        if (Pickable) return "Locked: the lock can be picked";
+                        return "Locked";
+                    case DoorState.Wedged: return "Wedged shut";
+                    case DoorState.Disabled: return "Sealed shut";
+                    case DoorState.Breached: return "Breached";
+                    case DoorState.Closed: return Breachable ? "Closed (breachable)" : null;
+                    default: return null;
                 }
             }
         }
@@ -81,6 +102,16 @@ namespace Swat
             Color color = electronic ? new Color(0.35f, 0.38f, 0.42f) : state == DoorState.Locked ? new Color(0.45f, 0.22f, 0.16f) : new Color(0.55f, 0.4f, 0.26f);
             if (state == DoorState.Disabled) color = new Color(0.3f, 0.3f, 0.3f);
             door.leaf = Shapes.Box("Leaf", door.hinge, new Vector3(width * 0.5f, VisualHeight * 0.5f, 0f), new Vector3(width - 0.06f, VisualHeight, 0.08f), color);
+            Shapes.ApplySurface(door.leaf, color, electronic || state == DoorState.Disabled ? SurfaceKind.Metal : SurfaceKind.Wood);
+            SurfaceTag.Set(door.leaf, electronic || state == DoorState.Disabled ? Swat.Surface.Metal : Swat.Surface.Wood);
+            // Handles on both faces, and a frame so doorways read clearly from above.
+            var handle = new Color(0.72f, 0.72f, 0.7f);
+            Shapes.Box("Handle", door.leaf.transform, new Vector3(0.4f, -0.05f, 0.9f), new Vector3(0.08f, 0.03f, 0.9f), handle, false);
+            Shapes.Box("Handle", door.leaf.transform, new Vector3(0.4f, -0.05f, -0.9f), new Vector3(0.08f, 0.03f, 0.9f), handle, false);
+            var frame = new Color(0.2f, 0.21f, 0.23f);
+            Shapes.Box("Frame", go.transform, new Vector3(-width * 0.5f, 0.73f, 0f), new Vector3(0.08f, 1.46f, 0.24f), frame, false);
+            Shapes.Box("Frame", go.transform, new Vector3(width * 0.5f, 0.73f, 0f), new Vector3(0.08f, 1.46f, 0.24f), frame, false);
+            Shapes.Box("Threshold", go.transform, new Vector3(0f, 0.035f, 0f), new Vector3(width, 0.012f, 0.24f), frame, false);
             var box = door.leaf.GetComponent<BoxCollider>();
             box.size = new Vector3(1f, SolidHeight / VisualHeight, 1f);
             box.center = new Vector3(0f, box.size.y * 0.5f - 0.5f, 0f);
@@ -130,7 +161,7 @@ namespace Swat
 
         public bool CanInteract(PlayerController player)
         {
-            return State != DoorState.Breached && !ChargePlaced;
+            return State != DoorState.Breached && State != DoorState.Disabled && !ChargePlaced;
         }
 
         public void Interact(PlayerController player)
@@ -145,12 +176,10 @@ namespace Swat
                     else if (Pickable) PickLock(player.Position);
                     else
                     {
-                        AudioManager.Play(Sound.DoorLocked, transform.position, 0.8f);
-                        UIManager.Notify(Electronic ? "Electronic lock. Find a security console." : "This door is locked.");
+                        AudioManager.Play(Sound.DoorHandle, transform.position, 0.8f);
+                        AudioManager.Play(Sound.DoorLocked, transform.position, 0.7f);
+                        UIManager.Notify(StatusText);
                     }
-                    break;
-                case DoorState.Disabled:
-                    AudioManager.Play(Sound.DoorLocked, transform.position, 0.8f);
                     break;
             }
         }
@@ -163,7 +192,8 @@ namespace Swat
             float side = Vector3.Dot(from - transform.position, transform.forward) > 0f ? 1f : -1f;
             targetAngle = 95f * side;
             enabled = true;
-            AudioManager.Play(Sound.DoorOpen, transform.position, 0.6f);
+            AudioManager.Play(Electronic ? Sound.DoorOpenMetal : Sound.DoorOpen, transform.position, 0.6f, Random.Range(0.92f, 1.08f));
+            AudioManager.Play(Sound.DoorHandle, transform.position, 0.4f, Random.Range(0.9f, 1.1f));
             Noise.Emit(transform.position, 5f, NoiseKind.Door);
             MissionManager.Instance.ReportDoor(this);
             if (Opened != null) Opened(this);
@@ -175,7 +205,7 @@ namespace Swat
             SetState(DoorState.Closed);
             targetAngle = 0f;
             enabled = true;
-            AudioManager.Play(Sound.DoorOpen, transform.position, 0.5f, 0.8f);
+            AudioManager.Play(Sound.DoorClose, transform.position, 0.6f, Random.Range(0.92f, 1.08f));
         }
 
         public void PickLock(Vector3 from)

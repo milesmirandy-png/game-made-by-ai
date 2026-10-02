@@ -16,6 +16,8 @@ namespace Swat
             HitIndicator = 1f;
             LastHitFrom = transform.position - info.direction * 5f;
             AudioManager.Play2D(Sound.Hurt, 0.7f);
+            var player = GetComponent<PlayerController>();
+            if (player != null && player.Animator != null) player.Animator.Hit(info.direction);
             GameManager.Instance.CameraRig.Shake(0.25f);
         }
 

@@ -85,6 +85,14 @@ namespace Swat
                 game.RollPlan();
             }
             y += 42f;
+            var lighting = new[] { "Mission default (" + LightingProfile.Names[(int)mission.DefaultTime] + ")", "Day", "Evening", "Night" };
+            int timeChoice = UITheme.Stepper(new Rect(x, y, cw, 36f), "Lighting", OfficerSelectionManager.TimeOverride + 1, lighting);
+            if (timeChoice != OfficerSelectionManager.TimeOverride + 1)
+            {
+                OfficerSelectionManager.TimeOverride = timeChoice - 1;
+                game.RollPlan();
+            }
+            y += 42f;
             UITheme.Text(new Rect(x, y, cw * 0.36f, 36f), "Random seed", 17, UITheme.TextColor, TextAnchor.MiddleLeft);
             UITheme.Text(new Rect(x + cw * 0.38f, y, 120f, 36f), plan.seed.ToString(), 18, UITheme.TextColor, TextAnchor.MiddleLeft, true);
             bool fixedSeed = mission.seed != 0;

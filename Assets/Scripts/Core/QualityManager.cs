@@ -5,53 +5,68 @@ namespace Swat
     public enum QualityTier { Potato, Low, Medium, High, Ultra }
 
     // Makes the game run on anything from a potato to a gaming beast.
-    //  * Picks a graphics tier from the hardware on first launch.
-    //  * In Auto mode, drops a tier if the frame rate stays low.
-    //  * Low tiers render the 3D view at reduced resolution (the HUD stays sharp),
-    //    turn off shadows and dynamic lights, and think less often for the AI.
+    //  * Picks a graphics preset from the hardware on first launch.
+    //  * In Auto mode, drops a preset if the frame rate stays low.
+    //  * Individual options (shadows, anti-aliasing, effects, VSync, ambient
+    //    occlusion, post-processing, view distance) can override the preset.
+    //  * Performance Mode trims the expensive parts while keeping the look coherent.
+    //  * Low presets render the 3D view at reduced resolution (the HUD stays
+    //    sharp), turn off shadows and real-time lights, and update AI less often.
     public class QualityManager : MonoBehaviour
     {
         public struct Profile
         {
             public string name;
             public float renderScale;     // fraction of screen resolution the world is drawn at
-            public int shadows;           // 0 off, 1 hard, 2 soft
-            public float shadowDistance;
+            public int shadows;           // 0 off, 1 low, 2 medium, 3 high, 4 very high
             public int msaa;
             public int pixelLights;
-            public float particleScale;   // multiplier on debris and smoke puffs
-            public bool dynamicLights;    // muzzle flashes and explosions light the scene
+            public float particleScale;   // multiplier on debris, shells and smoke puffs
+            public bool dynamicLights;    // muzzle flashes, explosions and flashlights light the scene
+            public bool fixtureLights;    // room fixtures and street lamps are real lights (pools always show)
+            public bool contactShadows;   // baked-style ambient occlusion decals
+            public bool post;             // post-processing (grading, vignette, bloom)
+            public bool bloom;
             public float aiThinkInterval; // seconds between AI decisions
             public int targetFps;
             public bool vSync;
         }
 
+        public static readonly string[] ShadowNames = { "Off", "Low", "Medium", "High", "Very High" };
+        public static readonly string[] EffectsNames = { "Low", "Medium", "High" };
+
         static readonly Profile[] Profiles =
         {
-            new Profile { name = "Potato", renderScale = 0.5f, shadows = 0, shadowDistance = 0f, msaa = 0, pixelLights = 0, particleScale = 0.35f, dynamicLights = false, aiThinkInterval = 0.3f, targetFps = 60, vSync = false },
-            new Profile { name = "Low", renderScale = 0.75f, shadows = 0, shadowDistance = 0f, msaa = 0, pixelLights = 1, particleScale = 0.6f, dynamicLights = false, aiThinkInterval = 0.22f, targetFps = 60, vSync = false },
-            new Profile { name = "Medium", renderScale = 1f, shadows = 1, shadowDistance = 35f, msaa = 0, pixelLights = 2, particleScale = 1f, dynamicLights = true, aiThinkInterval = 0.15f, targetFps = 60, vSync = false },
-            new Profile { name = "High", renderScale = 1f, shadows = 2, shadowDistance = 45f, msaa = 2, pixelLights = 4, particleScale = 1f, dynamicLights = true, aiThinkInterval = 0.12f, targetFps = 0, vSync = true },
-            new Profile { name = "Ultra", renderScale = 1f, shadows = 2, shadowDistance = 60f, msaa = 4, pixelLights = 6, particleScale = 1.3f, dynamicLights = true, aiThinkInterval = 0.1f, targetFps = 0, vSync = true },
+            new Profile { name = "Potato", renderScale = 0.5f, shadows = 0, msaa = 0, pixelLights = 0, particleScale = 0.35f, dynamicLights = false, fixtureLights = false, contactShadows = false, post = false, bloom = false, aiThinkInterval = 0.3f, targetFps = 60, vSync = false },
+            new Profile { name = "Low", renderScale = 0.75f, shadows = 1, msaa = 0, pixelLights = 1, particleScale = 0.6f, dynamicLights = false, fixtureLights = false, contactShadows = true, post = false, bloom = false, aiThinkInterval = 0.22f, targetFps = 60, vSync = false },
+            new Profile { name = "Medium", renderScale = 1f, shadows = 2, msaa = 0, pixelLights = 2, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = false, aiThinkInterval = 0.15f, targetFps = 60, vSync = false },
+            new Profile { name = "High", renderScale = 1f, shadows = 3, msaa = 2, pixelLights = 4, particleScale = 1f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.12f, targetFps = 0, vSync = true },
+            new Profile { name = "Ultra", renderScale = 1f, shadows = 4, msaa = 4, pixelLights = 6, particleScale = 1.3f, dynamicLights = true, fixtureLights = true, contactShadows = true, post = true, bloom = true, aiThinkInterval = 0.1f, targetFps = 0, vSync = true },
         };
 
         const float LowFpsThreshold = 40f;
         const float LowFpsSeconds = 4f;
 
         public static QualityManager Instance { get; private set; }
-        public static Profile Current { get { return Instance != null ? Profiles[(int)Instance.Tier] : Profiles[(int)QualityTier.Medium]; } }
+        // The preset with the player's overrides and Performance Mode applied.
+        public static Profile Current { get { return Instance != null ? Instance.effective : Profiles[(int)QualityTier.Medium]; } }
         public static int TierCount { get { return Profiles.Length; } }
         public static string TierName(int tier) { return Profiles[tier].name; }
+        public static bool AmbientOcclusionOn { get { return Current.contactShadows && SaveManager.Settings.ambientOcclusion; } }
+        public static bool PostProcessingOn { get { return Current.post && SaveManager.Settings.postProcessing; } }
 
         public QualityTier Tier { get; private set; }
         public bool IsAuto { get; private set; }
         public bool ShowFps { get; set; }
         public float Fps { get; private set; }
+        public float FrameMs { get; private set; }
         public RenderTexture ScaledView { get; private set; }
         public string Hardware { get; private set; }
         public string Notice { get; private set; }
         public float NoticeTime { get; private set; }
+        public event System.Action Changed;
 
+        Profile effective;
         Camera worldCamera;
         Camera presentCamera;
         Light sun;
@@ -61,6 +76,7 @@ namespace Swat
         void Awake()
         {
             Instance = this;
+            effective = Profiles[(int)QualityTier.Medium];
             Fps = 60f;
             Hardware = SystemInfo.graphicsDeviceName + "  |  " + SystemInfo.graphicsMemorySize + " MB VRAM  |  "
                 + SystemInfo.systemMemorySize + " MB RAM  |  " + SystemInfo.processorCount + " cores";
@@ -82,6 +98,7 @@ namespace Swat
 
             // Saved in the settings file; -1 means Auto.
             ShowFps = SaveManager.Settings.showFps;
+            ApplyDisplay();
             int saved = SaveManager.Settings.qualityTier;
             if (saved < 0 || saved >= Profiles.Length) SetTier(DetectTier(), true);
             else SetTier((QualityTier)saved, false);
@@ -123,34 +140,106 @@ namespace Swat
             return QualityTier.Ultra;
         }
 
-        void Apply()
+        // Re-applies everything (call after changing any graphics setting).
+        public void Apply()
         {
-            var p = Profiles[(int)Tier];
+            effective = Effective(Profiles[(int)Tier], SaveManager.Settings);
+            var p = effective;
             QualitySettings.vSyncCount = p.vSync ? 1 : 0;
             Application.targetFrameRate = p.vSync ? -1 : p.targetFps;
             QualitySettings.antiAliasing = p.msaa;
             QualitySettings.pixelLightCount = p.pixelLights;
-            QualitySettings.shadows = p.shadows == 0 ? ShadowQuality.Disable : p.shadows == 1 ? ShadowQuality.HardOnly : ShadowQuality.All;
-            QualitySettings.shadowDistance = p.shadowDistance;
-            QualitySettings.shadowResolution = p.shadows == 2 ? ShadowResolution.High : ShadowResolution.Medium;
-            QualitySettings.shadowCascades = p.shadows == 2 ? 2 : 1;
+            ApplyShadows(p.shadows);
             QualitySettings.softParticles = false;
             QualitySettings.realtimeReflectionProbes = false;
-            QualitySettings.anisotropicFiltering = p.shadows == 0 ? AnisotropicFiltering.Disable : AnisotropicFiltering.Enable;
+            QualitySettings.anisotropicFiltering = SaveManager.Settings.textureQuality >= 2 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable;
             Time.fixedDeltaTime = (int)Tier <= (int)QualityTier.Low ? 0.04f : 0.02f;
-
-            if (sun != null)
-                sun.shadows = p.shadows == 0 ? LightShadows.None : p.shadows == 1 ? LightShadows.Hard : LightShadows.Soft;
+            if (worldCamera != null) worldCamera.allowMSAA = p.msaa > 0;
 
             UpdateRenderTarget(true);
             settleUntil = Time.unscaledTime + 3f;
             lowFpsTimer = 0f;
+            if (Changed != null) Changed();
+        }
+
+        static Profile Effective(Profile p, SettingsData s)
+        {
+            if (s.shadowQuality >= 0) p.shadows = Mathf.Clamp(s.shadowQuality, 0, 4);
+            if (s.antiAliasing >= 0) p.msaa = s.antiAliasing >= 8 ? 8 : s.antiAliasing >= 4 ? 4 : s.antiAliasing >= 2 ? 2 : 0;
+            if (s.effectsQuality >= 0) p.particleScale = s.effectsQuality == 0 ? 0.4f : s.effectsQuality == 1 ? 0.8f : 1.2f;
+            if (s.vSync >= 0) p.vSync = s.vSync == 1;
+            if (s.performanceMode)
+            {
+                // Same look, less work: low shadows, no AO or post-processing, fewer effects,
+                // light pools instead of real fixture lights.
+                p.shadows = Mathf.Min(p.shadows, 1);
+                p.contactShadows = false;
+                p.post = false;
+                p.bloom = false;
+                p.particleScale *= 0.5f;
+                p.fixtureLights = false;
+                p.pixelLights = Mathf.Min(p.pixelLights, 1);
+                p.msaa = Mathf.Min(p.msaa, 2);
+                p.renderScale = Mathf.Min(p.renderScale, 0.85f);
+            }
+            return p;
+        }
+
+        void ApplyShadows(int level)
+        {
+            switch (level)
+            {
+                case 0:
+                    QualitySettings.shadows = ShadowQuality.Disable;
+                    break;
+                case 1:
+                    QualitySettings.shadows = ShadowQuality.HardOnly;
+                    QualitySettings.shadowResolution = ShadowResolution.Low;
+                    QualitySettings.shadowDistance = 25f;
+                    QualitySettings.shadowCascades = 1;
+                    break;
+                case 2:
+                    QualitySettings.shadows = ShadowQuality.HardOnly;
+                    QualitySettings.shadowResolution = ShadowResolution.Medium;
+                    QualitySettings.shadowDistance = 35f;
+                    QualitySettings.shadowCascades = 1;
+                    break;
+                case 3:
+                    QualitySettings.shadows = ShadowQuality.All;
+                    QualitySettings.shadowResolution = ShadowResolution.High;
+                    QualitySettings.shadowDistance = 45f;
+                    QualitySettings.shadowCascades = 2;
+                    break;
+                default:
+                    QualitySettings.shadows = ShadowQuality.All;
+                    QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
+                    QualitySettings.shadowDistance = 60f;
+                    QualitySettings.shadowCascades = 4;
+                    break;
+            }
+            if (sun != null)
+                sun.shadows = level == 0 ? LightShadows.None : level <= 2 ? LightShadows.Hard : LightShadows.Soft;
+        }
+
+        // Resolution and window mode (only meaningful in a built game).
+        public void ApplyDisplay()
+        {
+            var s = SaveManager.Settings;
+            if (Application.isEditor) return;
+            int width = s.resolutionWidth > 0 ? s.resolutionWidth : Screen.width;
+            int height = s.resolutionHeight > 0 ? s.resolutionHeight : Screen.height;
+            var mode = s.fullscreenMode >= 0 ? (FullScreenMode)s.fullscreenMode : Screen.fullScreenMode;
+            if (width != Screen.width || height != Screen.height || mode != Screen.fullScreenMode) Screen.SetResolution(width, height, mode);
         }
 
         void Update()
         {
             float dt = Time.unscaledDeltaTime;
-            if (dt > 0f) Fps = Mathf.Lerp(Fps, 1f / dt, 0.05f);
+            if (dt > 0f)
+            {
+                Fps = Mathf.Lerp(Fps, 1f / dt, 0.05f);
+                FrameMs = Mathf.Lerp(FrameMs, dt * 1000f, 0.05f);
+            }
             if (GameInput.Down(InputAction.ToggleFps))
             {
                 ShowFps = !ShowFps;
@@ -158,9 +247,9 @@ namespace Swat
             }
             UpdateRenderTarget(false);
 
-            // Auto mode: if the game is struggling for a few seconds, step down a tier.
+            // Auto mode: if the game is struggling for a few seconds, step down a preset.
             var game = GameManager.Instance;
-            bool measuring = IsAuto && game != null && game.IsPlaying && Time.unscaledTime > settleUntil;
+            bool measuring = IsAuto && game != null && game.IsPlaying && Time.timeScale > 0f && Time.unscaledTime > settleUntil;
             if (!measuring) return;
             lowFpsTimer = Fps < LowFpsThreshold ? lowFpsTimer + dt : 0f;
             if (lowFpsTimer > LowFpsSeconds && Tier > QualityTier.Potato)
@@ -172,11 +261,11 @@ namespace Swat
             }
         }
 
-        // Draws the 3D world into a smaller texture when the tier asks for it.
+        // Draws the 3D world into a smaller texture when the preset asks for it.
         void UpdateRenderTarget(bool force)
         {
             if (worldCamera == null) return;
-            float scale = Profiles[(int)Tier].renderScale;
+            float scale = effective.renderScale <= 0f ? 1f : effective.renderScale;
             int width = Mathf.Max(64, Mathf.RoundToInt(Screen.width * scale));
             int height = Mathf.Max(64, Mathf.RoundToInt(Screen.height * scale));
             bool wantScaled = scale < 0.99f;

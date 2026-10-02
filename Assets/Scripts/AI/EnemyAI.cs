@@ -87,18 +87,7 @@ namespace Swat
             ai.health = go.AddComponent<EnemyHealth>();
             ai.health.Init(data, ai);
 
-            var look = new Appearance
-            {
-                shirt = data.shirtColor,
-                pants = data.pantsColor,
-                skin = CharacterFactory.RandomSkin(),
-                headwear = data.headwear == 3 ? new Color(0.12f, 0.12f, 0.13f) : new Color(0.08f, 0.08f, 0.09f),
-                head = data.headwear == 0 ? HeadStyle.Hair : data.headwear == 1 ? HeadStyle.Cap : data.headwear == 2 ? HeadStyle.Balaclava : HeadStyle.Helmet,
-                vestOn = data.damageReduction > 0.2f,
-                vest = new Color(0.12f, 0.12f, 0.12f),
-                ring = Color.red,
-                armed = data.armed,
-            };
+            var look = CharacterFactory.SuspectLook(data);
             var parts = CharacterFactory.Build(go.transform, look);
             if (data.armed)
                 CharacterFactory.SetWeapon(parts, GameData.Weapon(data.archetype == EnemyArchetype.Nervous ? "pistol_bk6" : data.archetype == EnemyArchetype.Armored ? "rifle_service" : "smg_compact"), null);
@@ -559,6 +548,7 @@ namespace Swat
 
         public void OnHit(DamageInfo info, bool lethal)
         {
+            if (!lethal) body.Animator.Hit(info.direction);
             bool unjustified = State == EnemyState.Surrendering || State == EnemyState.Restrained
                 || (!Data.armed && !info.lessLethal) || Data.archetype == EnemyArchetype.TrainingDummy;
             if (info.attacker == Team.Police && unjustified) MissionManager.Instance.OnUnauthorizedForce(Data.displayName);

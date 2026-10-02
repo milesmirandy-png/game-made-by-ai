@@ -15,7 +15,6 @@ namespace Swat
         [SerializeField] float minDistance = 8f;
         [SerializeField] float maxDistance = 26f;
         [SerializeField] float zoomStep = 2f;
-        [SerializeField] float followSmoothTime = 0.12f;
         [SerializeField] float maxLookAhead = 4f;
 
         public Camera Cam { get; private set; }
@@ -103,9 +102,20 @@ namespace Swat
             if (instant) distance = targetDistance;
         }
 
+        // Camera Shake setting: Off, Low (default) or Medium.
         public void Shake(float amount)
         {
-            shake = Mathf.Min(1f, shake + amount);
+            int level = SaveManager.Settings.cameraShake;
+            float scale = level <= 0 ? 0f : level == 1 ? 0.5f : 1f;
+            shake = Mathf.Min(1f, shake + amount * scale);
+        }
+
+        // Automatic indoor/outdoor zoom: the chosen preset indoors, one step wider outside.
+        public void SetEnvironment(bool indoor)
+        {
+            if (!SaveManager.Settings.autoIndoorZoom || player == null) return;
+            int preset = SaveManager.Settings.zoomPreset;
+            SetPreset(indoor ? preset : Mathf.Min(preset + 1, PresetDistances.Length - 1), false);
         }
 
         // Where a screen point (pixels, origin bottom-left) hits the horizontal plane at the given height.
@@ -162,18 +172,51 @@ namespace Swat
                 ahead.y = 0f;
                 desired += Vector3.ClampMagnitude(ahead * Mathf.Clamp(settings.lookAhead, 0f, 0.5f), maxLookAhead);
             }
+            UpdateEdgeScroll(live && settings.edgeScrolling, dt);
+            desired += edgeOffset;
             if (hasBounds)
             {
                 desired.x = Mathf.Clamp(desired.x, bounds.min.x, bounds.max.x);
                 desired.z = Mathf.Clamp(desired.z, bounds.min.z, bounds.max.z);
             }
-            focus = Vector3.SmoothDamp(focus, desired, ref focusVelocity, followSmoothTime, Mathf.Infinity, Mathf.Max(dt, 0.0001f));
+            float smoothing = Mathf.Clamp(settings.cameraSmoothing, 0f, 0.4f);
+            if (smoothing <= 0.005f) { focus = desired; focusVelocity = Vector3.zero; }
+            else focus = Vector3.SmoothDamp(focus, desired, ref focusVelocity, smoothing, Mathf.Infinity, Mathf.Max(dt, 0.0001f));
             Place();
 
             if (shake > 0f)
             {
                 transform.position += Random.insideUnitSphere * shake * 0.35f;
                 shake = Mathf.MoveTowards(shake, 0f, dt * 3f);
+            }
+        }
+
+        // Optional edge scrolling: pushing the cursor against a screen edge pans
+        // the view up to 12 m that way; it eases back once the cursor leaves the edge.
+        Vector3 edgeOffset;
+        float edgeIdle;
+
+        void UpdateEdgeScroll(bool enabledNow, float dt)
+        {
+            Vector2 mouse = GameInput.MousePosition;
+            Vector3 push = Vector3.zero;
+            if (enabledNow)
+            {
+                const float margin = 12f;
+                if (mouse.x <= margin) push.x = -1f;
+                else if (mouse.x >= Screen.width - margin) push.x = 1f;
+                if (mouse.y <= margin) push.z = -1f;
+                else if (mouse.y >= Screen.height - margin) push.z = 1f;
+            }
+            if (push.sqrMagnitude > 0f)
+            {
+                edgeIdle = 0f;
+                edgeOffset = Vector3.ClampMagnitude(edgeOffset + push.normalized * 14f * dt, 12f);
+            }
+            else
+            {
+                edgeIdle += dt;
+                if (edgeIdle > 0.8f) edgeOffset = Vector3.MoveTowards(edgeOffset, Vector3.zero, 10f * dt);
             }
         }
 

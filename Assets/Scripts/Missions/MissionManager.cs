@@ -38,6 +38,7 @@ namespace Swat
         public MissionResult Result { get; private set; }
 
         float nextTick;
+        readonly Dictionary<Objective, ObjectiveState> lastStates = new Dictionary<Objective, ObjectiveState>();
         string lastForceName;
         float lastForceTime = -10f;
 
@@ -68,6 +69,11 @@ namespace Swat
                 if (civilian.State == CivilianState.Injured) Stats.civilians.initiallyInjured++;
             }
             Stats.evidenceTotal = GameManager.Instance.Level.evidence.Count;
+            lastStates.Clear();
+            foreach (var objective in Tracker.Objectives) lastStates[objective] = objective.State;
+            int optional = 0;
+            foreach (var objective in Tracker.Objectives) if (objective.Optional) optional++;
+            if (optional > 0) UIManager.Banner("OPTIONAL OBJECTIVES", optional + " available this deployment (press " + UITheme.KeyFor(InputAction.Objectives) + ")", BannerKind.Info);
             // Deployed solo: squad-command steps can't be done, so they're waived.
             if (AIManager.Instance.Officers.Count == 0) Tracker.CompleteType(ObjectiveType.TrainingCommandSquad);
             // A shield carrier has no primary weapon to switch back to.
@@ -83,8 +89,41 @@ namespace Swat
             if (Time.time < nextTick) return;
             nextTick = Time.time + 0.25f;
             Tracker.Tick(this, game, Elapsed);
+            AnnounceObjectiveChanges();
             if (Tracker.ExtractionReached) game.EndMission(!Tracker.AnyMandatoryFailed, Tracker.AnyMandatoryFailed ? "A primary objective failed." : null);
             else if (Mission.isTraining && Tracker.CurrentStep == null) game.EndMission(true, null);
+        }
+
+        // Short banners and a radio call when objectives change (no long center-screen messages).
+        void AnnounceObjectiveChanges()
+        {
+            foreach (var objective in Tracker.Objectives)
+            {
+                ObjectiveState before;
+                if (!lastStates.TryGetValue(objective, out before)) before = objective.State;
+                if (before == objective.State) continue;
+                lastStates[objective] = objective.State;
+                string label = objective.Definition.description;
+                switch (objective.State)
+                {
+                    case ObjectiveState.Completed:
+                        UIManager.Banner(objective.Optional ? "OPTIONAL OBJECTIVE COMPLETE" : "OBJECTIVE COMPLETE", label, BannerKind.Good);
+                        AudioManager.Play2D(Sound.ObjectiveTone, 0.6f, 1f, SoundCategory.Interface);
+                        if (objective.Type != ObjectiveType.ReachExtraction) SquadCommandManager.Instance.Radio(null, Mission.isTraining ? "Good. Next step." : "Objective complete.");
+                        break;
+                    case ObjectiveState.Failed:
+                        UIManager.Banner(objective.Optional ? "OPTIONAL OBJECTIVE FAILED" : "OBJECTIVE FAILED", label, BannerKind.Bad);
+                        AudioManager.Play2D(Sound.Warning, 0.5f, 1f, SoundCategory.Interface);
+                        break;
+                    case ObjectiveState.Active:
+                        if (before == ObjectiveState.Pending)
+                        {
+                            UIManager.Banner("OBJECTIVE UPDATED", label, BannerKind.Info);
+                            AudioManager.Play2D(Sound.RadioOrder, 0.4f, 1.2f, SoundCategory.Interface);
+                        }
+                        break;
+                }
+            }
         }
 
         // ---- Reports from gameplay ----
@@ -211,7 +250,9 @@ namespace Swat
 
         public void OnCivilianEncountered(CivilianAI civilian)
         {
-            if (Running) Stats.civilians.encountered++;
+            if (!Running) return;
+            Stats.civilians.encountered++;
+            SquadCommandManager.Instance.CivilianLocated(civilian);
         }
 
         public void OnCivilianSecured(CivilianAI civilian)
@@ -236,7 +277,8 @@ namespace Swat
         {
             if (!Running) return;
             Stats.civilians.injured++;
-            UIManager.Notify("A civilian was hurt!", true);
+            UIManager.Banner("CIVILIAN IN DANGER", "A civilian has been hurt", BannerKind.Bad);
+            AudioManager.Play2D(Sound.Warning, 0.5f, 1f, SoundCategory.Interface);
         }
 
         public void OnCivilianKilled(CivilianAI civilian)

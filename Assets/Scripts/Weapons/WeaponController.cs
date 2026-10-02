@@ -20,6 +20,21 @@ namespace Swat
         public int ShotsHit { get; private set; }
         public bool Overcharged { get; set; }
 
+        // Weapon wheel (hold the switch-weapon key): primary, sidearm and each equipment item.
+        public struct WheelEntry
+        {
+            public string label;
+            public int weapon;     // 0 primary, 1 sidearm, -1 equipment
+            public int equipment;  // index into Inventory.Equipment
+            public bool enabled;
+        }
+        public bool WheelOpen { get; private set; }
+        public Vector2 WheelCenter { get; private set; } // GUI pixels (y down)
+        public int WheelHovered { get; private set; }
+        public readonly System.Collections.Generic.List<WheelEntry> WheelEntries = new System.Collections.Generic.List<WheelEntry>();
+        float switchHeldSince = -1f;
+        bool lowAmmoWarned;
+
         public float MoveSpeedMultiplier
         {
             get { return Current.Data.moveSpeedMultiplier * Current.MoveMultiplier; }
@@ -46,14 +61,31 @@ namespace Swat
             }
             bloom = Mathf.MoveTowards(bloom, 0f, Current.Data.recoilRecovery * dt);
             player.Animator.SetReload(ReloadProgress);
+            player.Animator.SetSwitch(IsSwitching ? Mathf.Clamp01(1f - (switchEnd - Time.time) / Mathf.Max(0.05f, Current.Data.switchTime)) : 0f);
 
             if (!active)
             {
                 laser.gameObject.SetActive(false);
+                WheelOpen = false;
+                switchHeldSince = -1f;
                 return;
             }
 
-            if (GameInput.Down(InputAction.SwitchWeapon)) Switch(Inventory.CurrentIndex == 0 ? 1 : 0);
+            // Tap the switch key to swap weapons; hold it for the weapon wheel.
+            if (GameInput.Down(InputAction.SwitchWeapon)) switchHeldSince = Time.unscaledTime;
+            if (switchHeldSince >= 0f && !WheelOpen && GameInput.Held(InputAction.SwitchWeapon) && Time.unscaledTime - switchHeldSince > 0.25f) OpenWheel();
+            if (WheelOpen) UpdateWheel();
+            if (GameInput.Released(InputAction.SwitchWeapon))
+            {
+                if (WheelOpen) ChooseWheel();
+                else if (switchHeldSince >= 0f) Switch(Inventory.CurrentIndex == 0 ? 1 : 0);
+                switchHeldSince = -1f;
+            }
+            if (WheelOpen)
+            {
+                laser.gameObject.SetActive(false);
+                return;
+            }
             if (GameInput.Down(InputAction.Slot1)) Switch(0);
             if (GameInput.Down(InputAction.Slot2)) Switch(1);
             if (GameInput.Down(InputAction.Slot3)) CycleEquipment(-1);
@@ -81,9 +113,69 @@ namespace Swat
             reloadEnd = 0f;
             bloom = 0f;
             switchEnd = Time.time + Current.Data.switchTime;
+            lowAmmoWarned = Current.Magazine <= Current.Data.magazineSize / 4;
             ApplyWeaponModel();
-            AudioManager.Play(Sound.Click, player.Position, 0.4f);
+            AudioManager.Play(Sound.WeaponRaise, player.Position, 0.45f);
+            AudioManager.Play(Sound.Equip, player.Position, 0.35f);
             MissionManager.Instance.Report(ObjectiveType.TrainingSwitchWeapon, index);
+        }
+
+        void OpenWheel()
+        {
+            WheelEntries.Clear();
+            if (Inventory.Primary != null)
+                WheelEntries.Add(new WheelEntry { label = Inventory.Primary.Data.displayName, weapon = 0, equipment = -1, enabled = !Inventory.PrimaryBlocked });
+            if (Inventory.Sidearm != null)
+                WheelEntries.Add(new WheelEntry { label = Inventory.Sidearm.Data.displayName, weapon = 1, equipment = -1, enabled = true });
+            for (int i = 0; i < Inventory.Equipment.Count; i++)
+            {
+                var slot = Inventory.Equipment[i];
+                WheelEntries.Add(new WheelEntry { label = slot.Data.displayName + (slot.Data.consumable ? " x" + slot.Count : ""), weapon = -1, equipment = i, enabled = slot.Count > 0 });
+            }
+            if (WheelEntries.Count == 0) return;
+            Vector2 mouse = GameInput.MousePosition;
+            float margin = 200f * UITheme.Scale;
+            WheelCenter = new Vector2(Mathf.Clamp(mouse.x, margin, Screen.width - margin), Mathf.Clamp(Screen.height - mouse.y, margin, Screen.height - margin));
+            WheelHovered = -1;
+            WheelOpen = true;
+            AudioManager.Ui(Sound.UiHover, 0.4f);
+        }
+
+        void UpdateWheel()
+        {
+            Vector2 mouse = GameInput.MousePosition;
+            Vector2 offset = new Vector2(mouse.x, Screen.height - mouse.y) - WheelCenter;
+            int previous = WheelHovered;
+            if (offset.magnitude < 40f * UITheme.Scale) WheelHovered = -1;
+            else
+            {
+                float angle = Mathf.Atan2(offset.x, -offset.y) * Mathf.Rad2Deg;
+                if (angle < 0f) angle += 360f;
+                float step = 360f / WheelEntries.Count;
+                WheelHovered = Mathf.FloorToInt((angle + step * 0.5f) / step) % WheelEntries.Count;
+            }
+            if (WheelHovered != previous && WheelHovered >= 0) AudioManager.Ui(Sound.UiHover, 0.25f);
+            if (GameInput.Cancel || GameInput.KeyDown(KeyCode.Mouse1)) { WheelOpen = false; switchHeldSince = -1f; }
+            else if (GameInput.KeyDown(KeyCode.Mouse0) && WheelHovered >= 0) { ChooseWheel(); switchHeldSince = -1f; }
+        }
+
+        void ChooseWheel()
+        {
+            WheelOpen = false;
+            if (WheelHovered < 0 || WheelHovered >= WheelEntries.Count) return;
+            var entry = WheelEntries[WheelHovered];
+            if (!entry.enabled)
+            {
+                AudioManager.Ui(Sound.Empty, 0.5f);
+                return;
+            }
+            if (entry.weapon >= 0) Switch(entry.weapon);
+            else
+            {
+                Inventory.SelectedEquipment = entry.equipment;
+                AudioManager.Play(Sound.Equip, player.Position, 0.5f);
+                UIManager.Notify("Equipment: " + Inventory.SelectedSlot.Data.displayName);
+            }
         }
 
         void ApplyWeaponModel()
@@ -127,6 +219,7 @@ namespace Swat
         void StartReload()
         {
             reloadEnd = Time.time + Current.Data.reloadTime;
+            lowAmmoWarned = false;
             AudioManager.Play(Sound.Reload, player.Position, 0.7f);
             MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
         }
@@ -154,11 +247,35 @@ namespace Swat
             bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
             player.Animator.Fire(Mathf.Clamp(weapon.Recoil * 0.6f, 0.4f, 1.5f));
             WeaponEffects.MuzzleFlash(muzzle, data.fireSound, 0.8f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            if (!data.lessLethal) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun);
             GameManager.Instance.CameraRig.Shake(weapon.Recoil * 0.08f);
+            AmmoFeedback(weapon);
             if (!hitSomeone) return;
             ShotsHit++;
             LastHitTime = Time.time;
-            AudioManager.Play2D(Sound.Hit, 0.35f);
+            if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f);
+        }
+
+        // Low-ammo cue, automatic reload when the magazine runs dry, optional switch to the sidearm.
+        void AmmoFeedback(Weapon weapon)
+        {
+            var settings = SaveManager.Settings;
+            if (!lowAmmoWarned && weapon.Magazine > 0 && weapon.Magazine <= weapon.Data.magazineSize / 4)
+            {
+                lowAmmoWarned = true;
+                AudioManager.Play2D(Sound.Empty, 0.25f, 1.4f);
+            }
+            if (weapon.Magazine > 0) return;
+            if (weapon.CanReload)
+            {
+                if (settings.autoReload) StartReload();
+            }
+            else if (Inventory.CurrentIndex == 0 && settings.autoSwitchWhenEmpty && Inventory.Sidearm != null)
+            {
+                UIManager.Notify("Out of ammo: switching to sidearm");
+                Switch(1);
+            }
+            else UIManager.Notify(weapon.Data.displayName + " is out of ammunition", true);
         }
 
         void UseSelectedEquipment()

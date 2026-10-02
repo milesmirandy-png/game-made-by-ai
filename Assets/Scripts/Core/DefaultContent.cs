@@ -315,6 +315,7 @@ namespace Swat
         {
             var training = Mission("m00_training", "TRU Qualification Course", "TRU Training Facility", MissionType.Training, "training", 1, 2, 600f, 0, 0, new Color(0.25f, 0.4f, 0.3f));
             training.isTraining = true;
+            training.timeOfDay = TimeOfDay.Day;
             training.sequentialObjectives = true;
             training.description = "Learn movement, shooting, doors, equipment and squad commands.";
             training.briefing = "Welcome to the Tactical Response Unit qualification course. Instructors will walk you through each skill in turn. "
@@ -367,9 +368,11 @@ namespace Swat
             clearance.enemies.AddRange(new[] { new EnemyGroup("hostile", 5), new EnemyGroup("guard", 2), new EnemyGroup("nervous", 1), new EnemyGroup("suspect_unarmed", 1) });
             clearance.civilians.AddRange(new[] { new CivilianGroup(CivilianType.OfficeWorker, 3), new CivilianGroup(CivilianType.Visitor, 1), new CivilianGroup(CivilianType.Hiding, 1) });
             clearance.camerasActiveChance = 0.8f;
+            clearance.timeOfDay = TimeOfDay.Day;
 
             var rescue = Mission("m02_rescue", "Operation Lantern", "Halvorsen Logistics Offices (night)", MissionType.CivilianRescue, "office", 2, 3, 540f, 0, 2, new Color(0.3f, 0.25f, 0.45f));
             rescue.night = true;
+            rescue.timeOfDay = TimeOfDay.Night;
             rescue.powerOutageChance = 0.6f;
             rescue.description = "A night shift is trapped inside during a hostage situation. Get them out.";
             rescue.briefing = "2140 hours. A disgruntled former employee and associates are holding the Halvorsen night shift in the conference room. "
@@ -404,6 +407,7 @@ namespace Swat
             warehouse.briefing = "0230 hours. Kestrel Freight's silent alarm tripped and the night guards stopped answering. Intelligence suggests a smuggling crew is moving goods through the building. "
                 + "Reach the security booth and review the camera footage to locate the evidence, secure it, and detain the crew. Their leader may try to slip out the back.";
             warehouse.night = true;
+            warehouse.timeOfDay = TimeOfDay.Night;
             warehouse.powerOutageChance = 0.25f;
             warehouse.objectives.AddRange(new[]
             {
@@ -423,9 +427,9 @@ namespace Swat
             warehouse.civilians.AddRange(new[] { new CivilianGroup(CivilianType.SecurityGuard, 1), new CivilianGroup(CivilianType.OfficeWorker, 1), new CivilianGroup(CivilianType.Hostage, 1, "restricted") });
 
             var apartment = Mission("m04_apartment", "Operation Stairwell", "Marlow Court Apartments", MissionType.Emergency, "apartment", 3, 3, 660f, 2, 4, new Color(0.45f, 0.2f, 0.2f));
-            apartment.night = true;
+            apartment.timeOfDay = TimeOfDay.Evening;
             apartment.description = "A dangerous suspect is barricaded in an apartment block full of residents.";
-            apartment.briefing = "2310 hours. Shots were reported at Marlow Court. A wanted suspect and armed associates are moving between the second floor and the roof. "
+            apartment.briefing = "1950 hours. Shots were reported at Marlow Court. A wanted suspect and armed associates are moving between the second floor and the roof. "
                 + "Evacuate the residents, investigate apartment 2B and the maintenance room, and take the suspect into custody. Use the stairwell to change floors; your squad will follow.";
             apartment.objectives.AddRange(new[]
             {

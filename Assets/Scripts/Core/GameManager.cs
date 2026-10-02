@@ -4,7 +4,7 @@ using UnityEngine.AI;
 
 namespace Swat
 {
-    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Deploying, Playing, Paused, Debrief }
+    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Loading, Deploying, Playing, Paused, Debrief }
 
     // Owns the game's lifecycle. Everything lives in one scene that is built
     // at runtime: the headquarters diorama behind the menus and, while
@@ -44,6 +44,14 @@ namespace Swat
         Transform missionRoot;
         NavMeshDataInstance navMesh;
         Light sun;
+        PostEffects postEffects;
+        MapDresser dresser, hqDresser;
+        public LightingProfile Lighting { get; private set; }
+        public string LoadingTip { get; private set; }
+        AmbientDust dust;
+        RoomController lastRoom;
+        bool lastIndoor, lastDark;
+        float nextAutoLight;
         VehicleArrival arrival;
         Transform van;
         float stateChangedAt, failAt = -1f, deployStarted;
@@ -69,8 +77,11 @@ namespace Swat
             PoolRoot.SetParent(transform, false);
 
             CameraRig = CameraController.Create();
+            postEffects = PostEffects.Attach(CameraRig.Cam);
             sun = SetUpSun();
-            gameObject.AddComponent<QualityManager>().Init(CameraRig.Cam, sun);
+            var quality = gameObject.AddComponent<QualityManager>();
+            quality.Init(CameraRig.Cam, sun);
+            quality.Changed += OnQualityChanged;
             gameObject.AddComponent<AudioManager>();
             gameObject.AddComponent<EffectsManager>();
             gameObject.AddComponent<AIManager>();
@@ -80,6 +91,7 @@ namespace Swat
             gameObject.AddComponent<UIManager>();
 
             Headquarters = HeadquartersMap.Build(transform);
+            hqDresser = MapDresser.Dress(Headquarters.layout, LightingProfile.For(TimeOfDay.Day), 1, true);
             GoToMainMenu();
         }
 
@@ -94,33 +106,26 @@ namespace Swat
                 found.type = LightType.Directional;
             }
             found.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.fog = false;
+            found.shadowBias = 0.04f;
+            found.shadowNormalBias = 0.3f;
             return found;
         }
 
-        // Day, night and power outage. Indoor fixtures only light up at night
-        // (and only on tiers with dynamic lights); low tiers brighten the
-        // ambient light instead so nothing becomes unreadable.
-        void ApplyLighting(bool night, bool outage)
+        void OnQualityChanged()
         {
-            bool dynamic = QualityManager.Current.dynamicLights;
-            if (!night)
-            {
-                sun.color = new Color(1f, 0.96f, 0.9f);
-                sun.intensity = 1.1f;
-                RenderSettings.ambientLight = new Color(0.5f, 0.52f, 0.56f);
-            }
-            else
-            {
-                sun.color = new Color(0.55f, 0.62f, 0.85f);
-                sun.intensity = dynamic ? 0.18f : 0.35f;
-                RenderSettings.ambientLight = dynamic ? new Color(0.2f, 0.23f, 0.3f) : new Color(0.32f, 0.35f, 0.42f);
-            }
-            if (Level == null) return;
-            foreach (var room in Level.rooms) room.SetLights(night && !room.IsDark, dynamic);
-            foreach (var light in Level.outdoorLights) light.enabled = night && dynamic;
-            CameraRig.Cam.backgroundColor = night ? new Color(0.02f, 0.03f, 0.05f) : UITheme.Background;
+            if (dresser != null) dresser.ApplyQuality();
+            if (hqDresser != null) hqDresser.ApplyQuality();
+            if (Level != null && Plan != null) ApplyLighting();
+        }
+
+        // The mission's lighting profile (day, evening or night): sun, ambient
+        // light, haze and color grading. Room fixtures, light pools and
+        // emergency lights are set up by MapDresser.
+        void ApplyLighting()
+        {
+            Lighting = LightingProfile.For(Plan.timeOfDay);
+            Lighting.ApplyEnvironment(sun, CameraRig.Cam, QualityManager.Current.dynamicLights, SaveManager.Settings.viewDistance);
+            if (postEffects != null) postEffects.SetProfile(Plan.timeOfDay);
         }
 
         void SetState(GameState next)
@@ -149,6 +154,8 @@ namespace Swat
                 else if (SquadCommandManager.Instance != null && SquadCommandManager.Instance.WheelOpen) scale = 0.3f;
             }
             if (!Mathf.Approximately(Time.timeScale, scale)) Time.timeScale = scale;
+            // World audio stops with the game (menus and music keep playing) and resumes where it left off.
+            AudioManager.SetPaused(scale <= 0f);
             // While playing, the HUD draws a crosshair; the system cursor is only shown for menus on top.
             if (State == GameState.Playing)
                 Cursor.visible = PlanningMode || ConsoleOpen || (SquadCommandManager.Instance != null && SquadCommandManager.Instance.WheelOpen);
@@ -175,6 +182,7 @@ namespace Swat
 
         public void SelectMission(MissionData mission)
         {
+            if (OfficerSelectionManager.Mission != mission) OfficerSelectionManager.TimeOverride = -1;
             OfficerSelectionManager.Mission = mission;
             if (mission.seed != 0) OfficerSelectionManager.Seed = mission.seed;
             else if (!OfficerSelectionManager.KeepSeed || OfficerSelectionManager.Seed == 0) OfficerSelectionManager.NewSeed();
@@ -228,14 +236,15 @@ namespace Swat
         void ShowHeadquarters(Vector3 cameraPosition, Vector3 target, bool instant)
         {
             Headquarters.root.gameObject.SetActive(true);
-            sun.color = new Color(1f, 0.96f, 0.9f);
-            sun.intensity = 1f;
-            RenderSettings.ambientLight = new Color(0.45f, 0.47f, 0.52f);
-            CameraRig.Cam.backgroundColor = UITheme.Background;
+            LightingProfile.ApplyHeadquarters(sun, CameraRig.Cam);
+            if (postEffects != null) postEffects.SetProfile(null);
             CameraRig.ShowcaseShot(cameraPosition, target, instant);
             AudioManager.Instance.ListenFrom(target);
             AudioManager.Instance.SetAmbience(Sound.RoomTone);
             AudioManager.Instance.SetAlarm(false);
+            AudioManager.Instance.SetReverb(AudioReverbPreset.Room);
+            AudioManager.Instance.SetHum(false);
+            AudioManager.Instance.SetMusic(Sound.MusicMenu);
         }
 
         // The next mission to play: the first available one not yet completed.
@@ -256,20 +265,44 @@ namespace Swat
             if (OfficerSelectionManager.Mission == null) return;
             if (Plan == null || Plan.mission != OfficerSelectionManager.Mission || Plan.difficulty != OfficerSelectionManager.Difficulty) RollPlan();
             SaveManager.Save();
-            BuildMission(Plan);
+            StartCoroutine(LoadMission(Plan));
+        }
+
+        static readonly string[] Tips =
+        {
+            "Check your equipment before deployment: charges for locked doors, lights for dark rooms.",
+            "Use the tactical map (Tab) to track discovered areas and last known threats.",
+            "Protect civilians and complete your objectives. Arrests score higher than force.",
+            "Shout (X) before you shoot. Suspects who surrender must be restrained, not shot.",
+            "Hold Z and point at a door to stack your squad for a coordinated entry.",
+            "Planning mode (Space) pauses the game so you can send squadmates to waypoints.",
+            "A recon camera under a door shows part of the room behind it.",
+            "Flashbangs work through open doors. Stand clear of the blast yourself.",
+            "Wedge doors you don't want suspects coming through.",
+        };
+
+        // Shows the loading screen for at least one frame, then builds the mission.
+        // There is no progress bar: the map builds in one step and nothing is faked.
+        System.Collections.IEnumerator LoadMission(MissionPlan plan)
+        {
+            LoadingTip = Tips[Random.Range(0, Tips.Length)];
+            SetState(GameState.Loading);
+            yield return null;
+            yield return null;
+            BuildMission(plan);
             SetState(GameState.Deploying);
             deployStarted = Time.unscaledTime;
-            UIManager.Notify(Plan.mission.displayName + " - " + Plan.mission.location);
+            AudioManager.Instance.SetMusic(Sound.MusicMission);
         }
 
         public void RestartMission()
         {
             if (Plan == null) return;
             // Same seed, same variation.
+            var time = Plan.timeOfDay;
             Plan = MissionRandomizer.Plan(Plan.mission, Plan.seed, Plan.difficulty);
-            BuildMission(Plan);
-            SetState(GameState.Deploying);
-            deployStarted = Time.unscaledTime;
+            Plan.timeOfDay = time;
+            StartCoroutine(LoadMission(Plan));
         }
 
         void ClearMission()
@@ -292,6 +325,9 @@ namespace Swat
             SecurityCamera.All.Clear();
             Player = null;
             Level = null;
+            dresser = null;
+            dust = null;
+            lastRoom = null;
             arrival = null;
             van = null;
             if (AudioManager.Instance != null) AudioManager.Instance.SetAlarm(false);
@@ -310,12 +346,15 @@ namespace Swat
             var actors = new GameObject("Actors").transform;
             actors.SetParent(missionRoot, false);
             MissionRandomizer.Populate(plan, Level, actors);
-            ApplyLighting(mission.night, plan.powerOutage);
+            ApplyLighting();
+            dresser = MapDresser.Dress(Level, Lighting, plan.seed, true);
+            dust = AmbientDust.Create(missionRoot);
 
             // The team.
             var leader = OfficerSelectionManager.Leader;
             var leaderLoadout = GameData.LoadoutFor(leader);
             Player = PlayerController.Spawn(missionRoot, Level.playerSpawn, Level.playerYaw, leader, leaderLoadout, mission.bonusEquipment);
+            dust.Follow(Player.transform);
             AIManager.Instance.RegisterPlayer(Player);
             var squad = OfficerSelectionManager.Squad;
             for (int i = 0; i < squad.Count && i < Level.squadSpawns.Count; i++)
@@ -340,6 +379,7 @@ namespace Swat
             CameraRig.ShowcaseShot(vanView, Level.vanParking, true);
             AudioManager.Instance.FollowWithListener(Player.transform);
             AudioManager.Instance.SetAmbience(Sound.Wind);
+            AudioManager.Instance.SetReverb(AudioReverbPreset.Off);
             indoorAmbience = false;
         }
 
@@ -438,6 +478,7 @@ namespace Swat
             RecordProgress(LastResult);
             AudioManager.Play2D(success ? Sound.Complete : Sound.Fail, 0.7f, 1f, SoundCategory.Interface);
             AudioManager.Instance.SetAlarm(false);
+            AudioManager.Instance.SetMusic(Sound.MusicMenu);
             SetState(GameState.Debrief);
         }
 
@@ -541,14 +582,37 @@ namespace Swat
             UpdateTimeScale();
         }
 
+        // Indoor/outdoor ambience, reverb, fluorescent hum, automatic camera zoom
+        // and the optional automatic flashlight, updated when the player changes room.
         void UpdateAmbience()
         {
             if (Player == null || Level == null) return;
             var room = Level.RoomAt(Player.Position);
             bool indoor = room != null && room.Indoor;
-            if (indoor == indoorAmbience) return;
-            indoorAmbience = indoor;
-            AudioManager.Instance.SetAmbience(indoor ? Sound.RoomTone : Sound.Wind);
+            bool dark = room != null && room.IsDark;
+            if (room != lastRoom || indoor != lastIndoor || dark != lastDark)
+            {
+                lastRoom = room;
+                var audio = AudioManager.Instance;
+                if (indoor != indoorAmbience || room == null)
+                {
+                    indoorAmbience = indoor;
+                    audio.SetAmbience(indoor ? Sound.RoomTone : Sound.Wind);
+                }
+                audio.SetReverb(room != null ? room.Style.reverb : AudioReverbPreset.Off);
+                audio.SetHum(indoor && !dark && room.Style.hum);
+                if (dust != null) dust.SetActive(indoor && room.Style.kind != RoomKind.Restroom);
+                if (indoor != lastIndoor) CameraRig.SetEnvironment(indoor);
+                lastIndoor = indoor;
+                lastDark = dark;
+            }
+
+            if (SaveManager.Settings.autoFlashlight && Player.IsAlive && Time.time >= nextAutoLight)
+            {
+                nextAutoLight = Time.time + 0.5f;
+                bool needLight = dark || (Lighting.time == TimeOfDay.Night && !indoor);
+                if (needLight != Player.Flashlight.On) Player.Flashlight.Set(needLight);
+            }
         }
 
         void OnApplicationQuit()
@@ -562,6 +626,7 @@ namespace Swat
             if (navMesh.valid) navMesh.Remove();
             Instance = null;
             Time.timeScale = 1f;
+            AudioListener.pause = false;
             Cursor.visible = true;
             Cursor.lockState = CursorLockMode.None;
         }

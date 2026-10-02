@@ -32,12 +32,13 @@ namespace Swat
                 float angle = i * step * Mathf.Deg2Rad;
                 Vector2 p = center + new Vector2(Mathf.Sin(angle), -Mathf.Cos(angle)) * radius;
                 bool hovered = i == squad.Hovered;
-                var rect = new Rect(p.x - 78f, p.y - 22f, 156f, 44f);
+                var rect = new Rect(p.x - 86f, p.y - 24f, 172f, 48f);
                 UITheme.Fill(rect, hovered ? new Color(UITheme.AccentDim.r, UITheme.AccentDim.g, UITheme.AccentDim.b, 0.95f) : UITheme.PanelLight);
                 UITheme.Frame(rect, hovered ? UITheme.Accent : new Color(UITheme.Line.r, UITheme.Line.g, UITheme.Line.b, 0.8f));
                 Color text = option.enabled ? UITheme.TextColor : UITheme.Faint;
-                UITheme.Text(new Rect(rect.x + 6f, rect.y + 2f, 22f, 20f), ((i + 1) % 10).ToString(), 12, UITheme.Dim, TextAnchor.UpperLeft, true);
-                UITheme.Text(rect, option.label, 16, text, TextAnchor.MiddleCenter, hovered);
+                UIIcons.Order(new Rect(rect.x + 8f, rect.y + 8f, 32f, 32f), option.order, option.action, option.enabled ? (hovered ? Color.white : UITheme.Accent) : UITheme.Faint);
+                UITheme.Text(new Rect(rect.x + 46f, rect.y + 4f, rect.width - 50f, 22f), option.label.ToUpperInvariant(), 15, text, TextAnchor.UpperLeft, true);
+                UITheme.Text(new Rect(rect.x + 46f, rect.y + 26f, rect.width - 50f, 18f), "key " + ((i + 1) % 10), 12, UITheme.Faint, TextAnchor.UpperLeft);
             }
 
             // Centre: what the order applies to.

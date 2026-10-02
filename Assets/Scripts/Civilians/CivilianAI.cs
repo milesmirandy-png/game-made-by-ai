@@ -72,18 +72,7 @@ namespace Swat
             civilian.mover.Init(1.4f, 4.2f, 0.28f);
             civilian.home = spawn.position;
 
-            var shirts = new[] { new Color(0.92f, 0.92f, 0.9f), new Color(0.55f, 0.75f, 0.95f), new Color(0.95f, 0.85f, 0.4f), new Color(0.95f, 0.6f, 0.7f), new Color(0.6f, 0.85f, 0.6f) };
-            var hair = new[] { new Color(0.1f, 0.07f, 0.05f), new Color(0.4f, 0.25f, 0.12f), new Color(0.85f, 0.7f, 0.4f), new Color(0.6f, 0.6f, 0.6f) };
-            bool guard = type == CivilianType.SecurityGuard;
-            var look = new Appearance
-            {
-                shirt = guard ? new Color(0.5f, 0.55f, 0.6f) : shirts[Random.Range(0, shirts.Length)],
-                pants = guard ? new Color(0.15f, 0.17f, 0.22f) : new Color(0.25f, 0.3f, 0.45f),
-                skin = CharacterFactory.RandomSkin(),
-                headwear = guard ? new Color(0.15f, 0.17f, 0.22f) : hair[Random.Range(0, hair.Length)],
-                head = guard ? HeadStyle.Cap : HeadStyle.Hair,
-                ring = CivilianRing,
-            };
+            var look = CharacterFactory.CivilianLook(type, CivilianRing);
             civilian.parts = CharacterFactory.Build(go.transform, look);
             civilian.animator = new ProceduralAnimator(civilian.parts);
             civilian.helpMarker = new GameObject("Help Marker");

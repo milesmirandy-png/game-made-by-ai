@@ -92,7 +92,7 @@ namespace Swat
 
             player.Flashlight = go.AddComponent<FlashlightController>();
             float lightRange = 13f * inventory.Primary.LightRangeMultiplierOrOne();
-            player.Flashlight.Init(CharacterFactory.AddFlashlight(player.Parts, lightRange), lightRange, true);
+            player.Flashlight.Init(CharacterFactory.AddFlashlight(player.Parts, lightRange), lightRange, true, true);
 
             Shapes.SetLayer(go, Layers.Characters);
             return player;
@@ -114,6 +114,9 @@ namespace Swat
                 shield = loadout.useShield,
                 ring = isPlayer ? new Color(0.3f, 0.8f, 1f) : new Color(0.2f, 0.45f, 1f),
                 armed = true,
+                outfit = Outfit.Tactical,
+                idMarker = true,
+                idColor = UITheme.RoleColor(officer.role),
             };
         }
 

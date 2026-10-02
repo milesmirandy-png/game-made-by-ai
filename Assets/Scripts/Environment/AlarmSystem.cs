@@ -17,7 +17,7 @@ namespace Swat
         readonly List<Light> beacons = new List<Light>();
         readonly List<Renderer> beaconGlows = new List<Renderer>();
 
-        public string Prompt { get { return State == AlarmState.Triggered ? "[E] Silence the alarm (hold)" : "[E] Disable the alarm panel (hold)"; } }
+        public string Prompt { get { return State == AlarmState.Triggered ? "[E] Silence Alarm (hold)" : "[E] Disable Alarm (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up * 1.2f; } }
 
         public static AlarmSystem Create(Transform parent, Vector3 panelPosition, float panelYaw, IList<Vector3> beaconPositions, bool armed)
@@ -78,6 +78,11 @@ namespace Swat
                 beacons[i].intensity = 2f * Shapes.PointLightScale;
                 beaconGlows[i].sharedMaterial = Shapes.Mat(new Color(1f, 0.15f, 0.1f), on ? 3f : 0.2f);
             }
+        }
+
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
         }
 
         public float InteractDuration(PlayerController player) { return 2f; }
