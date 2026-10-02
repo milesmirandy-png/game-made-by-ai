@@ -92,3 +92,11 @@ Some easy things to try:
 - Mouse too fast or slow? Change `lookSensitivity` in `PlayerController.cs`.
 - Want a bigger magazine or more damage? Edit `magazineSize` and `damage` in `Weapon.cs`.
 - Suspects too good? Lower `accuracy` in `LevelGenerator.Populate`.
+
+## Also in this repo: Ravenfield Kill Popups
+
+[`Ravenfield-KillPopups`](Ravenfield-KillPopups) is a mutator for the game
+Ravenfield that shows HEADSHOT, GRENADE KILL, DOUBLE KILL, OVERKILL, SQUAD KILL
+and more when you get kills. It isn't part of the SWAT game. See its
+[README](Ravenfield-KillPopups/README.md) for how to build it with the
+Ravenfield modding tools.
