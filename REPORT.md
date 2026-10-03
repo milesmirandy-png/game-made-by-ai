@@ -1,9 +1,10 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has six parts: the **gun pack, NPC and
-arsenal update** (newest, first), the **game modes, arsenal and sprite
-update**, the **pixel-art style**, the **ten levels,
+and what is still unverified. It has seven parts: **online multiplayer and
+the screenshot tour** (newest, first), the **gun pack, NPC and arsenal
+update**, the **game modes, arsenal and sprite update**, the **pixel-art
+style**, the **ten levels,
 main menu and Level Creator**, the **quality-of-life, graphics, lighting and
 polish update**, and the original build (updated where later work changed
 something).
@@ -13,6 +14,106 @@ compiles in three configurations and the shaders pass a syntax check, but
 **the game has not been run inside the Unity editor yet**. No play-testing, no
 profiling or performance measurements, and no screenshots exist. Treat
 everything below as "implemented in code" unless it says otherwise.
+
+# Part 0d: Online multiplayer (peer to peer) and the screenshot tour
+
+## What was added
+
+- **Transport** (`Net/NetTransport.cs`, plain C#, no Unity types): UDP via
+  `System.Net.Sockets` (non-blocking, polled once per frame). One player
+  hosts; the others connect straight to the host's address. Each packet
+  carries a cumulative acknowledgement, millisecond stamps for round-trip
+  timing, reliable messages (numbered, resent until acknowledged, delivered
+  once and in order, buffered when they arrive early) and unreliable messages
+  (snapshots, positions, shots). Connection requests carry the player's hello
+  and are retried for 10 seconds; the host can refuse with a reason (lobby
+  full, match in progress, different game version: a hash of the weapon,
+  officer and map lists). Keep-alives every 0.4 s; 10 seconds of silence is a
+  disconnect. `NetDiscovery` answers or sends a broadcast query on UDP 27778
+  to list games on the local network. Malformed packets are dropped.
+- **Session** (`Net/NetSession.cs`): host / join / leave, the lobby (players,
+  teams, pings, the host's match settings), starting a match (everyone builds
+  the same map from the host's seed; UnityEngine.Random is seeded too), the
+  match setup each joining player receives (team, spawn, bases, zone, flag
+  homes, roster), snapshots from the host at 15 Hz (clock, scores, zone, flags
+  and everyone's position, facing, stance, weapon, health and score line),
+  player positions to the host at 20 Hz, shots (flash, sound and tracers for
+  everyone else), hits, tag-outs, respawns, match events and results, back to
+  lobby and rematch. Host leaving or a lost connection returns players to the
+  Game Modes screen with the reason.
+- **Players on screen** (`Net/NetActor.cs`): on the host, a stand-in for each
+  remote player that bots see, chase and shoot and that carries flags; on the
+  other players' screens, everyone else. Movement is drawn 0.1 s behind,
+  blending between updates (extrapolating up to 0.25 s if updates stop),
+  using the sender's clock with a slowly adapting offset so uneven delivery
+  doesn't make people jitter; long jumps (respawns) snap.
+- **Combat:** the shooter's game checks its own hits (what you see is what you
+  hit) and sends them to the host; the host applies hits on bots and on its own
+  player, and passes hits on other players to their game, where armor and
+  health are applied. The player who goes down reports it and the host credits
+  the takedown. Same-team hits are ignored everywhere.
+- **Match logic** (`Versus/VersusMatch.cs`): bots and remote players share an
+  `IVersusMember` interface; the HUD, minimap and results use it, so remote
+  players appear wherever bots did. Feed lines and banners became `MatchEvent`s
+  the host sends and every player words from their own side ("You", "your
+  flag"). A joined player's copy runs in mirror mode (no bots or scoring of its
+  own). Your officer wears red on the Red Team. Team size now goes down to
+  1 vs 1.
+- **Rules online:** no pausing or slow motion (the pause menu opens, the match
+  goes on), tactical equipment and door changes are disabled so every copy of
+  the building stays the same, the host is always on Blue, joining only from
+  the lobby.
+- **UI:** an online panel on the Game Modes screen (name, Host a match, Join by
+  address, Find games on this network), the host's lobby list (click a team to
+  move a player), a lobby screen for joined players (host's settings, teams,
+  team buttons, Squad, Loadout, Leave), online buttons on the results screen
+  and pause menu.
+- **Screenshot tour** (`Utilities/ScreenshotTour.cs`): Shift+F12 or SWAT ->
+  Screenshot Tour plays through 15 moments (menus, a mission, two game-mode
+  matches, the level creator) and saves a screenshot of each with
+  `ScreenCapture`, then restores the game-mode settings it changed.
+
+## Limitations
+
+- **Never run between two real copies of the game.** The transport was tested
+  outside Unity (below); the session, match sync, stand-ins and UI have only
+  been compiled and reviewed.
+- Internet play needs the host to forward UDP 27777 (no NAT punch-through or
+  relay; those need a server). LAN discovery needs broadcasts to be allowed by
+  the network and firewall; joining by address works without it.
+- Hits are decided by the shooter's game, which feels responsive but trusts
+  every player (fine among friends, no cheat protection). With high ping you
+  can be hit just after reaching cover on your screen.
+- No joining mid-match, no host migration: if the host leaves, the match ends
+  for everyone.
+- Equipment, door use and pausing are off online; the host is always Blue.
+- A match setup with many long names can exceed one packet and relies on IP
+  fragmentation (normally fine).
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors).
+- **Transport, simulated network:** `NetTransport.cs` compiled with Mono and a
+  test program that routes packets through an in-memory network with loss,
+  duplication, delay and reordering: clean network; 25% loss with 5%
+  duplicates and 40-160 ms delay; 50% loss with 10% duplicates and 80-380 ms
+  delay (3 or 2 clients, 600-2000 reliable messages each way plus a stream of
+  unreliable ones). Every reliable message arrived exactly once and in order in
+  all three; the round-trip estimates came out at 34, 191 and 475 ms, matching
+  the simulated delays. Also checked: refusal with a reason, giving up on an
+  address nobody answers, both sides noticing silence (timeout) and a clean
+  leave, 70,000 reliable messages through 20% loss (sequence numbers wrap past
+  65,535), random garbage packets (no exceptions, real traffic unaffected),
+  and messages of 3,000 and 7,900 bytes mixed with small ones. 23 checks pass
+  (`Tests/NetTransportTest.cs`; `Tests/README.md` says how to run them).
+- **Transport, real sockets:** the same code over real UDP sockets on this
+  machine's loopback: LAN discovery found the host and its port, hello and
+  welcome went through, about 300 messages each way arrived, the host saw the
+  player leave, and a second host on the same port was refused (Mono enables
+  address reuse by default; the socket now turns it off). 7 checks pass
+  (`Tests/NetSocketTest.cs`).
+- **Not done:** two copies of the game playing each other, any measurement of
+  bandwidth or smoothness in practice, the screenshot tour itself.
 
 # Part 0c: Gun pack sprites, NPC models and four more guns
 

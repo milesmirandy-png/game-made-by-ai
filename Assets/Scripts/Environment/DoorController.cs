@@ -161,6 +161,8 @@ namespace Swat
 
         public bool CanInteract(PlayerController player)
         {
+            // Online matches keep every door as the match set it, so all players see the same doors.
+            if (NetSession.Online && VersusMatch.Active) return false;
             return State != DoorState.Breached && State != DoorState.Disabled && !ChargePlaced;
         }
 

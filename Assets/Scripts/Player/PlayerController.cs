@@ -51,7 +51,7 @@ namespace Swat
         bool exhausted, sprintLatch;
         Vector3 aimTarget;
 
-        public static PlayerController Spawn(Transform parent, Vector3 position, float yaw, OfficerData officer, OfficerLoadout loadout, System.Collections.Generic.List<EquipmentCount> bonus)
+        public static PlayerController Spawn(Transform parent, Vector3 position, float yaw, OfficerData officer, OfficerLoadout loadout, System.Collections.Generic.List<EquipmentCount> bonus, int versusSide = 0)
         {
             var go = new GameObject("Team Leader (" + officer.displayName + ")");
             go.transform.SetParent(parent, false);
@@ -80,7 +80,8 @@ namespace Swat
             player.AimPoint = player.aimTarget = position + go.transform.forward * 3f;
 
             var armor = GameData.Armor(loadout.armorId);
-            player.Parts = CharacterFactory.Build(go.transform, OfficerAppearance(officer, loadout, true));
+            // Online on the Red Team, your officer wears red.
+            player.Parts = CharacterFactory.Build(go.transform, VersusMatch.TeamColours(OfficerAppearance(officer, loadout, true), versusSide));
             player.Animator = new ProceduralAnimator(player.Parts);
             player.Animator.SetPose(Pose.Aim);
 

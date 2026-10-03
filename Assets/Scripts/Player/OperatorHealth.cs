@@ -53,7 +53,7 @@ namespace Swat
         {
             if (IsDown || info.attacker == Team.Police) return;
             var game = GameManager.Instance;
-            if (game == null || !game.IsPlaying) return;
+            if (game == null || !game.WorldRunning) return;
             if (Time.time < ProtectedUntil) return;
             LastHit = info;
 

@@ -20,7 +20,8 @@ namespace Swat
             DrawTeam(match, y + 8f);
             DrawRespawn(game, match);
             if (match.PlayerCarrying)
-                UITheme.ShadowText(new Rect(UITheme.Width * 0.5f - 300f, UITheme.Height - 300f, 600f, 30f), "YOU HAVE THE RED FLAG - bring it to your base", 20, Red, TextAnchor.MiddleCenter, true);
+                UITheme.ShadowText(new Rect(UITheme.Width * 0.5f - 300f, UITheme.Height - 300f, 600f, 30f), "YOU HAVE THE " + VersusMatch.SideName(1 - match.MySide).ToUpperInvariant() + " FLAG - bring it to your base",
+                    20, SideColor(1 - match.MySide), TextAnchor.MiddleCenter, true);
         }
 
         static void DrawScore(VersusMatch match)
@@ -43,7 +44,8 @@ namespace Swat
             float y = rect.yMax + 4f;
             if (match.Mode == GameMode.CaptureTheFlag)
             {
-                UITheme.ShadowText(new Rect(rect.x - 120f, y, rect.width + 240f, 22f), "Your flag: " + FlagStatus(match, 0) + "     Red flag: " + FlagStatus(match, 1), 15, UITheme.TextColor, TextAnchor.UpperCenter);
+                int theirs = 1 - match.MySide;
+                UITheme.ShadowText(new Rect(rect.x - 120f, y, rect.width + 240f, 22f), "Your flag: " + FlagStatus(match, match.MySide) + "     " + VersusMatch.SideName(theirs) + " flag: " + FlagStatus(match, theirs), 15, UITheme.TextColor, TextAnchor.UpperCenter);
             }
             else if (match.Mode == GameMode.ZoneControl)
             {
@@ -91,17 +93,18 @@ namespace Swat
             return y;
         }
 
+        // Your teammates: bots and (online) other players, marked with a dot.
         static void DrawTeam(VersusMatch match, float y)
         {
             float w = UITheme.Width;
-            UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), "BLUE TEAM", 13, Blue, TextAnchor.UpperRight, true);
+            UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), VersusMatch.SideName(match.MySide).ToUpperInvariant() + " TEAM", 13, SideColor(match.MySide), TextAnchor.UpperRight, true);
             y += 22f;
-            foreach (var bot in match.Bots)
+            foreach (var mate in match.Others)
             {
-                if (bot.Side != 0) continue;
-                string state = bot.IsAlive ? bot.Kills + " tag-outs" : "back in " + Mathf.CeilToInt(Mathf.Max(0f, bot.RespawnAt - Time.time));
-                if (match.IsCarrying(bot)) state = "HAS THE FLAG";
-                UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), bot.Callsign + "   " + state, 14, bot.IsAlive ? UITheme.TextColor : UITheme.Faint, TextAnchor.UpperRight);
+                if (mate.Side != match.MySide) continue;
+                string state = mate.IsAlive ? mate.Kills + " tag-outs" : mate.RespawnAt > 0f && !match.Mirror ? "back in " + Mathf.CeilToInt(Mathf.Max(0f, mate.RespawnAt - Time.time)) : "tagged out";
+                if (match.IsCarrying(mate)) state = "HAS THE FLAG";
+                UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), (mate.IsHuman ? "* " : "") + mate.Callsign + "   " + state, 14, mate.IsAlive ? UITheme.TextColor : UITheme.Faint, TextAnchor.UpperRight);
                 y += 20f;
             }
         }
@@ -121,23 +124,23 @@ namespace Swat
         static void DrawWorld(GameManager game, VersusMatch match)
         {
             var cam = game.CameraRig.Cam;
-            foreach (var bot in match.Bots)
+            foreach (var other in match.Others)
             {
-                if (!bot.IsAlive || (bot.Side == 1 && !bot.Seen)) continue;
+                if (!other.IsAlive || (other.Side != match.MySide && !other.Seen)) continue;
                 Vector2 gui;
-                if (!UITheme.WorldToGui(cam, bot.Position + Vector3.up * 2.35f, out gui)) continue;
-                var color = SideColor(bot.Side);
-                UITheme.ShadowText(new Rect(gui.x - 90f, gui.y - 12f, 180f, 20f), bot.Callsign, 13, color, TextAnchor.MiddleCenter, true);
-                if (bot.Health < bot.MaxHealth)
-                    UITheme.Bar(new Rect(gui.x - 18f, gui.y + 8f, 36f, 3f), bot.Health / bot.MaxHealth, color);
+                if (!UITheme.WorldToGui(cam, other.Position + Vector3.up * 2.35f, out gui)) continue;
+                var color = SideColor(other.Side);
+                UITheme.ShadowText(new Rect(gui.x - 90f, gui.y - 12f, 180f, 20f), other.Callsign, 13, color, TextAnchor.MiddleCenter, true);
+                if (other.Health < other.MaxHealth)
+                    UITheme.Bar(new Rect(gui.x - 18f, gui.y + 8f, 36f, 3f), other.Health / other.MaxHealth, color);
             }
             if (match.Mode == GameMode.CaptureTheFlag)
                 for (int side = 0; side < 2; side++)
                 {
                     var flag = match.Flags[side];
                     if (flag == null || flag.carrier == (ICombatTarget)game.Player) continue;
-                    var carrierBot = flag.carrier as ArenaBot;
-                    if (carrierBot != null && carrierBot.Side == 1 && !carrierBot.Seen) continue;
+                    var carrier = flag.carrier as IVersusMember;
+                    if (carrier != null && carrier.Side != match.MySide && !carrier.Seen) continue;
                     Marker(cam, flag.position + Vector3.up * 2.7f, side == 0 ? "BLUE FLAG" : "RED FLAG", SideColor(side));
                 }
             if (match.Mode == GameMode.ZoneControl)

@@ -3,7 +3,8 @@ using UnityEngine;
 namespace Swat
 {
     // Resume, Restart mission, Settings, Controls, Quit mission (back to headquarters), Quit to desktop.
-    // The world is fully paused underneath (AI, timers, physics and world audio).
+    // The world is fully paused underneath (AI, timers, physics and world audio),
+    // except in online matches, where nobody else stops.
     public class PauseMenuController
     {
         string confirm; // which destructive action is waiting for a second click
@@ -32,7 +33,9 @@ namespace Swat
             if (UITheme.Button(new Rect(x, y, bw, bh), "Resume")) { confirm = null; game.Resume(); }
             y += bh + gap;
             bool versus = VersusMatch.Active;
-            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "restart" ? "Click again to restart" : versus ? "Restart match" : "Restart mission", true, confirm == "restart"))
+            // Online only the host can restart (for everyone).
+            bool canRestart = !NetSession.IsClient;
+            if (UITheme.Button(new Rect(x, y, bw, bh), !canRestart ? "Only the host can restart" : confirm == "restart" ? "Click again to restart" : NetSession.IsHost ? "Restart match (everyone)" : versus ? "Restart match" : "Restart mission", canRestart, confirm == "restart"))
             {
                 if (confirm == "restart") { confirm = null; game.RestartMission(); }
                 else confirm = "restart";
@@ -42,9 +45,10 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(4);
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? (versus ? "Click again to leave the match" : "Click again to quit the mission") : versus ? "Leave match" : "Quit mission", true, confirm == "hq"))
+            string leave = NetSession.IsHost ? "End match (everyone to the lobby)" : NetSession.IsClient ? "Leave the online game" : versus ? "Leave match" : "Quit mission";
+            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? (versus ? "Click again to leave the match" : "Click again to quit the mission") : leave, true, confirm == "hq"))
             {
-                if (confirm == "hq") { confirm = null; game.LeaveMissionScreens(); }
+                if (confirm == "hq") { confirm = null; game.LeaveMatch(); }
                 else confirm = "hq";
             }
             y += bh + gap;
@@ -53,7 +57,7 @@ namespace Swat
                 if (confirm == "quit") game.Quit();
                 else confirm = "quit";
             }
-            UITheme.Text(new Rect(rect.x, rect.yMax - 34f, rect.width, 22f), "Progress so far in this mission is lost if you leave.", 13, UITheme.Faint, TextAnchor.UpperCenter);
+            UITheme.Text(new Rect(rect.x, rect.yMax - 34f, rect.width, 22f), NetSession.Online ? "Online match: the game keeps running while this menu is open." : "Progress so far in this mission is lost if you leave.", 13, NetSession.Online ? UITheme.Warn : UITheme.Faint, TextAnchor.UpperCenter);
         }
     }
 }

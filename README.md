@@ -12,15 +12,32 @@ code at runtime from built-in Unity modules, so the project has no package
 dependencies and runs on modest hardware. The one exception is the weapon
 icons: pixel-art guns from a free-to-use sprite pack (see [CREDITS.md](CREDITS.md)).
 
-> **Status:** prototype with ten levels, a level creator, a pixel-art look and a
-> quality-of-life, graphics and lighting polish pass. The code compiles (checked outside the
-> Unity editor, see [REPORT.md](REPORT.md#testing-performed)), the custom
-> shaders pass a syntax check and the level creator's layout logic passes unit
-> tests, but the game has **not yet been play-tested inside Unity**, no
-> performance has been measured, and no gameplay screenshots exist yet.
-> [Screenshots/README.md](Screenshots/README.md) explains how to capture them.
+> **Status:** prototype with ten levels, a level creator, game modes with
+> online play, a pixel-art look and a quality-of-life, graphics and lighting
+> polish pass. The code compiles (checked outside the Unity editor, see
+> [REPORT.md](REPORT.md#testing-performed)), the custom shaders pass a syntax
+> check, and the level creator's layout logic and the online transport pass
+> tests run outside Unity, but the game has **not yet been play-tested inside
+> Unity** (online play included), no performance has been measured, and no
+> gameplay screenshots exist yet. [Screenshots/README.md](Screenshots/README.md)
+> explains how to capture them (the screenshot tour does most of it).
 
-## What's new: pixel-art gun pack, better NPCs and four more guns
+## What's new: online multiplayer and a screenshot tour
+
+- **Play the game modes online with friends (peer to peer).** One player
+  hosts from the Game Modes screen; the others join with the host's address,
+  or pick the game from **Find games on this network**. Up to 8 players, on
+  either team, with bots filling each team up to the team size (1 vs 1 up to
+  6 vs 6, so pure player-against-player works too). Team Deathmatch, Capture
+  the Flag and Zone Control all work online. No server, account or extra
+  package: the game talks UDP directly. See [Playing online](#playing-online).
+- **Screenshot tour:** **Shift+F12** in the game, or the editor menu
+  **SWAT -> Screenshot Tour**, walks through the main screens, a mission and
+  two game-mode matches by itself and saves a real screenshot of each into
+  `Screenshots/` (15 pictures in about a minute and a half). Handy for
+  showing the game, or for an AI assistant connected to your Unity editor.
+
+## Earlier: pixel-art gun pack, better NPCs and four more guns
 
 - **Weapon icons from the pixel-art gun pack** you supplied, used 1:1: every
   one of the 24 weapons shows one of the pack's guns, pixel for pixel, in the
@@ -242,6 +259,7 @@ All keys can be remapped in **Settings -> Controls**.
 | **Mouse wheel** | Zoom |
 | **F10** | FPS counter |
 | **F12** | Save a screenshot |
+| **Shift + F12** | Screenshot tour: visits the main screens and a few moments of play by itself and saves a screenshot of each (Esc twice stops it) |
 
 ### Gamepad
 
@@ -333,7 +351,8 @@ uses the normal deployment: the van arrives, then the exercise starts.
 
 - **Teams:** you plus your squadmates (bots using their own loadouts; extra
   places are filled by other officers) against the Red Team (bots with random
-  weapons). Team size 2 vs 2 to 6 vs 6; bot skill Easy, Normal or Hard.
+  weapons). Team size 1 vs 1 to 6 vs 6; bot skill Easy, Normal or Hard.
+  Online, other players take places on either team (see below).
 - **Respawns:** 5 seconds after being tagged out, at your base, with full
   health and ammo and a moment of protection. Ammo also refills at the van.
 - **Maps:** warehouse, office, corner store, motel, bank, clinic, nightclub,
@@ -347,6 +366,44 @@ uses the normal deployment: the van arrives, then the exercise starts.
   from shooting.
 - Match results show both teams' scoreboards; **Rematch** replays the same
   setup.
+
+### Playing online
+
+Online play is peer to peer: one player's game hosts the match and runs the
+bots, scoring, flags and zone; the other players' games connect straight to
+it over UDP (port **27777**). There is no server, account or matchmaking.
+
+1. **Host:** Game Modes -> type a name -> **Host a match**. The panel shows the
+   address(es) other players should use. Pick the mode, map, team size and
+   limits as usual, move players between teams by clicking their team, then
+   press **START ONLINE MATCH**.
+2. **Join:** Game Modes -> type the host's address (for example
+   `192.168.1.20`, or `192.168.1.20:27778` if the host's panel shows another
+   port) -> **Join**. On the same network you can instead click **Find games
+   on this network** and **Join** the one listed. In the lobby, pick **Blue
+   team** or **Red team** and wait for the host to start.
+3. **Over the internet:** the host forwards **UDP port 27777** on their router
+   to their computer and gives the others their public IP address. (A
+   virtual-LAN tool that puts everyone on one private network also works.)
+   Allow the game through the host's firewall when Windows asks.
+
+During an online match:
+
+- Everyone plays their own officer and loadout; bots fill the gaps. The host
+  is always on the Blue Team.
+- The host's game sends everyone the match 15 times a second and each player
+  sends their own position 20 times a second; other players are drawn a tenth
+  of a second behind so they move smoothly.
+- Your shots are checked on your own screen and the hits you land are sent to
+  the host, which passes them on; whoever is hit takes the damage on their own
+  game. Your own team can't be hurt.
+- **Nobody pauses:** the pause menu opens, but the match keeps going.
+- **Tactical equipment is off, and doors stay as the match set them** (all
+  usable doors open), so every player sees the same building.
+- The host can restart the match for everyone (pause menu or results), or take
+  everyone back to the lobby. A player who leaves drops any flag they carry.
+- Players only join from the lobby, not in the middle of a match. Both games
+  need the same version of the project (the lobby refuses a mismatched one).
 
 ## Level Creator
 
@@ -453,19 +510,25 @@ Assets/
     Vehicles/          VanBuilder, VehicleArrival, LightBar, VanSupply
     LevelEditor/       CustomLevel (data), CustomLevelGeometry (walls from rooms), CustomLevelValidator,
                        CustomLevelBuilder (map + mission), CustomLevelStore (JSON files, example level)
+    Versus/            VersusMatch (game modes: teams, flags, zone, scoring, events), ArenaBot
+    Net/               NetTransport (UDP peer, reliable/unreliable messages, LAN discovery; plain C#),
+                       NetSession (lobby, match start, snapshots, hits), NetActor (other players on screen)
     Missions/          MissionData, MissionManager, Objective, ObjectiveTracker, MissionScoring,
                        MissionBriefing, MissionRandomizer, MissionStats, TacticalIntel
     UI/                UIManager, UITheme, UIIcons, MainMenuController, MissionSelectionUI,
+                       VersusSetupUI + OnlineLobbyUI (Game Modes, online lobby), VersusHUD, VersusResultUI,
                        BriefingUI, OfficerSelectionUI, LoadoutUI, HUDController, CommandWheelUI,
                        TacticalMapUI (also the minimap), PauseMenuController, MissionDebriefUI,
                        SettingsUI, CharacterPreview, WeaponWheelUI, LevelEditorUI (the level creator)
     Audio/             AudioManager, SoundLibrary (procedural placeholder sounds)
     Save/              SaveData, SaveManager (versioned JSON), Progression
-    Utilities/         Shapes, ObjectPool, ScreenshotTool, ProceduralTextures, DecalMesh
+    Utilities/         Shapes, ObjectPool, ScreenshotTool, ScreenshotTour, ProceduralTextures, DecalMesh
     Editor/            SWAT menu: Boot scene, editable data assets, screenshots folder, delete save
   ScriptableObjects/   editable data assets go here (see above)
-  Resources/SWAT/Shaders/  small unlit, decal, glow and post-processing shaders (no packages needed)
-Screenshots/           F12 saves screenshots here when playing in the editor
+  Resources/SWAT/Shaders/  small unlit, decal, glow, toon and post-processing shaders (no packages needed)
+  Resources/SWAT/WeaponSprites/  the weapon icons (PNG images saved as <weapon id>.bytes; see CREDITS.md)
+Screenshots/           F12 and the screenshot tour save here when playing in the editor
+Tests/                 checks for plain-C# parts run outside Unity with Mono (online transport)
 ```
 
 See [REPORT.md](REPORT.md) for what is complete, what is simplified, testing

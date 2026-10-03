@@ -4,6 +4,8 @@ namespace Swat
 {
     // End of a game-mode match: who won, the final score, both teams'
     // scoreboards and your own numbers, with Rematch / Match setup / Main menu.
+    // Online, the host chooses what happens next (rematch or back to the
+    // lobby); the other players wait for that or leave.
     public class VersusResultUI
     {
         VersusResult shown;
@@ -21,8 +23,9 @@ namespace Swat
             }
             float t = Time.unscaledTime - openedAt;
             UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.015f, 0.02f, 0.04f, 0.93f * Mathf.Clamp01(t / 0.3f + 0.4f)));
-            string title = result.winner == 0 ? "VICTORY" : result.winner == 1 ? "DEFEAT" : "DRAW";
-            Color color = result.winner == 0 ? UITheme.Good : result.winner == 1 ? UITheme.Bad : UITheme.Warn;
+            bool won = result.winner == result.side, draw = result.winner < 0;
+            string title = draw ? "DRAW" : won ? "VICTORY" : "DEFEAT";
+            Color color = draw ? UITheme.Warn : won ? UITheme.Good : UITheme.Bad;
             float pop = 1f + Mathf.Clamp01(1f - t / 0.35f) * 0.3f;
             UITheme.ShadowText(new Rect(0f, 40f, w, 90f), title, Mathf.RoundToInt(64 * pop), color, TextAnchor.MiddleCenter, true);
             UITheme.Text(new Rect(0f, 128f, w, 26f), VersusMatch.ModeNames[(int)result.mode] + "  -  " + result.mapName + "   |   " + MissionScoring.FormatTime(result.time) + "   |   " + result.reason, 18, UITheme.Dim, TextAnchor.UpperCenter);
@@ -45,6 +48,28 @@ namespace Swat
 
             bool ready = t > 0.6f;
             float by = h - 90f;
+            if (NetSession.IsClient)
+            {
+                UITheme.Button(new Rect(60f, by, 360f, 50f), "Waiting for the host...", false, false, 18);
+                if (UITheme.Button(new Rect(w - 300f, by, 240f, 50f), "Leave", ready, false, 18))
+                {
+                    NetSession.Instance.Leave("You left the game.");
+                    game.OpenVersusSetup();
+                }
+                return;
+            }
+            if (NetSession.IsHost)
+            {
+                UITheme.Text(new Rect(0f, by - 34f, w, 22f), "Online: everyone joins your rematch, or goes back to the lobby with you.", 14, UITheme.Dim, TextAnchor.UpperCenter);
+                if (UITheme.Button(new Rect(60f, by, 240f, 50f), "Rematch", ready, true, 19)) NetSession.Instance.HostStartMatch();
+                if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Lobby", ready, false, 18)) NetSession.Instance.HostToLobby();
+                if (UITheme.Button(new Rect(w - 300f, by, 240f, 50f), "Close game", ready, false, 18))
+                {
+                    NetSession.Instance.Leave("You closed the online game.");
+                    game.OpenVersusSetup();
+                }
+                return;
+            }
             if (UITheme.Button(new Rect(60f, by, 240f, 50f), "Rematch", ready, true, 19)) game.RestartMission();
             if (UITheme.Button(new Rect(w - 560f, by, 240f, 50f), "Match setup", ready, false, 18)) game.OpenVersusSetup();
             if (UITheme.Button(new Rect(w - 300f, by, 240f, 50f), "Main menu", ready, false, 18)) game.GoToMainMenu();

@@ -10,7 +10,7 @@ namespace Swat
     // strafes while it shoots, reloads when empty, and otherwise plays the
     // objective VersusMatch gives it (hunt, take or defend a flag, hold the
     // zone). Taken down means "tagged out" until it respawns at its base.
-    public class ArenaBot : MonoBehaviour, ICombatTarget, IDamageable
+    public class ArenaBot : MonoBehaviour, IVersusMember, IDamageable
     {
         static readonly float[] AimError = { 7f, 4.5f, 2.8f };   // degrees, by skill
         static readonly float[] Reaction = { 0.6f, 0.4f, 0.25f };  // seconds before the first shot at a new target
@@ -29,7 +29,13 @@ namespace Swat
         public DamageInfo LastHit { get; private set; }
         public float NextThink { get; set; }
         public bool Seen { get; private set; }
-        public int Kills, Deaths, Captures;
+        public int Kills { get; set; }
+        public int Deaths { get; set; }
+        public int Captures { get; set; }
+        public int NetId { get; set; }            // the actor id online players know it by
+        public string OfficerId { get; set; }     // a squadmate's officer, for its look on other players' screens
+        public Appearance Look { get; private set; }
+        public bool IsHuman { get { return false; } }
 
         // Where VersusMatch currently wants this bot to wander (roaming, defending, holding the zone).
         public Vector3 RoamPoint;
@@ -73,6 +79,7 @@ namespace Swat
             bot.mover = go.AddComponent<AgentMover>();
             bot.mover.Init(3.4f, 5.8f);
             bot.mover.Warp(position);
+            bot.Look = look;
             bot.Parts = CharacterFactory.Build(go.transform, look);
             CharacterFactory.SetWeapon(bot.Parts, weapon, attachments);
             bot.animator = new ProceduralAnimator(bot.Parts);
@@ -232,10 +239,20 @@ namespace Swat
             Vector3 direction = (aim - origin).normalized;
             var damage = new DamageInfo { amount = data.damage, attacker = Team, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, shooter = this };
             Vector3 muzzle = Parts.muzzle.position;
+            var ends = NetSession.ShotEnds;
+            ends.Clear();
             if (data.blastRadius > 0f)
-                WeaponEffects.Blast(WeaponEffects.Trace(origin, WeaponEffects.Scatter(direction, error), data.range, muzzle, data.tracerColor, data.tracerWidth), data.blastRadius, damage);
+            {
+                Vector3 landed = WeaponEffects.Trace(origin, WeaponEffects.Scatter(direction, error), data.range, muzzle, data.tracerColor, data.tracerWidth);
+                ends.Add(landed);
+                WeaponEffects.Blast(landed, data.blastRadius, damage);
+            }
             else for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
+            {
                 WeaponEffects.Shoot(origin, WeaponEffects.Scatter(direction, error), data.range, damage, muzzle, data.tracerColor);
+                ends.Add(WeaponEffects.LastEnd);
+            }
+            if (NetSession.IsHost) NetSession.Instance.SendShot(NetId, data, muzzle, ends);
             Gun.Magazine--;
             LastShotTime = Time.time;
             animator.Fire(Mathf.Clamp(0.45f + data.kick * 0.45f, 0.4f, 1.5f));
@@ -340,6 +357,11 @@ namespace Swat
         {
             Seen = seen;
             Parts.SetVisible(seen || !IsAlive);
+        }
+
+        public void SetVisible(bool visible)
+        {
+            Parts.SetVisible(visible);
         }
     }
 }

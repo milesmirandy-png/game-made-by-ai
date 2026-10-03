@@ -8,25 +8,61 @@ namespace Swat
     {
         public GameMode mode;
         public string mapName;
-        public int winner;            // 0 your team, 1 red team, -1 draw
+        public int winner;            // winning side: 0 blue, 1 red, -1 draw
+        public int side;              // the side you played on
         public int blueScore, redScore, scoreLimit;
         public float time;
         public string reason;
         public int playerKills, playerDeaths, playerCaptures;
+        public bool online, hosted;   // an online match, and whether you were the host
         public readonly List<ScoreRow> rows = new List<ScoreRow>();
 
         public struct ScoreRow
         {
             public string name;
-            public int side, kills, deaths, captures;
+            public int side, kills, deaths, captures, actorId;
             public bool isPlayer;
         }
     }
 
-    // Runs a game-mode match: Blue Team (you and your squad, as bots) against
-    // Red Team (bots) on one of the mission maps, with respawns. The modes are
-    // framed as Tactical Response Unit training exercises with marking rounds,
-    // so "tagged out" just means out until the respawn.
+    // Everyone in a match other than you: bots, and in online matches the other players.
+    public interface IVersusMember : ICombatTarget
+    {
+        int NetId { get; }
+        int Side { get; }
+        string Callsign { get; }
+        bool Seen { get; }
+        float Health { get; }
+        float MaxHealth { get; }
+        float RespawnAt { get; }
+        float LastShotTime { get; }
+        int Kills { get; set; }
+        int Deaths { get; set; }
+        int Captures { get; set; }
+        bool IsHuman { get; }
+        void SetSeen(bool seen);
+        void SetVisible(bool visible);
+    }
+
+    public enum MatchEventKind { Takedown, FlagTaken, FlagDropped, FlagReturned, FlagCaptured, ZoneTaken, PlayerLeft }
+
+    // Something worth a line in the feed (and maybe a banner). The host decides these and sends them
+    // to everyone, and each player words them from their own side ("You", "your flag").
+    public struct MatchEvent
+    {
+        public MatchEventKind kind;
+        public int side;      // victim's side, the flag's side, or the zone's new owner
+        public int a, b;      // actors: killer and victim, or whoever moved the flag (-1 none)
+        public int weapon;    // weapon index for takedowns (-1 none)
+        public string name;   // a player who left
+    }
+
+    // Runs a game-mode match: Blue Team against Red Team on one of the mission
+    // maps, with respawns. Offline, you and your squad (as bots) are Blue and
+    // the Red Team is bots. Online, the host runs the match (bots, scoring,
+    // flags, zone) and the other players' copies mirror it (NetSession). The
+    // modes are framed as Tactical Response Unit training exercises with
+    // marking rounds, so "tagged out" just means out until the respawn.
     //   Team Deathmatch: first team to the tag-out limit.
     //   Capture the Flag: take the other team's flag back to your own (yours must be home).
     //   Zone Control: hold the zone alone to own it; the owner scores every second.
@@ -42,7 +78,7 @@ namespace Swat
         {
             "",
             "Tag out the other team. First to the limit wins.",
-            "Bring the red flag to your base. Your own flag must be home to score.",
+            "Bring the other team's flag to your base. Your own flag must be home to score.",
             "Stand in the zone with no opponents inside to take it. Your team scores every second it's yours.",
         };
         static readonly int[][] ScoreLimits = { new[] { 0 }, new[] { 15, 25, 40 }, new[] { 1, 3, 5 }, new[] { 60, 100, 200 } };
@@ -52,6 +88,7 @@ namespace Swat
         public static readonly string[] MapIds = { "warehouse", "office", "store", "motel", "bank", "clinic", "nightclub", "factory", "training" };
         static readonly string[] RedNames = { "Viper", "Rook", "Jackal", "Mako", "Vandal", "Hex", "Talon", "Sable" };
         public const float RespawnDelay = 5f;
+        public const int MaxTeamSize = 6;
 
         public static int ScoreLimitFor(GameMode mode, int index)
         {
@@ -69,6 +106,8 @@ namespace Swat
         {
             return mode == GameMode.TeamDeathmatch ? "tag-outs" : mode == GameMode.CaptureTheFlag ? "captures" : "points";
         }
+
+        public static string SideName(int side) { return side == 0 ? "Blue" : "Red"; }
 
         // The mission record the normal briefing-free flow deploys with (officer selection, loadout, deploy).
         public static MissionData CreateMission(VersusOptions options)
@@ -89,6 +128,18 @@ namespace Swat
             m.parTime = MinutesFor(mode, options.timeIndex) * 60f;
             m.thumbnailColor = mode == GameMode.TeamDeathmatch ? new Color(0.45f, 0.18f, 0.18f) : mode == GameMode.CaptureTheFlag ? new Color(0.2f, 0.3f, 0.5f) : new Color(0.25f, 0.4f, 0.25f);
             return m;
+        }
+
+        // Weapons travel over the network as their index in the game's weapon list.
+        public static int WeaponIndex(WeaponData weapon)
+        {
+            return weapon != null ? GameData.AllWeapons.IndexOf(weapon) : -1;
+        }
+
+        public static WeaponData WeaponAt(int index)
+        {
+            var all = GameData.AllWeapons;
+            return index >= 0 && index < all.Count ? all[index] : null;
         }
 
         // ---- Match state ----
@@ -117,6 +168,8 @@ namespace Swat
         public float TimeLeft { get { return Mathf.Max(0f, TimeLimit - Elapsed); } }
         public readonly float[] Score = new float[2];
         public readonly List<ArenaBot> Bots = new List<ArenaBot>();
+        public readonly List<NetActor> Remotes = new List<NetActor>();      // other players (online)
+        public readonly List<IVersusMember> Others = new List<IVersusMember>(); // bots and other players
         public readonly Flag[] Flags = new Flag[2];
         public Bounds Zone { get; private set; }
         public float ZoneControl { get; private set; }   // -1 red owns ... 0 neutral ... +1 blue owns
@@ -128,6 +181,11 @@ namespace Swat
         public int PlayerKills, PlayerDeaths, PlayerCaptures;
         public string MapName { get; private set; }
         public Vector3[] Bases { get; private set; }
+        public int MySide { get; private set; }          // the side you play on (always blue offline or hosting)
+        public int MyId { get; private set; }            // your actor id (0 offline or hosting)
+        public bool Mirror { get; private set; }         // online, not hosting: the host runs the match
+        public string LocalName { get; private set; }
+        public float[] BaseYaw { get { return baseYaw; } }
 
         readonly List<ICombatTarget>[] members = { new List<ICombatTarget>(), new List<ICombatTarget>() };
         readonly List<Vector3>[] spawns = { new List<Vector3>(), new List<Vector3>() };
@@ -135,7 +193,7 @@ namespace Swat
         readonly float[] baseYaw = new float[2];
         readonly int[] spawnCursor = new int[2];
         bool running;
-        int skill;
+        int skill, nextId;
         float nextVisibility, nextDoors;
         LevelLayout level;
         PlayerController player;
@@ -152,25 +210,19 @@ namespace Swat
 
         public List<ICombatTarget> Opponents(int side) { return members[1 - side]; }
         public List<ICombatTarget> Team(int side) { return members[side]; }
+        public PlayerController Player { get { return player; } }
 
         // ---- Setup ----
 
+        // Offline or hosting: this copy of the game runs the match.
         public void Begin(MissionData mission, VersusOptions options, LevelLayout layout, Transform actors, PlayerController leader)
         {
             Clear();
-            level = layout;
-            player = leader;
-            Mode = mission.mode;
+            Setup(mission, options, layout, actors, leader);
             skill = Mathf.Clamp(options.botSkill, 0, 2);
-            ScoreLimit = ScoreLimitFor(Mode, options.scoreIndex);
-            TimeLimit = MinutesFor(Mode, options.timeIndex) * 60f;
-            MapName = mission.location;
-            Elapsed = 0f;
-            Score[0] = Score[1] = 0f;
-            PlayerKills = PlayerDeaths = PlayerCaptures = 0;
-            PlayerRespawnAt = -1f;
-            ZoneControl = 0f;
-            ZoneOwner = -1;
+            MySide = 0;
+            MyId = 0;
+            nextId = 1;
 
             foreach (var door in level.doors) if (door != null) door.OpenForMatch();
             PickBases();
@@ -185,21 +237,80 @@ namespace Swat
                 Flags[1] = MakeFlag(1, Bases[1]);
             }
 
-            int teamSize = Mathf.Clamp(options.teamSize, 2, 6);
+            // Online, the other players take places on their teams and bots fill the rest.
+            var humans = NetSession.IsHost ? NetSession.Instance.RemotePlayers : new List<NetPlayer>();
+            int blueHumans = 1, redHumans = 0;
+            foreach (var human in humans) if (human.side == 0) blueHumans++; else redHumans++;
+            int teamSize = Mathf.Clamp(options.teamSize, 1, MaxTeamSize);
             members[0].Add(player);
             player.Health.ProtectedUntil = Time.time + 2f;
-            SpawnBlueTeam(actors, teamSize - 1);
-            SpawnRedTeam(actors, teamSize);
+            SpawnBlueTeam(actors, Mathf.Max(teamSize, blueHumans) - blueHumans);
+            SpawnRedTeam(actors, Mathf.Max(teamSize, redHumans) - redHumans);
+            foreach (var human in humans)
+            {
+                var actor = NetActor.CreateProxy(actors, nextId++, human, NextSpawn(human.side), baseYaw[human.side]);
+                human.actorId = actor.NetId;
+                AddRemote(actor);
+            }
             AssignRoles(0);
             AssignRoles(1);
             running = true;
             UIManager.Banner(ModeNames[(int)Mode].ToUpperInvariant(), ModeGoals[(int)Mode], BannerKind.Info);
+            if (NetSession.IsHost) NetSession.Instance.OnMatchBuilt(this);
         }
 
-        // During the van arrival nobody is shown; afterwards your team is, and red follows line of sight.
+        // Online, not hosting: shows the host's match. Bases, zone, flags and everyone else come from the host.
+        public void BeginMirror(MissionData mission, VersusOptions options, LevelLayout layout, Transform actors, PlayerController leader, MatchSetup setup)
+        {
+            Clear();
+            Setup(mission, options, layout, actors, leader);
+            Mirror = true;
+            MySide = setup.side;
+            MyId = setup.actorId;
+            foreach (var door in level.doors) if (door != null) door.OpenForMatch();
+            for (int side = 0; side < 2; side++)
+            {
+                Bases[side] = setup.bases[side];
+                baseYaw[side] = setup.baseYaw[side];
+                BasePad(side, Bases[side]);
+            }
+            if (Mode == GameMode.ZoneControl)
+            {
+                Zone = setup.zone;
+                BuildZoneVisual();
+            }
+            if (Mode == GameMode.CaptureTheFlag)
+                for (int side = 0; side < 2; side++) Flags[side] = MakeFlag(side, setup.flagHomes[side]);
+            members[MySide].Add(player);
+            foreach (var entry in setup.roster)
+                if (entry.id != MyId) AddRemote(NetActor.CreatePuppet(actors, entry));
+            player.TeleportTo(setup.spawn, setup.spawnYaw);
+            player.Health.ProtectedUntil = Time.time + 2f;
+            running = true;
+            UIManager.Banner(ModeNames[(int)Mode].ToUpperInvariant() + "  -  " + SideName(MySide).ToUpperInvariant() + " TEAM", ModeGoals[(int)Mode], BannerKind.Info);
+        }
+
+        void Setup(MissionData mission, VersusOptions options, LevelLayout layout, Transform actors, PlayerController leader)
+        {
+            level = layout;
+            player = leader;
+            Mode = mission.mode;
+            ScoreLimit = ScoreLimitFor(Mode, options.scoreIndex);
+            TimeLimit = MinutesFor(Mode, options.timeIndex) * 60f;
+            MapName = mission.location;
+            Elapsed = 0f;
+            Score[0] = Score[1] = 0f;
+            PlayerKills = PlayerDeaths = PlayerCaptures = 0;
+            PlayerRespawnAt = -1f;
+            ZoneControl = 0f;
+            ZoneOwner = -1;
+            LocalName = NetSession.Online ? NetSession.Instance.LocalName : leader != null ? leader.Officer.callsign : "You";
+        }
+
+        // During the van arrival nobody is shown; afterwards your team is, and the other team follows line of sight.
         public void ShowTeams(bool visible)
         {
-            foreach (var bot in Bots) bot.Parts.SetVisible(visible && (bot.Side == 0 || !SaveManager.Settings.lineOfSight));
+            foreach (var other in Others) other.SetVisible(visible && (other.Side == MySide || !SaveManager.Settings.lineOfSight));
         }
 
         public void Clear()
@@ -208,6 +319,8 @@ namespace Swat
             foreach (var go in spawned) if (go != null) Destroy(go);
             spawned.Clear();
             Bots.Clear();
+            Remotes.Clear();
+            Others.Clear();
             members[0].Clear();
             members[1].Clear();
             spawns[0].Clear();
@@ -219,6 +332,9 @@ namespace Swat
             zoneColorState = -2;
             level = null;
             player = null;
+            Mirror = false;
+            MySide = 0;
+            MyId = 0;
         }
 
         // Blue base where the team arrives; red base in the indoor room furthest away by walking distance.
@@ -322,24 +438,53 @@ namespace Swat
                     if (weapon == null || weapon.lessLethal || loadout.useShield) weapon = GameData.Weapon("rifle_compact");
                     var look = PlayerController.OfficerAppearance(officer, loadout, false);
                     look.shield = false;
-                    AddBot(ArenaBot.Spawn(actors, 0, officer.callsign, look, weapon, loadout, point, baseYaw[0], skill));
+                    AddBot(ArenaBot.Spawn(actors, 0, officer.callsign, look, weapon, loadout, point, baseYaw[0], skill), officer.id);
                 }
-                else AddBot(ArenaBot.Spawn(actors, 0, "Blue " + (i + 2), BlueLook(), RandomWeapon(), null, point, baseYaw[0], skill));
+                else AddBot(ArenaBot.Spawn(actors, 0, "Blue " + (i + 2), BlueLook(CharacterFactory.RandomSkin()), RandomWeapon(), null, point, baseYaw[0], skill), null);
             }
         }
 
         void SpawnRedTeam(Transform actors, int count)
         {
             for (int i = 0; i < count; i++)
-                AddBot(ArenaBot.Spawn(actors, 1, RedNames[i % RedNames.Length], RedLook(), RandomWeapon(), null, NextSpawn(1), baseYaw[1], skill));
+                AddBot(ArenaBot.Spawn(actors, 1, RedNames[i % RedNames.Length], RedLook(CharacterFactory.RandomSkin()), RandomWeapon(), null, NextSpawn(1), baseYaw[1], skill), null);
         }
 
-        void AddBot(ArenaBot bot)
+        void AddBot(ArenaBot bot, string officerId)
         {
+            bot.NetId = nextId++;
+            bot.OfficerId = officerId;
             bot.NextThink = Time.time + Random.value * 0.3f;
             Bots.Add(bot);
+            Others.Add(bot);
             members[bot.Side].Add(bot);
             spawned.Add(bot.gameObject);
+        }
+
+        void AddRemote(NetActor actor)
+        {
+            Remotes.Add(actor);
+            Others.Add(actor);
+            members[actor.Side].Add(actor);
+            spawned.Add(actor.gameObject);
+        }
+
+        // A player left: their stand-in goes (dropping a flag they carried).
+        public void RemoveRemote(NetActor actor, bool announce)
+        {
+            if (actor == null || !Remotes.Contains(actor)) return;
+            foreach (var flag in Flags)
+                if (flag != null && flag.carrier == (ICombatTarget)actor)
+                {
+                    if (Mirror) flag.carrier = null;
+                    else Drop(flag);
+                }
+            if (announce && !Mirror) Post(new MatchEvent { kind = MatchEventKind.PlayerLeft, a = actor.NetId, side = actor.Side, name = actor.Callsign });
+            Remotes.Remove(actor);
+            Others.Remove(actor);
+            members[actor.Side].Remove(actor);
+            spawned.Remove(actor.gameObject);
+            Destroy(actor.gameObject);
         }
 
         // Capture the Flag: about half attack, the rest defend. Other modes: everyone roams or holds the zone.
@@ -362,26 +507,38 @@ namespace Swat
             return options.Count > 0 ? options[Random.Range(0, options.Count)] : GameData.Weapon("rifle_compact");
         }
 
-        static Appearance BlueLook()
+        public static Appearance BlueLook(Color skin)
         {
             return new Appearance
             {
-                shirt = new Color(0.12f, 0.16f, 0.26f), pants = new Color(0.1f, 0.13f, 0.21f), skin = CharacterFactory.RandomSkin(),
+                shirt = new Color(0.12f, 0.16f, 0.26f), pants = new Color(0.1f, 0.13f, 0.21f), skin = skin,
                 headwear = new Color(0.08f, 0.09f, 0.12f), head = HeadStyle.Helmet, vestOn = true, vest = new Color(0.16f, 0.17f, 0.2f),
                 ring = new Color(0.2f, 0.45f, 1f), armed = true, outfit = Outfit.Tactical, idMarker = true, idColor = new Color(0.36f, 0.62f, 0.95f),
                 holster = true,
             };
         }
 
-        static Appearance RedLook()
+        public static Appearance RedLook(Color skin)
         {
             return new Appearance
             {
-                shirt = new Color(0.42f, 0.12f, 0.12f), pants = new Color(0.16f, 0.12f, 0.12f), skin = CharacterFactory.RandomSkin(),
+                shirt = new Color(0.42f, 0.12f, 0.12f), pants = new Color(0.16f, 0.12f, 0.12f), skin = skin,
                 headwear = new Color(0.14f, 0.1f, 0.1f), head = HeadStyle.Helmet, vestOn = true, vest = new Color(0.22f, 0.18f, 0.18f),
                 ring = new Color(1f, 0.25f, 0.2f), armed = true, outfit = Outfit.Tactical, idMarker = true, idColor = new Color(0.95f, 0.3f, 0.25f),
                 width = 1.04f, holster = true,
             };
+        }
+
+        // An officer playing for the Red Team wears its colours.
+        public static Appearance TeamColours(Appearance look, int side)
+        {
+            if (side != 1) return look;
+            look.shirt = new Color(0.42f, 0.12f, 0.12f);
+            look.pants = new Color(0.16f, 0.12f, 0.12f);
+            look.ring = new Color(1f, 0.25f, 0.2f);
+            look.idColor = new Color(0.95f, 0.3f, 0.25f);
+            look.shield = false;
+            return look;
         }
 
         Vector3 NextSpawn(int side)
@@ -467,13 +624,26 @@ namespace Swat
         void Update()
         {
             var game = GameManager.Instance;
-            if (!running || game == null || !game.IsPlaying || level == null) return;
+            if (!running || game == null || !game.WorldRunning || level == null) return;
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
-            Elapsed += dt;
             float now = Time.time;
-            float interval = Mathf.Max(0.15f, QualityManager.Current.aiThinkInterval);
+            if (Mirror)
+            {
+                // The host keeps the score and the clock; snapshots correct this.
+                Elapsed += dt;
+                for (int side = 0; side < 2; side++) if (Flags[side] != null) PlaceFlagVisual(Flags[side]);
+                UpdateZoneColor();
+                if (now >= nextVisibility)
+                {
+                    nextVisibility = now + 0.2f;
+                    UpdateVisibility();
+                }
+                return;
+            }
 
+            Elapsed += dt;
+            float interval = Mathf.Max(0.15f, QualityManager.Current.aiThinkInterval);
             for (int i = 0; i < Bots.Count; i++)
             {
                 var bot = Bots[i];
@@ -487,6 +657,9 @@ namespace Swat
                 bot.NextThink = now + interval;
                 bot.Think(this);
             }
+            // Other players who were tagged out come back when their time is up.
+            foreach (var remote in Remotes)
+                if (remote.Ready && remote.Down && remote.RespawnAt > 0f && now >= remote.RespawnAt) RespawnRemote(remote);
 
             if (player != null && !player.IsAlive && PlayerRespawnAt > 0f && now >= PlayerRespawnAt) RespawnPlayer();
             if (Mode == GameMode.CaptureTheFlag) UpdateFlags(now);
@@ -507,8 +680,16 @@ namespace Swat
         void RespawnPlayer()
         {
             PlayerRespawnAt = -1f;
-            Vector3 point = NextSpawn(0);
-            player.TeleportTo(point, baseYaw[0]);
+            Vector3 point = NextSpawn(MySide);
+            RespawnLocal(point, baseYaw[MySide]);
+        }
+
+        // Puts you back in at a spawn point (online, the host chooses it).
+        public void RespawnLocal(Vector3 point, float yaw)
+        {
+            if (player == null) return;
+            PlayerRespawnAt = -1f;
+            player.TeleportTo(point, yaw);
             player.ResetStance();
             player.Health.RestoreFull();
             player.Health.ProtectedUntil = Time.time + 1.5f;
@@ -517,31 +698,37 @@ namespace Swat
             AudioManager.Play2D(Sound.Equip, 0.6f);
         }
 
-        // Fog of war for the red team: drawn only while someone on your team can see them
+        void RespawnRemote(NetActor remote)
+        {
+            Vector3 point = NextSpawn(remote.Side);
+            remote.Revive(point, baseYaw[remote.Side]);
+            NetSession.Instance.SendRespawn(remote, point, baseYaw[remote.Side]);
+        }
+
+        // Fog of war for the other team: drawn only while someone on your team can see them
         // (or just after they fire near you). Respects the Line of Sight setting.
         void UpdateVisibility()
         {
             bool lineOfSight = SaveManager.Settings.lineOfSight;
-            foreach (var bot in Bots)
+            foreach (var other in Others)
             {
-                if (bot.Side == 0) { bot.SetSeen(true); continue; }
-                if (!lineOfSight || !bot.IsAlive) { bot.SetSeen(true); continue; }
-                bool seen = Time.time - bot.LastShotTime < 1f && player != null && (bot.Position - player.Position).sqrMagnitude < 30f * 30f;
+                if (other.Side == MySide || !lineOfSight || !other.IsAlive) { other.SetSeen(true); continue; }
+                bool seen = Time.time - other.LastShotTime < 1f && player != null && (other.Position - player.Position).sqrMagnitude < 30f * 30f;
                 if (!seen)
                 {
-                    Vector3 chest = bot.ChestPosition;
-                    float visibility = AIVisibility.VisibilityOf(bot.Position, false, false);
-                    foreach (var friend in members[0])
+                    Vector3 chest = other.ChestPosition;
+                    float visibility = AIVisibility.VisibilityOf(other.Position, other.IsCrouched, other.FlashlightOn);
+                    foreach (var friend in members[MySide])
                     {
                         if (friend == null || !friend.IsAlive) continue;
                         if (AIVisibility.CanSee(friend.Position + Vector3.up * 1.5f, Vector3.forward, 360f, 26f, chest, visibility)) { seen = true; break; }
                     }
                 }
-                bot.SetSeen(seen);
+                other.SetSeen(seen);
             }
         }
 
-        // Bots don't push doors; anything closed again (by you) opens when someone walks up to it.
+        // Bots don't push doors; anything closed again opens when someone walks up to it.
         void ReopenDoors()
         {
             foreach (var door in level.doors)
@@ -555,12 +742,12 @@ namespace Swat
 
         // ---- Flags ----
 
-        public bool IsCarrying(ArenaBot bot)
+        public bool IsCarrying(IVersusMember member)
         {
-            return Mode == GameMode.CaptureTheFlag && Flags[1 - bot.Side] != null && Flags[1 - bot.Side].carrier == (ICombatTarget)bot;
+            return Mode == GameMode.CaptureTheFlag && Flags[1 - member.Side] != null && Flags[1 - member.Side].carrier == (ICombatTarget)member;
         }
 
-        public bool PlayerCarrying { get { return Mode == GameMode.CaptureTheFlag && Flags[1] != null && player != null && Flags[1].carrier == (ICombatTarget)player; } }
+        public bool PlayerCarrying { get { return Mode == GameMode.CaptureTheFlag && Flags[1 - MySide] != null && player != null && Flags[1 - MySide].carrier == (ICombatTarget)player; } }
 
         public Vector3 FlagHome(int side)
         {
@@ -604,10 +791,7 @@ namespace Swat
                 if (AIManager.FlatDistance(target.Position, flag.position) < 1.3f)
                 {
                     flag.carrier = target;
-                    Announce(NameOf(target) + " took the " + (flag.side == 0 ? "blue" : "red") + " flag", 1 - flag.side);
-                    AudioManager.Play2D(Sound.ObjectiveTone, 0.55f, flag.side == 0 ? 0.8f : 1.1f, SoundCategory.Interface);
-                    if (target == (ICombatTarget)player) UIManager.Banner("YOU HAVE THE FLAG", "Bring it back to your base", BannerKind.Good);
-                    else if (flag.side == 0) UIManager.Banner("YOUR FLAG WAS TAKEN", "Tag out the carrier to drop it", BannerKind.Bad);
+                    Post(new MatchEvent { kind = MatchEventKind.FlagTaken, side = flag.side, a = IdOf(target), b = -1, weapon = -1 });
                     return;
                 }
             }
@@ -615,18 +799,18 @@ namespace Swat
 
         void Drop(Flag flag)
         {
-            Announce(NameOf(flag.carrier) + " dropped the " + (flag.side == 0 ? "blue" : "red") + " flag", flag.side);
+            int by = IdOf(flag.carrier);
             flag.position = OnNavMesh(flag.carrier.Position);
             flag.carrier = null;
             flag.droppedAt = Time.time;
+            Post(new MatchEvent { kind = MatchEventKind.FlagDropped, side = flag.side, a = by, b = -1, weapon = -1 });
         }
 
         void ReturnFlag(Flag flag, ICombatTarget by)
         {
             flag.carrier = null;
             flag.position = flag.home;
-            Announce(by != null ? NameOf(by) + " returned the " + (flag.side == 0 ? "blue" : "red") + " flag" : "The " + (flag.side == 0 ? "blue" : "red") + " flag returned to base", flag.side);
-            AudioManager.Play2D(Sound.RadioOrder, 0.45f, 1f, SoundCategory.Interface);
+            Post(new MatchEvent { kind = MatchEventKind.FlagReturned, side = flag.side, a = by != null ? IdOf(by) : -1, b = -1, weapon = -1 });
         }
 
         void Capture(Flag flag)
@@ -634,14 +818,12 @@ namespace Swat
             var carrier = flag.carrier;
             int side = 1 - flag.side;
             Score[side] += 1f;
-            var bot = carrier as ArenaBot;
-            if (bot != null) bot.Captures++;
+            var member = carrier as IVersusMember;
+            if (member != null) member.Captures++;
             if (carrier == (ICombatTarget)player) PlayerCaptures++;
             flag.carrier = null;
             flag.position = flag.home;
-            Announce(NameOf(carrier) + " CAPTURED the " + (flag.side == 0 ? "blue" : "red") + " flag", side);
-            UIManager.Banner(side == 0 ? "FLAG CAPTURED" : "RED TEAM SCORED", Mathf.RoundToInt(Score[0]) + " - " + Mathf.RoundToInt(Score[1]), side == 0 ? BannerKind.Good : BannerKind.Bad);
-            AudioManager.Play2D(side == 0 ? Sound.Complete : Sound.Warning, 0.6f, 1f, SoundCategory.Interface);
+            Post(new MatchEvent { kind = MatchEventKind.FlagCaptured, side = flag.side, a = IdOf(carrier), b = -1, weapon = -1 });
         }
 
         void PlaceFlagVisual(Flag flag)
@@ -698,12 +880,7 @@ namespace Swat
             if (owner != ZoneOwner)
             {
                 ZoneOwner = owner;
-                if (owner >= 0)
-                {
-                    Announce((owner == 0 ? "Blue" : "Red") + " team took the zone", owner);
-                    UIManager.Banner(owner == 0 ? "ZONE TAKEN" : "ZONE LOST", owner == 0 ? "Hold it to keep scoring" : "Get in there and take it back", owner == 0 ? BannerKind.Good : BannerKind.Bad);
-                    AudioManager.Play2D(owner == 0 ? Sound.ObjectiveTone : Sound.Warning, 0.55f, 1f, SoundCategory.Interface);
-                }
+                if (owner >= 0) Post(new MatchEvent { kind = MatchEventKind.ZoneTaken, side = owner, a = -1, b = -1, weapon = -1 });
                 UpdateZoneColor();
             }
             if (ZoneOwner >= 0) Score[ZoneOwner] += dt;
@@ -820,37 +997,98 @@ namespace Swat
         {
             if (!running) return;
             bot.RespawnAt = Time.time + RespawnDelay;
-            Credit(info, bot.Side, bot.Callsign);
+            Credit(info, bot.Side, bot.NetId);
         }
 
+        // You were tagged out (offline, hosting or as a client).
         public void OnPlayerDown()
         {
             if (!running || player == null) return;
             PlayerDeaths++;
             PlayerRespawnAt = Time.time + RespawnDelay;
             var hit = player.Health.LastHit;
-            var shooter = hit.shooter as ArenaBot;
+            var shooter = hit.shooter as IVersusMember;
             PlayerTaggedBy = shooter != null ? shooter.Callsign + (hit.weapon != null ? "  (" + hit.weapon.displayName + ")" : "") : "the other team";
-            Credit(hit, 0, "You");
             UIManager.Notify("Tagged out! Back in " + Mathf.RoundToInt(RespawnDelay) + " seconds", true);
+            // Online the host keeps score: tell it who did it.
+            if (Mirror) NetSession.Instance.SendDown(shooter != null ? shooter.NetId : -1, WeaponIndex(hit.weapon));
+            else Credit(hit, MySide, MyId);
         }
 
-        void Credit(DamageInfo info, int victimSide, string victimName)
+        // Host: another player reports being tagged out.
+        public void OnRemoteDown(NetActor remote, int attackerId, int weaponIndex)
         {
-            string by = "Someone";
-            var shooter = info.shooter as ArenaBot;
-            if (shooter != null)
-            {
-                shooter.Kills++;
-                by = shooter.Callsign;
-            }
-            else if (info.byPlayer)
-            {
-                PlayerKills++;
-                by = "You";
-            }
+            if (!running || Mirror || remote == null || remote.Down) return;
+            remote.SetDown(true);
+            remote.Deaths++;
+            remote.RespawnAt = Time.time + RespawnDelay;
+            var info = new DamageInfo { weapon = WeaponAt(weaponIndex), shooter = Find(attackerId) as MonoBehaviour, byPlayer = attackerId == MyId };
+            Credit(info, remote.Side, remote.NetId);
+        }
+
+        void Credit(DamageInfo info, int victimSide, int victimId)
+        {
+            var member = info.shooter as IVersusMember;
+            if (member != null) member.Kills++;
+            else if (info.byPlayer) PlayerKills++;
             if (Mode == GameMode.TeamDeathmatch) Score[1 - victimSide] += 1f;
-            Announce(by + "  >  " + victimName + (info.weapon != null ? "   [" + info.weapon.displayName + "]" : ""), 1 - victimSide);
+            int killer = member != null ? member.NetId : info.byPlayer ? MyId : -1;
+            Post(new MatchEvent { kind = MatchEventKind.Takedown, a = killer, b = victimId, side = victimSide, weapon = WeaponIndex(info.weapon) });
+        }
+
+        // ---- Events: the feed and banners ----
+
+        // Host or offline: something happened. Everyone (including you) hears about it.
+        void Post(MatchEvent e)
+        {
+            Apply(e);
+            if (NetSession.IsHost) NetSession.Instance.SendEvent(e);
+        }
+
+        public void Apply(MatchEvent e)
+        {
+            string flagName = SideName(e.side).ToLowerInvariant() + " flag";
+            switch (e.kind)
+            {
+                case MatchEventKind.Takedown:
+                    var weapon = WeaponAt(e.weapon);
+                    Announce(Name(e.a) + "  >  " + Name(e.b) + (weapon != null ? "   [" + weapon.displayName + "]" : ""), 1 - e.side);
+                    // As a client, your takedowns are confirmed by the host.
+                    if (Mirror && e.a == MyId && player != null)
+                    {
+                        PlayerKills++;
+                        player.Weapons.ConfirmTakedown();
+                    }
+                    break;
+                case MatchEventKind.FlagTaken:
+                    Announce(Name(e.a) + " took the " + flagName, 1 - e.side);
+                    AudioManager.Play2D(Sound.ObjectiveTone, 0.55f, e.side == MySide ? 0.8f : 1.1f, SoundCategory.Interface);
+                    if (e.a == MyId) UIManager.Banner("YOU HAVE THE FLAG", "Bring it back to your base", BannerKind.Good);
+                    else if (e.side == MySide) UIManager.Banner("YOUR FLAG WAS TAKEN", "Tag out the carrier to drop it", BannerKind.Bad);
+                    break;
+                case MatchEventKind.FlagDropped:
+                    Announce(Name(e.a) + " dropped the " + flagName, e.side);
+                    break;
+                case MatchEventKind.FlagReturned:
+                    Announce(e.a >= 0 ? Name(e.a) + " returned the " + flagName : "The " + flagName + " returned to base", e.side);
+                    AudioManager.Play2D(Sound.RadioOrder, 0.45f, 1f, SoundCategory.Interface);
+                    break;
+                case MatchEventKind.FlagCaptured:
+                    int scorer = 1 - e.side;
+                    Announce(Name(e.a) + " CAPTURED the " + flagName, scorer);
+                    UIManager.Banner(scorer == MySide ? "FLAG CAPTURED" : SideName(scorer).ToUpperInvariant() + " TEAM SCORED",
+                        scorer == MySide ? "One more for your team" : "Keep your flag at home", scorer == MySide ? BannerKind.Good : BannerKind.Bad);
+                    AudioManager.Play2D(scorer == MySide ? Sound.Complete : Sound.Warning, 0.6f, 1f, SoundCategory.Interface);
+                    break;
+                case MatchEventKind.ZoneTaken:
+                    Announce(SideName(e.side) + " team took the zone", e.side);
+                    UIManager.Banner(e.side == MySide ? "ZONE TAKEN" : "ZONE LOST", e.side == MySide ? "Hold it to keep scoring" : "Get in there and take it back", e.side == MySide ? BannerKind.Good : BannerKind.Bad);
+                    AudioManager.Play2D(e.side == MySide ? Sound.ObjectiveTone : Sound.Warning, 0.55f, 1f, SoundCategory.Interface);
+                    break;
+                case MatchEventKind.PlayerLeft:
+                    Announce((string.IsNullOrEmpty(e.name) ? "A player" : e.name) + " left the match", e.side);
+                    break;
+            }
         }
 
         void Announce(string text, int side)
@@ -859,12 +1097,68 @@ namespace Swat
             if (Feed.Count > 6) Feed.RemoveAt(0);
         }
 
+        // ---- Who is who ----
+
+        public IVersusMember Find(int id)
+        {
+            if (id < 0) return null;
+            foreach (var other in Others) if (other.NetId == id) return other;
+            return null;
+        }
+
+        // You, or anyone else, by actor id.
+        public ICombatTarget TargetById(int id)
+        {
+            if (id < 0) return null;
+            if (id == MyId) return player;
+            return Find(id);
+        }
+
+        public int IdOf(ICombatTarget target)
+        {
+            if (target == null) return -1;
+            if (target == (ICombatTarget)player) return MyId;
+            var member = target as IVersusMember;
+            return member != null ? member.NetId : -1;
+        }
+
+        string Name(int id)
+        {
+            if (id < 0) return "Someone";
+            if (id == MyId) return "You";
+            var member = Find(id);
+            return member != null ? member.Callsign : "Someone";
+        }
+
         public string NameOf(ICombatTarget target)
         {
             if (target == null) return "Someone";
             if (target == (ICombatTarget)player) return "You";
-            var bot = target as ArenaBot;
-            return bot != null ? bot.Callsign : "Someone";
+            var member = target as IVersusMember;
+            return member != null ? member.Callsign : "Someone";
+        }
+
+        // ---- Online: the host's view of the match, applied on the other players' copies ----
+
+        public void ApplyState(float elapsed, float blue, float red, float zoneControl, int zoneOwner, int inZoneBlue, int inZoneRed)
+        {
+            Elapsed = elapsed;
+            Score[0] = blue;
+            Score[1] = red;
+            ZoneControl = zoneControl;
+            ZoneOwner = zoneOwner;
+            ZoneCount[0] = inZoneBlue;
+            ZoneCount[1] = inZoneRed;
+        }
+
+        public void ApplyFlag(int side, Vector3 position, int carrierId, float droppedAgo)
+        {
+            var flag = Flags[side];
+            if (flag == null) return;
+            flag.carrier = TargetById(carrierId);
+            flag.position = flag.carrier != null ? flag.carrier.Position : position;
+            if ((position - flag.home).sqrMagnitude < 0.0025f) flag.position = flag.home;
+            flag.droppedAt = Time.time - droppedAgo;
         }
 
         // ---- End of match ----
@@ -885,13 +1179,29 @@ namespace Swat
             running = false;
             var result = new VersusResult
             {
-                mode = Mode, mapName = MapName, winner = winner, reason = reason, time = Elapsed,
+                mode = Mode, mapName = MapName, winner = winner, side = MySide, reason = reason, time = Elapsed,
                 blueScore = Mathf.FloorToInt(Score[0]), redScore = Mathf.FloorToInt(Score[1]), scoreLimit = ScoreLimit,
                 playerKills = PlayerKills, playerDeaths = PlayerDeaths, playerCaptures = PlayerCaptures,
+                online = NetSession.Online, hosted = NetSession.IsHost,
             };
-            result.rows.Add(new VersusResult.ScoreRow { name = player != null ? player.Officer.callsign + " (you)" : "You", side = 0, kills = PlayerKills, deaths = PlayerDeaths, captures = PlayerCaptures, isPlayer = true });
-            foreach (var bot in Bots) result.rows.Add(new VersusResult.ScoreRow { name = bot.Callsign, side = bot.Side, kills = bot.Kills, deaths = bot.Deaths, captures = bot.Captures });
+            result.rows.Add(new VersusResult.ScoreRow { name = LocalName, side = MySide, kills = PlayerKills, deaths = PlayerDeaths, captures = PlayerCaptures, actorId = MyId, isPlayer = true });
+            foreach (var other in Others)
+                result.rows.Add(new VersusResult.ScoreRow { name = other.Callsign, side = other.Side, kills = other.Kills, deaths = other.Deaths, captures = other.Captures, actorId = other.NetId });
+            SortRows(result);
+            if (NetSession.IsHost) NetSession.Instance.SendEnd(result);
+            GameManager.Instance.EndMatch(result);
+        }
+
+        public static void SortRows(VersusResult result)
+        {
             result.rows.Sort((a, b) => a.side != b.side ? a.side.CompareTo(b.side) : (b.kills * 2 + b.captures * 5 - b.deaths).CompareTo(a.kills * 2 + a.captures * 5 - a.deaths));
+        }
+
+        // Online, not hosting: the host ended the match.
+        public void Finish(VersusResult result)
+        {
+            if (!running) return;
+            running = false;
             GameManager.Instance.EndMatch(result);
         }
     }

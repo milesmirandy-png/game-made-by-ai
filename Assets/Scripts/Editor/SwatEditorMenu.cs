@@ -58,6 +58,19 @@ namespace Swat.EditorTools
             EditorApplication.isPlaying = true;
         }
 
+        // Plays the game and takes the screenshot tour (see ScreenshotTour); the pictures land in <project>/Screenshots.
+        [MenuItem("SWAT/Screenshot Tour")]
+        static void ScreenshotTourMenu()
+        {
+            if (EditorApplication.isPlaying)
+            {
+                ScreenshotTour.Begin();
+                return;
+            }
+            SessionState.SetBool(ScreenshotTour.RequestKey, true);
+            Play();
+        }
+
         // Writes every built-in weapon, attachment, armor, equipment item, officer,
         // suspect type and mission as an asset. GameData prefers these assets
         // over the built-in defaults (matched by id), so they can be edited in

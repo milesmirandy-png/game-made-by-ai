@@ -350,8 +350,8 @@ namespace Swat
                 {
                     var flag = match.Flags[side];
                     if (flag == null) continue;
-                    var carrier = flag.carrier as ArenaBot;
-                    if (carrier != null && carrier.Side == 1 && !carrier.Seen) continue;
+                    var carrier = flag.carrier as IVersusMember;
+                    if (carrier != null && carrier.Side != match.MySide && !carrier.Seen) continue;
                     Vector2 p = ToMap(flag.position);
                     var color = VersusHUD.SideColor(side);
                     Box(new Rect(p.x - 1f, p.y - 10f, 2f, 10f), Color.white);
@@ -361,10 +361,10 @@ namespace Swat
 
         void DrawVersusPeople(VersusMatch match, float r)
         {
-            foreach (var bot in match.Bots)
+            foreach (var other in match.Others)
             {
-                if (!bot.IsAlive || (bot.Side == 1 && !bot.Seen)) continue;
-                Dot(ToMap(bot.Position), r * 0.9f, VersusHUD.SideColor(bot.Side));
+                if (!other.IsAlive || (other.Side != match.MySide && !other.Seen)) continue;
+                Dot(ToMap(other.Position), r * (other.IsHuman ? 1.1f : 0.9f), VersusHUD.SideColor(other.Side));
             }
         }
 

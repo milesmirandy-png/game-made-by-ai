@@ -17,6 +17,8 @@ namespace Swat
 
         public GameState State { get; private set; }
         public bool IsPlaying { get { return State == GameState.Playing; } }
+        // The world keeps going: playing, or in the pause menu during an online match (nobody else pauses).
+        public bool WorldRunning { get { return State == GameState.Playing || (State == GameState.Paused && NetSession.Online); } }
         public bool MapOpen { get; private set; }       // Tab: map overlay, game keeps running
         public bool PlanningMode { get; private set; }  // Space: interactive map, time paused or slowed
         public bool ConsoleOpen { get { return UIManager.Instance != null && UIManager.Instance.ConsoleOpen; } }
@@ -57,6 +59,10 @@ namespace Swat
         Transform van;
         float stateChangedAt, failAt = -1f, deployStarted, hitStopUntil;
         bool indoorAmbience;
+        // Online: which team you play on, and (joining) whether the host's match setup is still on its way.
+        int onlineSide;
+        bool waitingForSetup;
+        Transform actorsRoot;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
@@ -88,6 +94,7 @@ namespace Swat
             gameObject.AddComponent<AIManager>();
             gameObject.AddComponent<MissionManager>();
             gameObject.AddComponent<VersusMatch>();
+            gameObject.AddComponent<NetSession>();
             gameObject.AddComponent<TacticalIntel>();
             gameObject.AddComponent<SquadCommandManager>();
             gameObject.AddComponent<UIManager>();
@@ -155,7 +162,8 @@ namespace Swat
         void UpdateTimeScale()
         {
             float scale = 1f;
-            if (State == GameState.Paused) scale = 0f;
+            if (NetSession.Online) scale = 1f; // online, time never stops or slows for one player
+            else if (State == GameState.Paused) scale = 0f;
             else if (State == GameState.Playing)
             {
                 if (PlanningMode) scale = SaveManager.Settings.planningPauses ? 0f : 0.2f;
@@ -237,6 +245,7 @@ namespace Swat
 
         public void OpenVersusSetup()
         {
+            StopAllCoroutines(); // a match still loading (online: the host left meanwhile)
             if (Level != null) ClearMission();
             ShowHeadquarters(Headquarters.missionsCamera, Headquarters.missionsTarget, false);
             BrowseMode = false;
@@ -265,11 +274,52 @@ namespace Swat
             LastResult = null;
             var options = SaveManager.Progress.versus;
             options.matchesPlayed++;
-            if (result.winner == 0) options.matchesWon++;
+            if (result.winner == result.side) options.matchesWon++;
             SaveManager.Save();
-            AudioManager.Play2D(result.winner == 0 ? Sound.Complete : Sound.Fail, 0.7f, 1f, SoundCategory.Interface);
+            AudioManager.Play2D(result.winner == result.side ? Sound.Complete : Sound.Fail, 0.7f, 1f, SoundCategory.Interface);
             AudioManager.Instance.SetMusic(Sound.MusicMenu);
             SetState(GameState.Debrief);
+        }
+
+        // Online: the host has started a match. Everyone builds the same map from the same seed.
+        public void StartOnlineMatch(VersusOptions options, int seed, int side)
+        {
+            var mission = VersusMatch.CreateMission(options);
+            mission.seed = seed;
+            onlineSide = side;
+            OfficerSelectionManager.TimeOverride = -1;
+            SelectMission(mission);
+            StopAllCoroutines();
+            StartCoroutine(LoadMission(Plan));
+        }
+
+        // Joining: the host's match setup arrived (possibly before or after this copy finished building the map).
+        public void OnOnlineSetup()
+        {
+            if (!waitingForSetup || Level == null || Plan == null) return;
+            if (TryBeginMirror(Plan.mission)) VersusMatch.Instance.ShowTeams(State == GameState.Playing);
+        }
+
+        bool TryBeginMirror(MissionData mission)
+        {
+            var session = NetSession.Instance;
+            if (session == null || session.PendingSetup == null) return false;
+            VersusMatch.Instance.BeginMirror(mission, session.Options, Level, actorsRoot, Player, session.PendingSetup);
+            session.OnMirrorStarted();
+            waitingForSetup = false;
+            return true;
+        }
+
+        // Pause menu "Leave match": online, a player leaves the game; the host takes everyone back to the lobby.
+        public void LeaveMatch()
+        {
+            if (NetSession.IsHost)
+            {
+                NetSession.Instance.HostToLobby();
+                return;
+            }
+            if (NetSession.IsClient) NetSession.Instance.Leave("You left the match.");
+            LeaveMissionScreens();
         }
 
         // The "back" target for screens shown before or after a mission.
@@ -372,6 +422,12 @@ namespace Swat
         public void RestartMission()
         {
             if (Plan == null) return;
+            // Online, the host restarts the match for everyone; the others wait for that.
+            if (NetSession.Online)
+            {
+                if (NetSession.IsHost) NetSession.Instance.HostStartMatch();
+                return;
+            }
             // Same seed, same variation.
             var time = Plan.timeOfDay;
             Plan = MissionRandomizer.Plan(Plan.mission, Plan.seed, Plan.difficulty);
@@ -384,6 +440,8 @@ namespace Swat
             Time.timeScale = 1f;
             failAt = -1f;
             FailReason = null;
+            waitingForSetup = false;
+            actorsRoot = null;
             MissionManager.Instance.Abort();
             VersusMatch.Instance.Clear();
             if (missionRoot != null)
@@ -414,13 +472,17 @@ namespace Swat
             var mission = plan.mission;
             Headquarters.root.gameObject.SetActive(false);
             missionRoot = new GameObject("Mission: " + mission.displayName).transform;
+            // Online, every copy of the game builds the map from the same seed so the details match too.
+            if (NetSession.Online) Random.InitState(plan.seed);
             Level = BuildMap(mission.mapId, missionRoot);
             navMesh = NavMeshBaker.Bake(Level.root, Level.navBounds);
             AIManager.Instance.Begin(Level);
 
             var actors = new GameObject("Actors").transform;
             actors.SetParent(missionRoot, false);
+            actorsRoot = actors;
             bool versus = mission.IsVersus;
+            bool joined = versus && NetSession.IsClient;
             // Game modes have no suspects, civilians, security devices or locked doors.
             if (!versus) MissionRandomizer.Populate(plan, Level, actors);
             ApplyLighting();
@@ -430,7 +492,7 @@ namespace Swat
             // The team.
             var leader = OfficerSelectionManager.Leader;
             var leaderLoadout = GameData.LoadoutFor(leader);
-            Player = PlayerController.Spawn(missionRoot, Level.playerSpawn, Level.playerYaw, leader, leaderLoadout, mission.bonusEquipment);
+            Player = PlayerController.Spawn(missionRoot, Level.playerSpawn, Level.playerYaw, leader, leaderLoadout, mission.bonusEquipment, joined ? onlineSide : 0);
             dust.Follow(Player.transform);
             AIManager.Instance.RegisterPlayer(Player);
             var squad = OfficerSelectionManager.Squad;
@@ -449,7 +511,8 @@ namespace Swat
             if (versus)
             {
                 MissionManager.Instance.Clear();
-                VersusMatch.Instance.Begin(mission, SaveManager.Progress.versus, Level, actors, Player);
+                if (joined) waitingForSetup = !TryBeginMirror(mission);
+                else VersusMatch.Instance.Begin(mission, NetSession.IsHost ? NetSession.Instance.Options : SaveManager.Progress.versus, Level, actors, Player);
                 VersusMatch.Instance.ShowTeams(false);
             }
             else MissionManager.Instance.Begin(plan);
@@ -528,7 +591,7 @@ namespace Swat
 
         public void OnPlayerDown()
         {
-            if (State != GameState.Playing) return;
+            if (!WorldRunning) return;
             if (VersusMatch.Active)
             {
                 // Game modes: tagged out until the respawn, never a failed mission.
@@ -649,6 +712,17 @@ namespace Swat
             if (State == GameState.Paused) SetState(GameState.Playing);
         }
 
+        // The screenshot tour: past the van arrival, and the map overlay on or off.
+        public void SkipDeployment()
+        {
+            if (State == GameState.Deploying && !waitingForSetup) FinishDeployment();
+        }
+
+        public void SetMapOpen(bool open)
+        {
+            if (State == GameState.Playing && !PlanningMode) MapOpen = open;
+        }
+
         public void SetPlanning(bool on)
         {
             if (State != GameState.Playing) return;
@@ -672,11 +746,26 @@ namespace Swat
 
         void Update()
         {
-            if (GameInput.Down(InputAction.Screenshot)) ScreenshotTool.Capture(State.ToString());
+            if (GameInput.Down(InputAction.Screenshot))
+            {
+                if (GameInput.KeyHeld(KeyCode.LeftShift) || GameInput.KeyHeld(KeyCode.RightShift)) ScreenshotTour.Begin();
+                else ScreenshotTool.Capture(State.ToString());
+            }
 
             switch (State)
             {
                 case GameState.Deploying:
+                    if (NetSession.Online && Plan != null && Plan.mission.IsVersus)
+                    {
+                        // Online there's no van ride: in as soon as the match is set up.
+                        if (!waitingForSetup) FinishDeployment();
+                        else if (Time.unscaledTime - deployStarted > 20f)
+                        {
+                            NetSession.Instance.Leave("The host didn't send the match. Try joining again.");
+                            OpenVersusSetup();
+                        }
+                        break;
+                    }
                     bool skip = Time.unscaledTime - deployStarted > 0.4f && (GameInput.Confirm || GameInput.KeyDown(KeyCode.Space) || GameInput.KeyDown(KeyCode.Mouse0));
                     if (skip || (arrival != null && arrival.Done && Time.unscaledTime - deployStarted > 3.4f)) FinishDeployment();
                     break;
@@ -693,7 +782,7 @@ namespace Swat
                         else if (SquadCommandManager.Instance.WheelOpen) { }
                         else Pause();
                     }
-                    else if (GameInput.Down(InputAction.PlanningMode)) SetPlanning(!PlanningMode);
+                    else if (GameInput.Down(InputAction.PlanningMode) && !NetSession.Online) SetPlanning(!PlanningMode);
                     else if (GameInput.Down(InputAction.TacticalMap) && !PlanningMode) MapOpen = !MapOpen;
                     if (GameInput.Down(InputAction.Objectives)) ShowObjectives = !ShowObjectives;
                     if (failAt > 0f && Time.time >= failAt) EndMission(false, FailReason);

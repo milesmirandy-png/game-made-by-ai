@@ -3,8 +3,9 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Press F12 (remappable) to save a screenshot. In the editor they go to
-    // the project's Screenshots folder; in a built game, to the save folder.
+    // Press F12 (remappable) to save a screenshot; Shift+F12 takes the whole
+    // screenshot tour (ScreenshotTour). In the editor they go to the project's
+    // Screenshots folder; in a built game, to the save folder.
     public static class ScreenshotTool
     {
         public static string Folder
@@ -21,13 +22,19 @@ namespace Swat
 
         public static void Capture(string label)
         {
+            Capture("SWAT_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + label, false);
+        }
+
+        // Saves <name>.png; quiet skips the "saved" message (the screenshot tour takes many in a row).
+        public static void Capture(string name, bool quiet)
+        {
             try
             {
                 Directory.CreateDirectory(Folder);
-                string name = "SWAT_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + label + ".png";
-                string path = Path.Combine(Folder, name);
+                string file = name + ".png";
+                string path = Path.Combine(Folder, file);
                 ScreenCapture.CaptureScreenshot(path);
-                UIManager.Notify("Screenshot saved: " + name, false, 0.3f);
+                if (!quiet) UIManager.Notify("Screenshot saved: " + file, false, 0.3f);
             }
             catch (System.Exception e)
             {

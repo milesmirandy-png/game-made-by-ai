@@ -9,7 +9,20 @@ This folder (`<project>/Screenshots/`, next to `Assets/`) is the project's
 screenshot directory. It sits outside `Assets/` on purpose, so Unity doesn't
 import every capture as a texture.
 
-## How to capture them
+## Quickest way: the screenshot tour
+
+Open the project in Unity 6, set the Game view to 1920x1080, then use the menu
+**SWAT -> Screenshot Tour** (or press **Shift+F12** while the game is running).
+The game plays itself through the main menu, level select, a briefing, the
+officer and loadout screens, a mission (deployment, gameplay, tactical map,
+pause menu), the Game Modes screen, a Capture the Flag and a Zone Control
+match, and the level creator, saving a screenshot of each here as
+`Tour_<date>_<time>_<number>_<what>.png`. Keep your hands off the controls
+while it runs (about a minute and a half); press **Esc** twice to stop it.
+These are real captures of the running game. If an AI assistant is connected
+to your Unity editor, it can run the same menu item and read the files.
+
+## How to capture them by hand
 
 1. Open the project in Unity 6 and press **Play** in `Assets/Scenes/Boot.unity`
    (see the main README). Set the Game view to a 16:9 resolution such as

@@ -298,6 +298,13 @@ namespace Swat
             MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
         }
 
+        // Online, the host confirms your takedowns a moment after the hit.
+        public void ConfirmTakedown()
+        {
+            LastKillTime = Time.time;
+            AudioManager.Play2D(Sound.Kill, 0.5f, 1f, SoundCategory.Interface);
+        }
+
         // Game modes: full ammunition again after a respawn.
         public void Resupply()
         {
@@ -321,10 +328,13 @@ namespace Swat
             float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
             var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player };
 
+            var ends = NetSession.ShotEnds;
+            ends.Clear();
             if (data.blastRadius > 0f)
             {
                 // Marking grenade: flies to the first thing it meets and bursts there.
                 Vector3 landed = WeaponEffects.Trace(origin, WeaponEffects.Scatter(player.AimDirection, Spread), data.range, muzzle, data.tracerColor, data.tracerWidth);
+                ends.Add(landed);
                 int tagged = WeaponEffects.Blast(landed, data.blastRadius, damage);
                 hitSomeone = tagged > 0;
                 tookDown = tagged > 0;
@@ -334,6 +344,7 @@ namespace Swat
             {
                 Vector3 direction = WeaponEffects.Scatter(player.AimDirection, Spread);
                 var victim = WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor);
+                ends.Add(WeaponEffects.LastEnd);
                 if (i == 0) LastShotEnd = origin + direction * data.range;
                 if (victim == null) continue;
                 hitSomeone = true;
@@ -341,6 +352,8 @@ namespace Swat
             }
             if (data.lessLethal && Overcharged) Overcharged = false;
             lastShotTime = Time.time;
+            // Online, everyone else sees the shot.
+            if (NetSession.Online && VersusMatch.Active) NetSession.Instance.SendShot(VersusMatch.Instance.MyId, data, muzzle, ends);
 
             // Feel: the gun and body kick, the camera jolts back along the aim, flame and flash at the muzzle.
             bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
@@ -388,6 +401,12 @@ namespace Swat
 
         void UseSelectedEquipment()
         {
+            // Grenades, wedges and charges would only happen on your own screen online.
+            if (NetSession.Online)
+            {
+                UIManager.Notify("Tactical equipment is off in online matches");
+                return;
+            }
             var slot = Inventory.SelectedSlot;
             if (slot == null)
             {

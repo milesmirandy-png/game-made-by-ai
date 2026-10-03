@@ -7,6 +7,9 @@ namespace Swat
     // muzzle flash, sound and the noise the AI can hear.
     public static class WeaponEffects
     {
+        // Where the last Shoot or Trace ended (online play shows the same tracer on other screens).
+        public static Vector3 LastEnd { get; private set; }
+
         // Returns the damageable that was hit (or null).
         public static IDamageable Shoot(Vector3 origin, Vector3 direction, float range, DamageInfo damage, Vector3 muzzle, Color tracer)
         {
@@ -39,6 +42,7 @@ namespace Swat
             }
             float width = damage.weapon != null ? damage.weapon.tracerWidth : 0.04f;
             EffectsManager.Instance.SpawnTracer(muzzle, end, tracer, width, 0.06f);
+            LastEnd = end;
             if (damage.attacker != Team.Police) NearMiss(origin, end, victim);
             return victim;
         }
@@ -50,6 +54,7 @@ namespace Swat
             RaycastHit hit;
             if (Physics.Raycast(origin, direction, out hit, range, Layers.ShootableMask, QueryTriggerInteraction.Ignore)) end = hit.point - direction * 0.1f;
             EffectsManager.Instance.SpawnTracer(muzzle, end, tracer, width, 0.09f);
+            LastEnd = end;
             return end;
         }
 
@@ -74,16 +79,22 @@ namespace Swat
                 victim.TakeDamage(info);
                 if (!victim.IsAlive) tagged++;
             }
+            BlastVisual(point, radius);
+            Noise.Emit(point, 30f, NoiseKind.Explosion);
+            return tagged;
+        }
+
+        // The look and sound of a marking-grenade burst (also shown for other players' grenades online).
+        public static void BlastVisual(Vector3 point, float radius)
+        {
             var effects = EffectsManager.Instance;
             effects.Burst(point + Vector3.up * 0.2f, Vector3.up, new Color(1f, 0.55f, 0.15f), 14, 5f, 0.12f, 1.5f);
             effects.Burst(point + Vector3.up * 0.2f, Vector3.up, new Color(0.95f, 0.95f, 0.9f), 8, 3f, 0.1f);
             effects.HitSpark(point + Vector3.up * 0.4f, radius * 0.6f);
             effects.FlashLight(point + Vector3.up * 0.5f, new Color(1f, 0.6f, 0.25f), 6f, radius * 3f, 0.15f);
             AudioManager.Play(Sound.Burst, point, 0.9f, Random.Range(0.95f, 1.05f), SoundCategory.Weapons);
-            Noise.Emit(point, 30f, NoiseKind.Explosion);
             var game = GameManager.Instance;
             if (game != null && game.Player != null && (game.Player.Position - point).sqrMagnitude < 15f * 15f) game.CameraRig.Shake(0.35f);
-            return tagged;
         }
 
         // Shots that pass close to the player without hitting make a sharp whiz.

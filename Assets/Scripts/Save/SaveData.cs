@@ -123,6 +123,8 @@ namespace Swat
         public int botSkill = 1;           // 0 easy, 1 normal, 2 hard
         public int timeOfDay;
         public int matchesPlayed, matchesWon;
+        public string onlineName = "";      // your name in online games (empty: your officer's callsign)
+        public string joinAddress = "";     // the last host address you joined
     }
 
     [Serializable]

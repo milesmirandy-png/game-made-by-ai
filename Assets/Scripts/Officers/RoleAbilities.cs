@@ -40,6 +40,11 @@ namespace Swat
         // Kicks open the locked (non-electronic) door in front of the player.
         static bool DoorKick(PlayerController player)
         {
+            if (NetSession.Online)
+            {
+                UIManager.Notify("Doors stay as they are in online matches");
+                return false;
+            }
             Vector3 ahead = player.Position + player.AimDirection * 0.8f;
             var door = AIManager.Instance.FindDoor(ahead, 2f, d => d.State == DoorState.Locked || d.State == DoorState.Closed);
             if (door == null)

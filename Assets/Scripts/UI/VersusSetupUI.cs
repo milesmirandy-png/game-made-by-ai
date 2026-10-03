@@ -6,13 +6,23 @@ namespace Swat
     // The Game Modes screen: pick Team Deathmatch, Capture the Flag or Zone
     // Control, a map, team size, score and time limits, bot skill and time of
     // day; check your team, then go to the squad or loadout screens or start.
+    // The online panel hosts or joins a game with friends; once you have
+    // joined someone else's game this screen shows their lobby instead.
     public class VersusSetupUI
     {
         static readonly string[] TimeNames = { "Day", "Evening", "Night" };
         readonly Dictionary<string, MissionData> thumbnails = new Dictionary<string, MissionData>();
+        readonly OnlineLobbyUI online = new OnlineLobbyUI();
 
         public void Draw(GameManager game)
         {
+            var session = NetSession.Instance;
+            if (session != null && session.Role == NetRole.Client && session.Phase != NetPhase.Connecting)
+            {
+                online.DrawClientLobby(game, Thumb);
+                return;
+            }
+            bool hosting = NetSession.IsHost;
             float w = UITheme.Width, h = UITheme.Height;
             var o = SaveManager.Progress.versus;
             o.mode = Mathf.Clamp(o.mode, 1, 3);
@@ -21,7 +31,7 @@ namespace Swat
             bool changed = false;
 
             UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.02f, 0.03f, 0.05f, 0.86f));
-            UITheme.Header(new Rect(60f, 36f, w - 120f, 60f), "Game Modes", "Training exercises with marking rounds: you and your squad against the Red Team");
+            UITheme.Header(new Rect(60f, 36f, w - 120f, 60f), "Game Modes", hosting ? "Hosting an online game: pick the match, then start it for everyone" : "Training exercises with marking rounds: you and your squad against the Red Team, or online with friends");
 
             // Modes.
             float x = 60f, y = 120f, cw = 520f;
@@ -40,9 +50,9 @@ namespace Swat
             y += 6f;
             UITheme.Text(new Rect(x, y, cw, 22f), "MATCH SETTINGS", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
             y += 28f;
-            var sizes = new[] { "2 vs 2", "3 vs 3", "4 vs 4", "5 vs 5", "6 vs 6" };
-            int size = UITheme.Stepper(new Rect(x, y, cw, 34f), "Team size", Mathf.Clamp(o.teamSize - 2, 0, 4), sizes);
-            if (size != o.teamSize - 2) { o.teamSize = size + 2; changed = true; }
+            var sizes = new[] { "1 vs 1", "2 vs 2", "3 vs 3", "4 vs 4", "5 vs 5", "6 vs 6" };
+            int size = UITheme.Stepper(new Rect(x, y, cw, 34f), "Team size", Mathf.Clamp(o.teamSize - 1, 0, 5), sizes);
+            if (size != o.teamSize - 1) { o.teamSize = size + 1; changed = true; }
             y += 40f;
             var scores = new string[3];
             for (int i = 0; i < 3; i++) scores[i] = VersusMatch.ScoreLimitFor(mode, i) + " " + VersusMatch.ScoreUnit(mode);
@@ -77,21 +87,43 @@ namespace Swat
 
             // Your team and record.
             float ty = 148f + Mathf.Ceil(VersusMatch.MapIds.Length / (float)columns) * (th + 12f) + 8f;
-            var teamRect = new Rect(mx, ty, mw, h - ty - 120f);
+            float th2 = h - ty - 120f;
+            float tw = Mathf.Floor(mw * 0.4f);
+            var teamRect = new Rect(mx, ty, tw, th2);
             UITheme.Panel(teamRect);
-            UITheme.Text(new Rect(teamRect.x + 18f, teamRect.y + 10f, mw - 36f, 22f), "BLUE TEAM", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
-            var names = new List<string> { OfficerSelectionManager.Leader.callsign + " (you)" };
-            foreach (var officer in OfficerSelectionManager.Squad) names.Add(officer.callsign);
-            int fill = Mathf.Max(0, o.teamSize - names.Count);
-            string line = string.Join("   ", names.GetRange(0, Mathf.Min(names.Count, o.teamSize)).ToArray()) + (fill > 0 ? "   + " + fill + " more officer" + (fill > 1 ? "s" : "") : "");
-            UITheme.Text(new Rect(teamRect.x + 18f, teamRect.y + 36f, mw - 36f, 24f), line, 16, UITheme.TextColor);
-            UITheme.Text(new Rect(teamRect.x + 18f, teamRect.y + 62f, mw - 36f, 40f),
-                "Squadmates play as bots with their own loadouts. You use your loadout; your team respawns at the van, the Red Team deep inside. Every usable door starts open. Ammo refills at the van and when you respawn.", 14, UITheme.Dim);
-            UITheme.Text(new Rect(teamRect.x + 18f, teamRect.yMax - 28f, mw - 36f, 22f), "Matches played " + o.matchesPlayed + "   |   Won " + o.matchesWon, 14, UITheme.Faint);
+            float tx = teamRect.x + 18f, tcw = tw - 36f;
+            if (hosting)
+            {
+                UITheme.Text(new Rect(tx, teamRect.y + 10f, tcw, 22f), "TEAMS", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
+                UITheme.Text(new Rect(tx, teamRect.y + 36f, tcw, 44f), "Blue:  " + OnlineLobbyUI.Lineup(o, 0), 15, VersusHUD.SideColor(0));
+                UITheme.Text(new Rect(tx, teamRect.y + 84f, tcw, 44f), "Red:  " + OnlineLobbyUI.Lineup(o, 1), 15, VersusHUD.SideColor(1));
+                UITheme.Text(new Rect(tx, teamRect.y + 134f, tcw, 80f), "Everyone plays their own officer and loadout. Tactical equipment is off and doors stay open in online matches. The game doesn't pause online.", 13, UITheme.Dim);
+            }
+            else
+            {
+                UITheme.Text(new Rect(tx, teamRect.y + 10f, tcw, 22f), "BLUE TEAM", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
+                var names = new List<string> { OfficerSelectionManager.Leader.callsign + " (you)" };
+                foreach (var officer in OfficerSelectionManager.Squad) names.Add(officer.callsign);
+                int fill = Mathf.Max(0, o.teamSize - names.Count);
+                string line = string.Join("   ", names.GetRange(0, Mathf.Min(names.Count, o.teamSize)).ToArray()) + (fill > 0 ? "   + " + fill + " more officer" + (fill > 1 ? "s" : "") : "");
+                UITheme.Text(new Rect(tx, teamRect.y + 36f, tcw, 44f), line, 16, UITheme.TextColor);
+                UITheme.Text(new Rect(tx, teamRect.y + 84f, tcw, 120f),
+                    "Squadmates play as bots with their own loadouts. You use your loadout; your team respawns at the van, the Red Team deep inside. Every usable door starts open. Ammo refills at the van and when you respawn.", 14, UITheme.Dim);
+            }
+            UITheme.Text(new Rect(tx, teamRect.yMax - 28f, tcw, 22f), "Matches played " + o.matchesPlayed + "   |   Won " + o.matchesWon, 14, UITheme.Faint);
+            online.DrawPanel(new Rect(mx + tw + 12f, ty, mw - tw - 12f, th2), game);
 
-            if (changed) SaveManager.Save();
+            if (changed)
+            {
+                SaveManager.Save();
+                if (hosting) session.SendLobby();
+            }
 
-            if (UITheme.Button(new Rect(60f, h - 90f, 200f, 50f), "< Main menu")) game.GoToMainMenu();
+            if (UITheme.Button(new Rect(60f, h - 90f, 200f, 50f), "< Main menu"))
+            {
+                if (hosting) session.Leave("You closed the online game.");
+                game.GoToMainMenu();
+            }
             if (UITheme.Button(new Rect(280f, h - 90f, 200f, 50f), "Squad"))
             {
                 game.PrepareVersus();
@@ -102,7 +134,11 @@ namespace Swat
                 game.PrepareVersus();
                 game.OpenLoadout(false);
             }
-            if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), "START MATCH  >", true, true, 22)) game.StartVersus();
+            if (hosting)
+            {
+                if (UITheme.Button(new Rect(w - 420f, h - 90f, 360f, 50f), "START ONLINE MATCH  >", true, true, 21)) session.HostStartMatch();
+            }
+            else if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), "START MATCH  >", true, true, 22)) game.StartVersus();
         }
 
         MissionData Thumb(string mapId)
