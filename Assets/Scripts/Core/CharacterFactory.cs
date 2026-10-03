@@ -4,6 +4,7 @@ namespace Swat
 {
     public enum HeadStyle { Helmet, Cap, Hair, Balaclava }
     public enum Outfit { Plain, Tactical, Jacket, Suit, HiVis, Uniform, Hoodie, Shirt }
+    public enum HairStyle { Short, Long, Ponytail, Bun, Buzz, Curly, Bald }
 
     public struct Appearance
     {
@@ -18,6 +19,11 @@ namespace Swat
         public Color idColor;     // squad identification color (helmet band, shoulder patch, helmet top)
         public bool idMarker;
         public float height, width;
+        // Added with the character update (all optional; zero values mean "default").
+        public HairStyle hair;        // for HeadStyle.Hair
+        public bool shortSleeves, skirt, backpack, lanyard, beard, gloves, sneakers, holster, bandage, hoodUp, bandana;
+        public int glasses;           // 0 none, 1 glasses, 2 sunglasses
+        public Color shoes, bag;      // shoe and backpack colour
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -141,12 +147,26 @@ namespace Swat
             var m = parts.model;
             bool tactical = look.outfit == Swat.Outfit.Tactical;
 
-            // Legs swing from the hips; boots at the bottom.
-            parts.leftLeg = Leg("Leg L", m, new Vector3(-0.11f, 0.8f, 0f), look.pants, tactical);
-            parts.rightLeg = Leg("Leg R", m, new Vector3(0.11f, 0.8f, 0f), look.pants, tactical);
-            Shapes.Box("Hips", m, new Vector3(0f, 0.78f, 0f), new Vector3(0.42f, 0.14f, 0.26f), look.pants, false);
+            Color shoe = look.shoes.a > 0f ? look.shoes : Boot;
+            Color skin = look.skin;
+            Color hairColor = look.headwear;
 
-            Shapes.Box("Torso", m, new Vector3(0f, 1.1f, 0f), new Vector3(0.54f, 0.62f, 0.32f), look.shirt, false);
+            // Legs swing from the hips: thigh, shin and shoe (white soles on sneakers).
+            parts.leftLeg = Leg("Leg L", m, new Vector3(-0.11f, 0.8f, 0f), look, shoe, tactical);
+            parts.rightLeg = Leg("Leg R", m, new Vector3(0.11f, 0.8f, 0f), look, shoe, tactical);
+            if (look.skirt) Shapes.Box("Skirt", m, new Vector3(0f, 0.7f, 0f), new Vector3(0.5f, 0.34f, 0.34f), look.pants, false);
+            else Shapes.Box("Hips", m, new Vector3(0f, 0.78f, 0f), new Vector3(0.42f, 0.14f, 0.26f), look.pants, false);
+
+            // A broader chest over a narrower waist: shoulders read clearly from above.
+            Shapes.Box("Waist", m, new Vector3(0f, 0.97f, 0f), new Vector3(0.46f, 0.34f, 0.28f), look.shirt, false);
+            Shapes.Box("Chest", m, new Vector3(0f, 1.24f, 0f), new Vector3(0.56f, 0.34f, 0.32f), look.shirt, false);
+            Shapes.Box("Neck", m, new Vector3(0f, 1.44f, 0f), new Vector3(0.13f, 0.08f, 0.13f), skin, false);
+            bool casual = look.outfit == Swat.Outfit.Plain || look.outfit == Swat.Outfit.Shirt || look.outfit == Swat.Outfit.Jacket;
+            if (casual && !look.skirt)
+            {
+                Shapes.Box("Belt", m, new Vector3(0f, 0.85f, 0f), new Vector3(0.47f, 0.05f, 0.29f), new Color(0.16f, 0.11f, 0.08f), false);
+                Shapes.Box("Buckle", m, new Vector3(0f, 0.85f, 0.15f), new Vector3(0.07f, 0.05f, 0.01f), new Color(0.75f, 0.68f, 0.45f), false);
+            }
             DressOutfit(look, m);
             if (look.vestOn)
             {
@@ -160,9 +180,23 @@ namespace Swat
                     Shapes.Box("Antenna", m, new Vector3(-0.22f, 1.44f, 0.19f), new Vector3(0.015f, 0.18f, 0.015f), Gear, false);
                     Shapes.Box("Back Plate", m, new Vector3(0f, 1.14f, -0.2f), new Vector3(0.44f, 0.36f, 0.05f), Shapes.Shade(look.vest, 0.85f), false);
                     Shapes.Box("Label", m, new Vector3(0f, 1.2f, -0.226f), new Vector3(0.3f, 0.07f, 0.005f), new Color(0.85f, 0.85f, 0.82f), false);
+                    Shapes.Box("Hydration", m, new Vector3(0f, 1.0f, -0.24f), new Vector3(0.22f, 0.2f, 0.05f), Shapes.Shade(look.vest, 0.7f), false);
                 }
             }
             if (tactical) Shapes.Box("Belt", m, new Vector3(0f, 0.84f, 0f), new Vector3(0.5f, 0.07f, 0.3f), Gear, false);
+            if (look.backpack)
+            {
+                Color bag = look.bag.a > 0f ? look.bag : new Color(0.25f, 0.3f, 0.38f);
+                Shapes.Box("Backpack", m, new Vector3(0f, 1.12f, -0.23f), new Vector3(0.38f, 0.42f, 0.16f), bag, false);
+                Shapes.Box("Flap", m, new Vector3(0f, 1.3f, -0.25f), new Vector3(0.36f, 0.08f, 0.17f), Shapes.Shade(bag, 0.8f), false);
+                for (int side = -1; side <= 1; side += 2)
+                    Shapes.Box("Strap", m, new Vector3(side * 0.13f, 1.25f, 0.165f), new Vector3(0.05f, 0.24f, 0.01f), Shapes.Shade(bag, 0.7f), false);
+            }
+            if (look.lanyard)
+            {
+                Shapes.Box("Lanyard", m, new Vector3(0f, 1.3f, 0.165f), new Vector3(0.02f, 0.18f, 0.01f), new Color(0.2f, 0.4f, 0.8f), false);
+                Shapes.Box("ID Card", m, new Vector3(0f, 1.17f, 0.17f), new Vector3(0.08f, 0.1f, 0.01f), new Color(0.95f, 0.95f, 0.92f), false);
+            }
 
             // The head sits on its own pivot. In pixel art it is drawn a little larger
             // ("chibi" proportions), so faces and helmets stay readable at low resolution.
@@ -172,8 +206,9 @@ namespace Swat
             parts.head.localPosition = new Vector3(0f, 1.62f + (headScale - 1f) * 0.12f, 0f);
             parts.head.localScale = Vector3.one * headScale;
             var hd = parts.head;
-            Shapes.Make(PrimitiveType.Sphere, "Head", hd, Vector3.zero, Vector3.one * 0.32f, look.skin, false);
-            bool eyes = true;
+            Shapes.Make(PrimitiveType.Sphere, "Head", hd, Vector3.zero, Vector3.one * 0.32f, skin, false);
+            Shapes.Box("Nose", hd, new Vector3(0f, -0.01f, 0.155f), new Vector3(0.05f, 0.06f, 0.04f), Shapes.Shade(skin, 0.92f), false);
+            bool eyes = true, face = true;
             switch (look.head)
             {
                 case HeadStyle.Helmet:
@@ -182,29 +217,51 @@ namespace Swat
                     {
                         Shapes.Box("Goggles", hd, new Vector3(0f, 0.04f, 0.15f), new Vector3(0.24f, 0.05f, 0.05f), new Color(0.1f, 0.12f, 0.14f), false);
                         Shapes.Box("Lens", hd, new Vector3(0f, 0.04f, 0.176f), new Vector3(0.18f, 0.03f, 0.01f), new Color(0.35f, 0.62f, 0.85f), false, 1.2f);
+                        Shapes.Box("Mount", hd, new Vector3(0f, 0.15f, 0.16f), new Vector3(0.08f, 0.06f, 0.05f), Gear, false);
                         eyes = false;
                     }
                     break;
                 case HeadStyle.Cap:
+                    if (look.hoodUp) Hood(hd, look.shirt);
                     Shapes.Box("Cap", hd, new Vector3(0f, 0.12f, 0f), new Vector3(0.32f, 0.08f, 0.32f), look.headwear, false);
                     Shapes.Box("Brim", hd, new Vector3(0f, 0.09f, 0.18f), new Vector3(0.26f, 0.03f, 0.12f), look.headwear, false);
                     break;
                 case HeadStyle.Balaclava:
                     Shapes.Make(PrimitiveType.Sphere, "Mask", hd, new Vector3(0f, 0.01f, 0f), Vector3.one * 0.34f, look.headwear, false);
-                    Shapes.Box("Eyes", hd, new Vector3(0f, 0.04f, 0.15f), new Vector3(0.22f, 0.05f, 0.05f), look.skin, false);
-                    eyes = false;
+                    Shapes.Box("Eyes", hd, new Vector3(0f, 0.04f, 0.15f), new Vector3(0.22f, 0.05f, 0.05f), skin, false);
+                    eyes = face = false;
                     break;
                 default:
-                    Shapes.Box("Hair", hd, new Vector3(0f, 0.09f, -0.04f), new Vector3(0.3f, 0.12f, 0.28f), look.headwear, false);
+                    if (look.hoodUp) Hood(hd, look.shirt);
+                    else DrawHair(hd, look.hair, hairColor);
                     break;
+            }
+            if (look.glasses > 0 && look.head != HeadStyle.Balaclava && !(look.head == HeadStyle.Helmet && tactical))
+            {
+                bool sun = look.glasses == 2;
+                Shapes.Box("Glasses", hd, new Vector3(0f, 0.025f, 0.155f), new Vector3(0.25f, sun ? 0.06f : 0.05f, 0.03f), sun ? new Color(0.05f, 0.05f, 0.06f) : new Color(0.2f, 0.18f, 0.16f), false);
+                if (!sun)
+                    for (int side = -1; side <= 1; side += 2)
+                        Shapes.Box("Lens", hd, new Vector3(side * 0.06f, 0.025f, 0.168f), new Vector3(0.07f, 0.035f, 0.005f), new Color(0.7f, 0.82f, 0.9f), false);
+                eyes = false;
             }
             if (eyes)
             {
-                // Two dark pixels for eyes: enough to show which way someone faces.
+                // Two dark pixels for eyes and a brow line above: enough to show which way someone faces.
                 var eye = new Color(0.08f, 0.07f, 0.07f);
                 Shapes.Box("Eye L", hd, new Vector3(-0.06f, 0.02f, 0.148f), new Vector3(0.045f, 0.05f, 0.03f), eye, false);
                 Shapes.Box("Eye R", hd, new Vector3(0.06f, 0.02f, 0.148f), new Vector3(0.045f, 0.05f, 0.03f), eye, false);
+                if (look.head == HeadStyle.Hair || look.head == HeadStyle.Cap)
+                    for (int side = -1; side <= 1; side += 2)
+                        Shapes.Box("Brow", hd, new Vector3(side * 0.06f, 0.065f, 0.147f), new Vector3(0.06f, 0.015f, 0.03f), Shapes.Shade(hairColor, 0.8f), false);
             }
+            if (face)
+            {
+                if (look.beard) Shapes.Box("Beard", hd, new Vector3(0f, -0.08f, 0.1f), new Vector3(0.25f, 0.1f, 0.12f), Shapes.Shade(hairColor, 0.9f), false);
+                else Shapes.Box("Mouth", hd, new Vector3(0f, -0.07f, 0.148f), new Vector3(0.06f, 0.015f, 0.02f), Shapes.Shade(skin, 0.6f), false);
+                if (look.bandana) Shapes.Box("Bandana", hd, new Vector3(0f, -0.06f, 0.1f), new Vector3(0.3f, 0.13f, 0.13f), look.accent.a > 0f ? look.accent : new Color(0.6f, 0.12f, 0.12f), false);
+            }
+            if (look.bandage) Shapes.Box("Bandage", hd, new Vector3(0f, 0.09f, 0f), new Vector3(0.335f, 0.05f, 0.335f), new Color(0.95f, 0.95f, 0.92f), false);
 
             if (look.idMarker)
             {
@@ -221,12 +278,15 @@ namespace Swat
                 Shapes.Box("Shoulder R", m, new Vector3(0.3f, 1.42f, 0f), new Vector3(0.17f, 0.07f, 0.24f), pad, false);
             }
 
-            Color hand = tactical ? Gear : look.skin;
+            Color hand = tactical || look.gloves ? Gear : skin;
             Color sleeve = look.outfit == Swat.Outfit.Suit || look.outfit == Swat.Outfit.Jacket ? look.accent : look.shirt;
-            parts.leftArm = Arm("Arm L", m, new Vector3(-0.33f, 1.34f, 0f), sleeve, hand);
-            parts.rightArm = Arm("Arm R", m, new Vector3(0.33f, 1.34f, 0f), sleeve, hand);
+            bool shortSleeves = look.shortSleeves && !tactical && casual && look.outfit != Swat.Outfit.Jacket;
+            parts.leftArm = Arm("Arm L", m, new Vector3(-0.33f, 1.34f, 0f), sleeve, hand, shortSleeves ? skin : sleeve);
+            parts.rightArm = Arm("Arm R", m, new Vector3(0.33f, 1.34f, 0f), sleeve, hand, shortSleeves ? skin : sleeve);
             if (look.idMarker)
-                Shapes.Box("Patch", parts.rightArm, new Vector3(0.068f, -0.12f, 0f), new Vector3(0.01f, 0.1f, 0.1f), look.idColor, false);
+                Shapes.Box("Patch", parts.rightArm, new Vector3(0.075f, -0.12f, 0f), new Vector3(0.01f, 0.1f, 0.1f), look.idColor, false);
+            if (look.holster) Shapes.Box("Holster", parts.rightLeg, new Vector3(0.11f, -0.2f, 0f), new Vector3(0.06f, 0.2f, 0.13f), Gear, false);
+            if (look.bandage && !shortSleeves) Shapes.Box("Arm Bandage", parts.leftArm, new Vector3(0f, -0.36f, 0f), new Vector3(0.145f, 0.07f, 0.145f), new Color(0.95f, 0.95f, 0.92f), false);
 
             parts.gunRoot = new GameObject("Gun").transform;
             parts.gunRoot.SetParent(m, false);
@@ -286,31 +346,77 @@ namespace Swat
                     Shapes.Box("Pocket", m, new Vector3(0.14f, 1.22f, 0.165f), new Vector3(0.1f, 0.1f, 0.01f), Shapes.Shade(look.shirt, 0.85f), false);
                     break;
                 case Swat.Outfit.Hoodie:
-                    Shapes.Box("Hood", m, new Vector3(0f, 1.45f, -0.14f), new Vector3(0.34f, 0.2f, 0.12f), Shapes.Shade(look.shirt, 0.9f), false);
+                    if (!look.hoodUp) Shapes.Box("Hood", m, new Vector3(0f, 1.45f, -0.14f), new Vector3(0.34f, 0.2f, 0.12f), Shapes.Shade(look.shirt, 0.9f), false);
                     Shapes.Box("Pocket", m, new Vector3(0f, 0.95f, 0.165f), new Vector3(0.3f, 0.12f, 0.01f), Shapes.Shade(look.shirt, 0.85f), false);
                     break;
             }
         }
 
-        static Transform Leg(string name, Transform parent, Vector3 hip, Color pants, bool tactical)
+        static Transform Leg(string name, Transform parent, Vector3 hip, Appearance look, Color shoe, bool tactical)
         {
             var pivot = new GameObject(name).transform;
             pivot.SetParent(parent, false);
             pivot.localPosition = hip;
-            Shapes.Box("Thigh", pivot, new Vector3(0f, -0.38f, 0f), new Vector3(0.18f, 0.76f, 0.24f), pants, false);
-            Shapes.Box("Boot", pivot, new Vector3(0f, -0.74f, 0.03f), new Vector3(0.2f, 0.12f, 0.3f), Boot, false);
+            Color shin = look.skirt ? look.skin : look.pants;
+            Shapes.Box("Thigh", pivot, new Vector3(0f, -0.2f, 0f), new Vector3(0.18f, 0.42f, 0.24f), look.pants, false);
+            Shapes.Box("Shin", pivot, new Vector3(0f, -0.56f, 0f), new Vector3(0.16f, 0.34f, 0.21f), shin, false);
+            Shapes.Box("Shoe", pivot, new Vector3(0f, -0.74f, 0.04f), new Vector3(0.2f, 0.12f, 0.32f), shoe, false);
+            if (look.sneakers) Shapes.Box("Sole", pivot, new Vector3(0f, -0.795f, 0.04f), new Vector3(0.21f, 0.03f, 0.33f), new Color(0.92f, 0.92f, 0.9f), false);
             if (tactical) Shapes.Box("Knee Pad", pivot, new Vector3(0f, -0.42f, 0.13f), new Vector3(0.16f, 0.12f, 0.04f), Gear, false);
             return pivot;
         }
 
-        static Transform Arm(string name, Transform parent, Vector3 shoulder, Color sleeve, Color hand)
+        // Shoulder cap, upper arm, forearm (skin for short sleeves) and hand; all swing from the shoulder.
+        static Transform Arm(string name, Transform parent, Vector3 shoulder, Color sleeve, Color hand, Color forearm)
         {
             var pivot = new GameObject(name).transform;
             pivot.SetParent(parent, false);
             pivot.localPosition = shoulder;
-            Shapes.Box("Sleeve", pivot, new Vector3(0f, -0.25f, 0f), new Vector3(0.13f, 0.5f, 0.13f), sleeve, false);
-            Shapes.Box("Hand", pivot, new Vector3(0f, -0.55f, 0f), new Vector3(0.11f, 0.12f, 0.11f), hand, false);
+            Shapes.Box("Shoulder", pivot, new Vector3(0f, -0.03f, 0f), new Vector3(0.16f, 0.13f, 0.18f), sleeve, false);
+            Shapes.Box("Sleeve", pivot, new Vector3(0f, -0.17f, 0f), new Vector3(0.14f, 0.26f, 0.14f), sleeve, false);
+            Shapes.Box("Forearm", pivot, new Vector3(0f, -0.4f, 0f), new Vector3(0.13f, 0.22f, 0.13f), forearm, false);
+            Shapes.Box("Hand", pivot, new Vector3(0f, -0.56f, 0f), new Vector3(0.12f, 0.12f, 0.12f), hand, false);
             return pivot;
+        }
+
+        // Hair shapes that read from above (the top of the head is what you mostly see).
+        static void DrawHair(Transform head, HairStyle style, Color color)
+        {
+            switch (style)
+            {
+                case HairStyle.Buzz:
+                    Shapes.Box("Hair", head, new Vector3(0f, 0.115f, -0.015f), new Vector3(0.3f, 0.06f, 0.3f), color, false);
+                    break;
+                case HairStyle.Bald:
+                    Shapes.Box("Fringe", head, new Vector3(0f, 0.01f, -0.11f), new Vector3(0.31f, 0.08f, 0.11f), color, false);
+                    break;
+                case HairStyle.Curly:
+                    Shapes.Make(PrimitiveType.Sphere, "Curls", head, new Vector3(0f, 0.09f, -0.02f), new Vector3(0.38f, 0.27f, 0.37f), color, false);
+                    break;
+                default:
+                    Shapes.Box("Hair", head, new Vector3(0f, 0.09f, -0.04f), new Vector3(0.31f, 0.13f, 0.29f), color, false);
+                    if (style == HairStyle.Long)
+                    {
+                        Shapes.Box("Hair Back", head, new Vector3(0f, -0.08f, -0.13f), new Vector3(0.31f, 0.3f, 0.08f), color, false);
+                        for (int side = -1; side <= 1; side += 2)
+                            Shapes.Box("Hair Side", head, new Vector3(side * 0.15f, -0.03f, -0.04f), new Vector3(0.04f, 0.2f, 0.18f), color, false);
+                    }
+                    else if (style == HairStyle.Ponytail)
+                        Shapes.Box("Ponytail", head, new Vector3(0f, 0.0f, -0.19f), new Vector3(0.08f, 0.22f, 0.08f), color, false);
+                    else if (style == HairStyle.Bun)
+                        Shapes.Box("Bun", head, new Vector3(0f, 0.17f, -0.1f), new Vector3(0.13f, 0.1f, 0.13f), color, false);
+                    break;
+            }
+        }
+
+        // A hood pulled up: top, back and sides, leaving the face open.
+        static void Hood(Transform head, Color color)
+        {
+            var c = Shapes.Shade(color, 0.92f);
+            Shapes.Box("Hood Top", head, new Vector3(0f, 0.12f, -0.02f), new Vector3(0.36f, 0.12f, 0.34f), c, false);
+            Shapes.Box("Hood Back", head, new Vector3(0f, -0.03f, -0.13f), new Vector3(0.36f, 0.28f, 0.1f), c, false);
+            for (int side = -1; side <= 1; side += 2)
+                Shapes.Box("Hood Side", head, new Vector3(side * 0.17f, 0.0f, 0.0f), new Vector3(0.04f, 0.28f, 0.3f), c, false);
         }
 
         // ---- Appearance presets ----
@@ -320,8 +426,29 @@ namespace Swat
             new Color(0.92f, 0.92f, 0.9f), new Color(0.55f, 0.75f, 0.95f), new Color(0.95f, 0.85f, 0.4f), new Color(0.95f, 0.6f, 0.7f),
             new Color(0.6f, 0.85f, 0.6f), new Color(0.75f, 0.55f, 0.85f), new Color(0.95f, 0.65f, 0.35f),
         };
-        static readonly Color[] Hair = { new Color(0.1f, 0.07f, 0.05f), new Color(0.4f, 0.25f, 0.12f), new Color(0.85f, 0.7f, 0.4f), new Color(0.6f, 0.6f, 0.6f), new Color(0.55f, 0.2f, 0.1f) };
-        static readonly Color[] Pants = { new Color(0.25f, 0.3f, 0.45f), new Color(0.2f, 0.2f, 0.22f), new Color(0.45f, 0.4f, 0.32f), new Color(0.3f, 0.32f, 0.3f) };
+        static readonly Color[] Hair = { new Color(0.1f, 0.07f, 0.05f), new Color(0.4f, 0.25f, 0.12f), new Color(0.85f, 0.7f, 0.4f), new Color(0.6f, 0.6f, 0.6f), new Color(0.55f, 0.2f, 0.1f), new Color(0.2f, 0.12f, 0.07f) };
+        static readonly Color[] Pants = { new Color(0.25f, 0.3f, 0.45f), new Color(0.2f, 0.2f, 0.22f), new Color(0.45f, 0.4f, 0.32f), new Color(0.3f, 0.32f, 0.3f), new Color(0.18f, 0.24f, 0.4f), new Color(0.5f, 0.45f, 0.38f) };
+        static readonly Color[] Shoes = { new Color(0.06f, 0.06f, 0.065f), new Color(0.3f, 0.2f, 0.12f), new Color(0.85f, 0.85f, 0.85f), new Color(0.2f, 0.25f, 0.4f), new Color(0.6f, 0.15f, 0.15f) };
+        static readonly Color[] Bags = { new Color(0.25f, 0.3f, 0.38f), new Color(0.55f, 0.2f, 0.18f), new Color(0.2f, 0.35f, 0.25f), new Color(0.4f, 0.32f, 0.2f), new Color(0.12f, 0.12f, 0.14f) };
+
+        static HairStyle RandomHair(bool varied)
+        {
+            float roll = Random.value;
+            if (!varied) return roll < 0.45f ? HairStyle.Short : roll < 0.75f ? HairStyle.Buzz : roll < 0.88f ? HairStyle.Bald : HairStyle.Curly;
+            return roll < 0.26f ? HairStyle.Short : roll < 0.42f ? HairStyle.Long : roll < 0.54f ? HairStyle.Ponytail : roll < 0.63f ? HairStyle.Bun
+                : roll < 0.75f ? HairStyle.Buzz : roll < 0.85f ? HairStyle.Curly : HairStyle.Bald;
+        }
+
+        // Shoes, faces and accessories shared by suspects and civilians.
+        static void Accessorize(ref Appearance look, bool suspect)
+        {
+            look.hair = RandomHair(!suspect || Random.value < 0.3f);
+            look.sneakers = Random.value < (suspect ? 0.6f : 0.5f);
+            look.shoes = look.sneakers ? Shoes[Random.Range(0, Shoes.Length)] : Shoes[Random.Range(0, 2)];
+            look.beard = look.hair != HairStyle.Long && look.hair != HairStyle.Ponytail && look.hair != HairStyle.Bun && Random.value < (suspect ? 0.35f : 0.18f);
+            look.glasses = Random.value < (suspect ? 0.15f : 0.22f) ? (suspect ? 2 : (Random.value < 0.25f ? 2 : 1)) : 0;
+            look.bag = Bags[Random.Range(0, Bags.Length)];
+        }
 
         static Color Vary(Color c, float amount)
         {
@@ -346,18 +473,35 @@ namespace Swat
                 height = Random.Range(0.94f, 1.06f),
                 width = Random.Range(0.95f, 1.08f),
             };
+            Accessorize(ref look, true);
+            look.gloves = Random.value < 0.5f;
             switch (data.archetype)
             {
-                case EnemyArchetype.Guard: look.outfit = Swat.Outfit.Uniform; break;
-                case EnemyArchetype.Leader: look.outfit = Random.value < 0.5f ? Swat.Outfit.Suit : Swat.Outfit.Jacket; look.accent = new Color(0.12f, 0.12f, 0.14f); break;
-                case EnemyArchetype.Nervous: look.outfit = Swat.Outfit.Hoodie; break;
-                case EnemyArchetype.Armored: look.outfit = Swat.Outfit.Plain; look.width = Random.Range(1.05f, 1.12f); break;
-                case EnemyArchetype.TrainingDummy: look.outfit = Swat.Outfit.HiVis; break;
+                case EnemyArchetype.Guard: look.outfit = Swat.Outfit.Uniform; look.glasses = 0; look.holster = true; break;
+                case EnemyArchetype.Leader:
+                    look.outfit = Random.value < 0.5f ? Swat.Outfit.Suit : Swat.Outfit.Jacket;
+                    look.accent = new Color(0.12f, 0.12f, 0.14f);
+                    look.glasses = Random.value < 0.5f ? 2 : 0;
+                    look.sneakers = false;
+                    look.shoes = Shoes[0];
+                    break;
+                case EnemyArchetype.Nervous:
+                    look.outfit = Swat.Outfit.Hoodie;
+                    look.hoodUp = Random.value < 0.5f;
+                    look.backpack = Random.value < 0.25f;
+                    break;
+                case EnemyArchetype.Armored: look.outfit = Swat.Outfit.Plain; look.width = Random.Range(1.05f, 1.12f); look.gloves = true; break;
+                case EnemyArchetype.TrainingDummy: look.outfit = Swat.Outfit.HiVis; look.beard = false; look.glasses = 0; break;
                 default:
                     float roll = Random.value;
                     look.outfit = roll < 0.4f ? Swat.Outfit.Jacket : roll < 0.7f ? Swat.Outfit.Hoodie : Swat.Outfit.Plain;
                     look.accent = Vary(new Color(0.18f, 0.17f, 0.16f), 0.4f);
                     if (look.head == HeadStyle.Hair && Random.value < 0.35f) { look.head = HeadStyle.Cap; look.headwear = Vary(new Color(0.15f, 0.15f, 0.18f), 0.5f); }
+                    look.hoodUp = look.outfit == Swat.Outfit.Hoodie && Random.value < 0.4f;
+                    look.shortSleeves = look.outfit == Swat.Outfit.Plain && Random.value < 0.5f;
+                    // A bandana over the lower face (instead of a balaclava) for some.
+                    look.bandana = look.head != HeadStyle.Balaclava && Random.value < 0.25f;
+                    if (look.bandana) look.accent = Random.value < 0.5f ? new Color(0.6f, 0.12f, 0.12f) : new Color(0.12f, 0.12f, 0.14f);
                     break;
             }
             return look;
@@ -378,6 +522,7 @@ namespace Swat
                 width = Random.Range(0.94f, 1.06f),
                 accent = new Color(Random.Range(0.1f, 0.6f), Random.Range(0.1f, 0.4f), Random.Range(0.2f, 0.6f)),
             };
+            Accessorize(ref look, false);
             float roll = Random.value;
             switch (type)
             {
@@ -387,21 +532,30 @@ namespace Swat
                     look.pants = new Color(0.15f, 0.17f, 0.22f);
                     look.head = HeadStyle.Cap;
                     look.headwear = new Color(0.15f, 0.17f, 0.22f);
+                    look.holster = true;
+                    look.sneakers = false;
+                    look.shoes = Shoes[0];
                     break;
                 case CivilianType.OfficeWorker:
                 case CivilianType.Injured:
                 case CivilianType.Hostage:
-                    if (roll < 0.2f) { look.outfit = Swat.Outfit.Suit; look.accent = new Color(0.16f, 0.17f, 0.22f); look.shirt = new Color(0.93f, 0.93f, 0.9f); }
+                    if (roll < 0.2f) { look.outfit = Swat.Outfit.Suit; look.accent = new Color(0.16f, 0.17f, 0.22f); look.shirt = new Color(0.93f, 0.93f, 0.9f); look.sneakers = false; look.shoes = Shoes[Random.Range(0, 2)]; }
                     else if (roll < 0.32f) look.outfit = Swat.Outfit.HiVis; // maintenance worker
                     else look.outfit = Swat.Outfit.Shirt;
+                    look.lanyard = type == CivilianType.OfficeWorker && look.outfit != Swat.Outfit.HiVis && Random.value < 0.6f;
                     break;
                 case CivilianType.Visitor:
                     look.outfit = roll < 0.5f ? Swat.Outfit.Jacket : Swat.Outfit.Plain;
+                    look.backpack = Random.value < 0.4f;
                     break;
                 default: // residents and people hiding
                     look.outfit = roll < 0.35f ? Swat.Outfit.Hoodie : roll < 0.5f ? Swat.Outfit.HiVis : Swat.Outfit.Plain;
+                    look.backpack = Random.value < 0.15f;
                     break;
             }
+            look.shortSleeves = (look.outfit == Swat.Outfit.Plain || look.outfit == Swat.Outfit.Shirt) && Random.value < 0.4f;
+            look.skirt = (look.outfit == Swat.Outfit.Plain || look.outfit == Swat.Outfit.Shirt || look.outfit == Swat.Outfit.Suit) && Random.value < 0.18f;
+            look.bandage = type == CivilianType.Injured;
             return look;
         }
 

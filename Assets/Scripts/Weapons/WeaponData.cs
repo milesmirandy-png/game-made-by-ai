@@ -8,6 +8,7 @@ namespace Swat
         CompactSMG, SMG, CompactRifle, Rifle, Shotgun, Carbine, LessLethal, ServicePistol, BackupPistol, HeavyPistol,
         // Added with the arsenal update (appended so saved assets keep their values).
         PDW, BurstRifle, Bullpup, Marksman, LMG, AutoShotgun, Pepperball, MachinePistol, Revolver, StunPistol,
+        Rotary, DrumShotgun, VectorSMG, GrenadeLauncher,
     }
 
     // Settings for one firearm. The defaults live in DefaultContent; use the
@@ -55,6 +56,9 @@ namespace Swat
         [Tooltip("Less-lethal only: added chance that a stunned suspect gives up")] public float surrenderBonus = 0.35f;
         public bool ejectsShells = true;
         [Tooltip("Furniture colour of the built-in model (stock, grip, magazine)")] public Color accent = new Color(0.16f, 0.16f, 0.17f);
+        [Tooltip("Only offered in the game modes (not in SWAT missions)")] public bool versusOnly;
+        [Tooltip("Seconds the trigger must be held before it fires (rotary guns)")] public float spinUp;
+        [Tooltip("Marking-round burst radius in metres; 0 = a normal round")] public float blastRadius;
 
         public bool AllowedFor(OfficerRole role)
         {

@@ -101,34 +101,53 @@ namespace Swat
             list.Add(Weapon("stun_s2", "S2 Stun Pistol", WeaponCategory.StunPistol, true, FireMode.SemiAuto, false, 2f, 1f, 1, 8, 2.5f, 9f, 1.5f, 0.6f, 1, 6f, 1f, 0.3f, Sound.Zap, 0,
                 "One short-range stun dart per load. Almost silent, very likely to make a suspect give up."));
 
-            // Look and feel per weapon: furniture colour (the sprite and 3D model), kick, muzzle flash and extras.
+            // Heavier hardware, inspired by classic arcade shooters. The rotary gun and the marking-round
+            // launcher are game-mode only (they don't fit a SWAT entry).
+            list.Add(Weapon("rotary_rg6", "RG6 Rotary Gun", WeaponCategory.Rotary, false, FireMode.FullAuto, false, 14f, 20f, 150, 150, 5f, 40f, 4.5f, 0.5f, 1, 34f, 0.75f, 1.2f, Sound.Rotary, 0,
+                "Spins up, then pours out rounds. Very heavy: you move slowly while carrying it."));
+            list.Add(Weapon("shotgun_d20", "D20 Drum Shotgun", WeaponCategory.DrumShotgun, false, FireMode.FullAuto, false, 9f, 4f, 20, 40, 3.6f, 12f, 11f, 2f, 8, 30f, 0.9f, 0.7f, Sound.AutoShotgun, heavy,
+                "A fully automatic shotgun with a 20-round drum. Clears a room, kicks like a mule."));
+            list.Add(Weapon("smg_kv", "KV Vector SMG", WeaponCategory.VectorSMG, false, FireMode.FullAuto, true, 17f, 18f, 25, 125, 1.8f, 22f, 3.2f, 0.4f, 1, 21f, 1f, 0.45f, Sound.CompactSmg, 0,
+                "Blistering fire rate and almost no muzzle climb, but it empties fast."));
+            list.Add(Weapon("launcher_gl6", "GL6 Marker Launcher", WeaponCategory.GrenadeLauncher, false, FireMode.SemiAuto, false, 70f, 1.2f, 6, 18, 4f, 30f, 1f, 3f, 1, 30f, 0.85f, 0.8f, Sound.Launcher, 0,
+                "Six marking grenades that burst on impact and tag everyone close by. Game modes only."));
+
+            // Look and feel per weapon: furniture colour of the 3D model (matching its sprite), kick, muzzle flash and extras.
             foreach (var w in list)
             {
                 switch (w.id)
                 {
                     case "smg_compact": Feel(w, Polymer, 0.6f, 0.45f); break;
                     case "smg_v10": Feel(w, Polymer, 0.7f, 0.5f); break;
-                    case "rifle_compact": Feel(w, new Color(0.32f, 0.32f, 0.36f), 0.9f, 0.6f); break;
-                    case "rifle_service": Feel(w, new Color(0.75f, 0.2f, 0.32f), 1f, 0.7f); break;
-                    case "shotgun_ts8": Feel(w, new Color(0.62f, 0.3f, 0.16f), 2.2f, 0.95f); w.pumpAction = true; w.tracerWidth = 0.035f; break;
-                    case "carbine_pc9": Feel(w, new Color(0.66f, 0.24f, 0.2f), 1.6f, 0.8f); w.steadyLookAhead = 3f; w.pumpAction = true; break;
+                    case "rifle_compact": Feel(w, Wood, 0.9f, 0.6f); break;
+                    case "rifle_service": Feel(w, Wood, 1f, 0.7f); break;
+                    case "shotgun_ts8": Feel(w, Polymer, 2.2f, 0.95f); w.pumpAction = true; w.tracerWidth = 0.035f; break;
+                    case "carbine_pc9": Feel(w, Wood, 1.6f, 0.8f); w.steadyLookAhead = 3f; w.pumpAction = true; break;
                     case "launcher_ll40": Feel(w, Polymer, 1.4f, 0.5f); w.ejectsShells = false; w.tracerWidth = 0.08f; break;
                     case "pistol_p17": Feel(w, Polymer, 0.7f, 0.4f); break;
                     case "pistol_bk6": Feel(w, Polymer, 0.6f, 0.35f); break;
-                    case "pistol_h50": Feel(w, new Color(0.62f, 0.3f, 0.16f), 1.5f, 0.55f); break;
-                    case "pdw_x4": Feel(w, new Color(0.24f, 0.3f, 0.22f), 0.55f, 0.45f); break;
-                    case "rifle_b4": Feel(w, new Color(0.6f, 0.5f, 0.34f), 0.9f, 0.65f); w.burstCount = 3; break;
-                    case "rifle_cx": Feel(w, new Color(0.34f, 0.4f, 0.24f), 1f, 0.7f); break;
-                    case "dmr_dm2": Feel(w, new Color(0.6f, 0.5f, 0.34f), 2f, 0.9f); w.steadyLookAhead = 7f; w.pumpAction = true; w.tracerWidth = 0.06f; break;
-                    case "lmg_lm8": Feel(w, new Color(0.34f, 0.4f, 0.24f), 0.9f, 0.75f); w.crouchSpread = 0.45f; break;
-                    case "shotgun_as12": Feel(w, new Color(0.32f, 0.32f, 0.36f), 1.8f, 0.9f); w.tracerWidth = 0.035f; break;
+                    case "pistol_h50": Feel(w, Wood, 1.5f, 0.55f); break;
+                    case "pdw_x4": Feel(w, Polymer, 0.55f, 0.45f); break;
+                    case "rifle_b4": Feel(w, Wood, 0.9f, 0.65f); w.burstCount = 3; break;
+                    case "rifle_cx": Feel(w, Polymer, 1f, 0.7f); break;
+                    case "dmr_dm2": Feel(w, Wood, 2f, 0.9f); w.steadyLookAhead = 7f; w.pumpAction = true; w.tracerWidth = 0.06f; break;
+                    case "lmg_lm8": Feel(w, Wood, 0.9f, 0.75f); w.crouchSpread = 0.45f; break;
+                    case "shotgun_as12": Feel(w, Polymer, 1.8f, 0.9f); w.tracerWidth = 0.035f; break;
                     case "pepper_pb3":
-                        Feel(w, new Color(0.36f, 0.28f, 0.62f), 0.3f, 0.25f);
+                        Feel(w, Polymer, 0.3f, 0.25f);
                         w.lessLethal = true; w.stunDuration = 0.8f; w.surrenderBonus = 0.06f; w.ejectsShells = false;
                         w.tracerColor = new Color(0.85f, 0.4f, 1f);
                         break;
                     case "mp_m9": Feel(w, Polymer, 0.6f, 0.4f); break;
-                    case "revolver_r6": Feel(w, new Color(0.66f, 0.24f, 0.2f), 1.9f, 0.6f); w.ejectsShells = false; break;
+                    case "revolver_r6": Feel(w, Polymer, 1.9f, 0.6f); w.ejectsShells = false; break;
+                    case "rotary_rg6": Feel(w, Polymer, 0.7f, 0.7f); w.spinUp = 0.6f; w.versusOnly = true; w.crouchSpread = 0.6f; break;
+                    case "shotgun_d20": Feel(w, Polymer, 1.9f, 0.9f); w.tracerWidth = 0.035f; break;
+                    case "smg_kv": Feel(w, Amber, 0.45f, 0.45f); break;
+                    case "launcher_gl6":
+                        Feel(w, Amber, 2.4f, 0.8f);
+                        w.blastRadius = 3.5f; w.versusOnly = true; w.ejectsShells = false; w.tracerWidth = 0.09f;
+                        w.tracerColor = new Color(1f, 0.6f, 0.2f);
+                        break;
                     case "stun_s2":
                         Feel(w, Polymer, 0.3f, 0.2f);
                         w.lessLethal = true; w.stunDuration = 3.5f; w.surrenderBonus = 0.5f; w.ejectsShells = false;
@@ -139,7 +158,10 @@ namespace Swat
             return list;
         }
 
-        static readonly Color Polymer = new Color(0.2f, 0.22f, 0.3f);
+        // The sprite pack's furniture: charcoal polymer, orange wood and a lighter amber.
+        static readonly Color Polymer = new Color(0.24f, 0.24f, 0.23f);
+        static readonly Color Wood = new Color(0.78f, 0.4f, 0.14f);
+        static readonly Color Amber = new Color(0.86f, 0.56f, 0.2f);
 
         static void Feel(WeaponData w, Color accent, float kick, float flash)
         {

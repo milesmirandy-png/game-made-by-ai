@@ -2,14 +2,12 @@ using System;
 
 namespace Swat
 {
-    // Side-view pixel-art weapon sprites, drawn by code (no image files), in a
-    // hand-drawn sticker style: navy and slate steel with pale blue highlights,
-    // coloured furniture (stock, grip, handguard) with grain and hue-shifted
-    // shading, rounded corners, curved magazines, an outline in a darker shade
-    // of each part's own colour and a thick white border. Muzzle on the left,
-    // stock on the right. Pure C# with no Unity types, so the same code can be
-    // run outside the editor to check what it draws; WeaponSprites turns the
-    // result into textures.
+    // Side-view pixel-art weapon sprites drawn by code, the fallback for a
+    // weapon with no sprite in the gun pack (see WeaponSprites): navy and slate
+    // steel, coloured furniture with grain and hue-shifted shading, an outline in
+    // a darker shade of each part's own colour and a white border. Muzzle on the
+    // left, stock on the right (WeaponSprites mirrors it to match the pack). Pure
+    // C# with no Unity types, so the same code can be run outside the editor.
     public static class WeaponSpriteArt
     {
         public sealed class Image
@@ -427,6 +425,75 @@ namespace Swat
                     c.Fill(43, 9, 13, 5, wood);
                     c.Fill(56, 8, 3, 8, DarkSteel);
                     muzzleX = 3; barrelY = 11; railX = -1;
+                    break;
+
+                case WeaponCategory.Rotary:
+                    // A cluster of barrels with clamps, motor housing, carry handle, spade grip and ammo box.
+                    for (int i = 0; i < 3; i++) c.Fill(2, 8 + i * 2, 30, 2, i == 1 ? DarkSteel : Steel, false);
+                    c.Fill(6, 7, 3, 8, DarkSteel);
+                    c.Fill(20, 7, 3, 8, DarkSteel);
+                    c.Fill(0, 8, 3, 6, DarkSteel);
+                    c.Fill(31, 5, 16, 11, Steel);
+                    c.HLine(33, 9, 12, Steel.Dark);
+                    c.Fill(34, 2, 10, 2, DarkSteel, false);
+                    c.VLine(34, 3, 2, DarkSteel.Mid);
+                    c.VLine(43, 3, 2, DarkSteel.Mid);
+                    c.Fill(35, 16, 12, 8, wood);
+                    c.HLine(36, 19, 10, wood.Shade);
+                    c.Fill(47, 7, 6, 3, DarkSteel, false);
+                    c.Lean(50, 10, 4, 8, 2, Polymer);
+                    TriggerGuard(c, 46, 16, 4);
+                    muzzleX = 0; barrelY = 10; railX = -1;
+                    break;
+
+                case WeaponCategory.DrumShotgun:
+                    // Barrel with a brake, ribbed handguard, boxy receiver, big drum magazine, straight stock.
+                    c.Fill(1, 9, 4, 5, DarkSteel);
+                    Barrel(c, 5, 10, 14, 2);
+                    c.Fill(15, 8, 16, 6, Polymer);
+                    c.Dots(17, 11, 12, 2, Polymer.Dark);
+                    c.Fill(31, 6, 22, 8, Steel);
+                    c.HLine(36, 9, 8, DarkSteel.Dark);
+                    c.Fill(31, 14, 14, 13, wood);
+                    c.Fill(35, 18, 6, 5, DarkSteel); // drum hub
+                    c.Lean(47, 14, 5, 9, 3, Polymer);
+                    TriggerGuard(c, 44, 14, 4);
+                    c.Fill(53, 7, 19, 7, Polymer);
+                    c.Fill(72, 6, 3, 10, DarkSteel);
+                    muzzleX = 1; barrelY = 10; railX = 33; railY = 5; railW = 16; lightX = 18; lightY = 14;
+                    break;
+
+                case WeaponCategory.VectorSMG:
+                    // Long shroud, angular upper, slanted lower body, magazine at the front, folding stock.
+                    c.Fill(1, 9, 18, 4, DarkSteel);
+                    c.HLine(3, 9, 14, DarkSteel.Light);
+                    c.Fill(18, 6, 28, 7, wood);
+                    c.Lean(21, 13, 18, 7, 4, wood);
+                    c.Fill(23, 19, 5, 10, DarkSteel);
+                    Ribs(c, 23, 19, 5, 10, 0);
+                    c.Lean(38, 13, 5, 9, 2, Polymer);
+                    TriggerGuard(c, 33, 18, 4);
+                    c.Fill(46, 7, 15, 5, Polymer);
+                    c.Cut(48, 8, 10, 2);
+                    c.Fill(60, 6, 3, 8, DarkSteel);
+                    muzzleX = 1; barrelY = 10; railX = 20; railY = 5; railW = 20; lightX = 6; lightY = 13;
+                    break;
+
+                case WeaponCategory.GrenadeLauncher:
+                    // Short fat barrel, a six-shot revolving drum, ladder sight, foregrip, pistol grip, stock.
+                    c.Fill(2, 6, 15, 7, DarkSteel);
+                    c.HLine(3, 6, 12, DarkSteel.Light);
+                    c.Lean(8, 13, 4, 7, 1, Polymer);
+                    c.Fill(16, 3, 16, 15, wood);
+                    for (int i = 0; i < 3; i++) c.HLine(17, 6 + i * 4, 14, wood.Dark);
+                    c.Fill(19, 0, 3, 3, DarkSteel, false);
+                    c.Fill(32, 6, 8, 8, Steel);
+                    c.Lean(34, 14, 5, 9, 3, wood);
+                    TriggerGuard(c, 30, 14, 4);
+                    c.Fill(40, 8, 17, 5, DarkSteel);
+                    c.Cut(42, 9, 12, 3);
+                    c.Fill(56, 6, 4, 10, wood);
+                    muzzleX = 2; barrelY = 9; railX = -1;
                     break;
 
                 case WeaponCategory.MachinePistol:

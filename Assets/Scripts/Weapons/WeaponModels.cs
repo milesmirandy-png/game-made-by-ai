@@ -3,14 +3,15 @@ using UnityEngine;
 namespace Swat
 {
     // Builds a small low-poly model for each weapon category out of boxes, in the
-    // same colours as the pixel-art sprites: blue-grey steel, dark steel and the
+    // same colours as the pixel-art sprites: charcoal steel, dark steel and the
     // weapon's accent colour for the furniture (stock, grip, handguard). If the
     // WeaponData has a modelPrefab, that is used instead. +z is the muzzle.
     public static class WeaponModels
     {
-        static readonly Color Steel = new Color(0.25f, 0.3f, 0.42f);
-        static readonly Color DarkSteel = new Color(0.12f, 0.14f, 0.19f);
-        static readonly Color Polymer = new Color(0.16f, 0.17f, 0.21f);
+        // Charcoal steel and polymer, as in the weapon sprites.
+        static readonly Color Steel = new Color(0.34f, 0.35f, 0.34f);
+        static readonly Color DarkSteel = new Color(0.14f, 0.14f, 0.13f);
+        static readonly Color Polymer = new Color(0.2f, 0.2f, 0.19f);
         static readonly Color Orange = new Color(0.95f, 0.5f, 0.1f);
         static readonly Color Yellow = new Color(0.95f, 0.78f, 0.12f);
 
@@ -144,6 +145,46 @@ namespace Swat
                     muzzleZ = pepper ? 0.48f : 0.46f;
                     break;
                 }
+                case WeaponCategory.Rotary:
+                    for (int i = 0; i < 3; i++)
+                        Box(parent, (i - 1) * 0.035f, 0.01f + (i == 1 ? 0.03f : 0f), 0.48f, 0.03f, 0.03f, 0.5f, i == 1 ? DarkSteel : Steel);
+                    Box(parent, 0f, 0.02f, 0.3f, 0.12f, 0.1f, 0.04f, DarkSteel);
+                    Box(parent, 0f, 0.02f, 0.6f, 0.12f, 0.1f, 0.04f, DarkSteel);
+                    Box(parent, 0f, 0.01f, 0.06f, 0.14f, 0.15f, 0.3f, Steel);
+                    Box(parent, 0f, 0.11f, 0.06f, 0.03f, 0.04f, 0.2f, DarkSteel);
+                    Box(parent, 0.11f, -0.07f, 0.04f, 0.1f, 0.14f, 0.18f, wood); // ammo box
+                    Box(parent, 0f, -0.06f, -0.12f, 0.05f, 0.12f, 0.05f, Polymer);
+                    muzzleZ = 0.74f;
+                    break;
+                case WeaponCategory.DrumShotgun:
+                    Box(parent, 0f, 0f, 0.12f, 0.08f, 0.12f, 0.36f, Steel);
+                    Box(parent, 0f, 0.01f, 0.42f, 0.045f, 0.045f, 0.26f, DarkSteel);
+                    Box(parent, 0f, 0.01f, 0.56f, 0.07f, 0.06f, 0.05f, DarkSteel);
+                    var drum = Shapes.Make(PrimitiveType.Cylinder, "Drum", parent, new Vector3(0f, -0.13f, 0.18f), new Vector3(0.2f, 0.05f, 0.2f), wood, false).transform;
+                    drum.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                    Box(parent, 0f, -0.1f, 0.0f, 0.045f, 0.13f, 0.05f, Polymer);
+                    Box(parent, 0f, -0.02f, -0.17f, 0.06f, 0.1f, 0.26f, Polymer);
+                    muzzleZ = 0.58f;
+                    rail = true;
+                    break;
+                case WeaponCategory.VectorSMG:
+                    Box(parent, 0f, 0.01f, 0.14f, 0.07f, 0.11f, 0.34f, wood);
+                    Box(parent, 0f, -0.07f, 0.12f, 0.065f, 0.1f, 0.2f, wood).localRotation = Quaternion.Euler(-20f, 0f, 0f);
+                    Box(parent, 0f, 0.01f, 0.4f, 0.045f, 0.045f, 0.2f, DarkSteel);
+                    Box(parent, 0f, -0.15f, 0.2f, 0.04f, 0.17f, 0.06f, DarkSteel);
+                    Box(parent, 0f, -0.01f, -0.12f, 0.04f, 0.06f, 0.18f, Polymer);
+                    muzzleZ = 0.5f;
+                    rail = true;
+                    break;
+                case WeaponCategory.GrenadeLauncher:
+                    var cylinder = Shapes.Make(PrimitiveType.Cylinder, "Drum", parent, new Vector3(0f, 0.02f, 0.14f), new Vector3(0.17f, 0.08f, 0.17f), wood, false).transform;
+                    cylinder.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    Box(parent, 0f, 0.03f, 0.36f, 0.09f, 0.09f, 0.26f, DarkSteel);
+                    Box(parent, 0f, -0.08f, 0.33f, 0.04f, 0.1f, 0.05f, Polymer);
+                    Box(parent, 0f, -0.08f, 0.0f, 0.045f, 0.12f, 0.05f, wood);
+                    Box(parent, 0f, 0f, -0.17f, 0.05f, 0.07f, 0.24f, DarkSteel);
+                    muzzleZ = 0.5f;
+                    break;
                 case WeaponCategory.Revolver:
                     Box(parent, 0f, 0.02f, 0.16f, 0.035f, 0.045f, 0.22f, Steel);
                     Box(parent, 0f, 0.01f, 0.02f, 0.06f, 0.07f, 0.08f, Steel);

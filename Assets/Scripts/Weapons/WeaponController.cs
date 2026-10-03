@@ -17,6 +17,8 @@ namespace Swat
         public float Spread { get; private set; }
         public float LastHitTime { get; private set; }
         public float LastKillTime { get; private set; } = -10f;
+        public Vector3 LastShotEnd { get; private set; }
+        public float SpinUp { get { return spin; } }
         public int ShotsFired { get; private set; }
         public int ShotsHit { get; private set; }
         public bool Overcharged { get; set; }
@@ -49,6 +51,7 @@ namespace Swat
         float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f;
         int burstLeft;
         bool reloadFromEmpty;
+        float spin; // rotary guns: 0 = still, 1 = up to speed
 
         public void Init(PlayerController owner, WeaponInventory inventory)
         {
@@ -132,6 +135,7 @@ namespace Swat
             reloadEnd = 0f;
             bloom = 0f;
             burstLeft = 0;
+            spin = 0f;
             pumpAt = -1f;
             switchEnd = Time.time + Current.Data.switchTime;
             lowAmmoWarned = Current.Magazine <= Current.Data.magazineSize / 4;
@@ -257,6 +261,14 @@ namespace Swat
             }
 
             bool trigger = weapon.Automatic ? GameInput.Held(InputAction.Fire) : GameInput.Down(InputAction.Fire);
+            // Rotary guns spin up while the trigger is held and only fire at full speed.
+            if (data.spinUp > 0f)
+            {
+                bool holding = GameInput.Held(InputAction.Fire) && !blocked && weapon.Magazine > 0;
+                if (holding && spin <= 0f) AudioManager.Play(Sound.SpinUp, player.Position, 0.55f, 1f, SoundCategory.Weapons);
+                spin = Mathf.MoveTowards(spin, holding ? 1f : 0f, Time.deltaTime / (holding ? data.spinUp : data.spinUp * 1.5f));
+                if (spin < 1f) return;
+            }
             if (!trigger || blocked) return;
             if (Time.time < nextFireTime) return;
 
@@ -309,10 +321,20 @@ namespace Swat
             float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
             var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player };
 
-            for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
+            if (data.blastRadius > 0f)
+            {
+                // Marking grenade: flies to the first thing it meets and bursts there.
+                Vector3 landed = WeaponEffects.Trace(origin, WeaponEffects.Scatter(player.AimDirection, Spread), data.range, muzzle, data.tracerColor, data.tracerWidth);
+                int tagged = WeaponEffects.Blast(landed, data.blastRadius, damage);
+                hitSomeone = tagged > 0;
+                tookDown = tagged > 0;
+                LastShotEnd = landed;
+            }
+            else for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
             {
                 Vector3 direction = WeaponEffects.Scatter(player.AimDirection, Spread);
                 var victim = WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor);
+                if (i == 0) LastShotEnd = origin + direction * data.range;
                 if (victim == null) continue;
                 hitSomeone = true;
                 if (!victim.IsAlive) tookDown = true;

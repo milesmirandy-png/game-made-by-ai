@@ -64,7 +64,7 @@ namespace Swat
             UITheme.Text(new Rect(70f, h - 70f, 480f, 22f), "Arrests: " + progress.totalArrests + "   |   Rescues: " + progress.totalRescues + "   |   Shots fired: " + progress.totalShots, 15, UITheme.Dim);
             UITheme.Text(new Rect(70f, h - 46f, 480f, 22f), "F12 screenshot   |   F10 FPS counter   |   Prototype build", 14, UITheme.Faint);
 
-            if (showCredits) Credits(new Rect(w - 620f, 120f, 560f, 520f));
+            if (showCredits) Credits(new Rect(w - 620f, 120f, 560f, 600f));
             else if (next != null) NextCard(new Rect(w - 520f, h - 300f, 460f, 240f), next);
         }
 
@@ -117,8 +117,9 @@ namespace Swat
             UITheme.Header(new Rect(rect.x + 24f, rect.y + 20f, rect.width - 48f, 50f), "Credits");
             string text =
                 "SWAT: Tactical Response - a single-player top-down tactical prototype built in Unity.\n\n" +
-                "Design, code, level layouts, procedural models and procedural audio were generated for this project. " +
-                "No third-party art, sound or code assets are used.\n\n" +
+                "Design, code, level layouts, procedural models and procedural audio were generated for this project.\n\n" +
+                "Weapon icons: pixel-art guns from a free-to-use sprite pack supplied by the project owner (see CREDITS.md). " +
+                "No other third-party art, sound or code assets are used.\n\n" +
                 "All agencies, places, companies and people are fictional. Port Avalon, the Tactical Response Unit, " +
                 "Halvorsen Logistics, Kestrel Freight, Marlow Court, Brightwater Corner Mart, Seaview Motor Inn, Sterling Mutual, " +
                 "Harbor Street Clinic, Club Halcyon and Riverside Steelworks do not exist.\n\n" +

@@ -118,6 +118,7 @@ namespace Swat
                 outfit = Outfit.Tactical,
                 idMarker = true,
                 idColor = UITheme.RoleColor(officer.role),
+                holster = true,
             };
         }
 

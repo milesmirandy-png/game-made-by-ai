@@ -16,6 +16,7 @@ namespace Swat
         // Added with the arsenal update.
         Pdw, BurstRifle, Marksman, Lmg, AutoShotgun, Pepperball, MachinePistol, Revolver, Zap,
         Pump, MagOut, MagIn, Charge, Kill, Whiz,
+        Rotary, Launcher, SpinUp, Burst,
     }
 
     // Placeholder sound effects synthesized from simple waveforms at startup,
@@ -58,6 +59,10 @@ namespace Swat
             clips[(int)Sound.Charge] = Make("Charge", 0.28f, t => Slide(t, 0f, 0.1f) + Click(t, 0.1f) * 0.7f + Slide(t, 0.13f, 0.06f) * 0.8f + Click(t, 0.19f) * 1.1f);
             clips[(int)Sound.Kill] = Make("Kill Confirm", 0.22f, t => (Mathf.Sin(Tau * 1320f * t) * Mathf.Exp(-t * 26f) + (t > 0.06f ? Mathf.Sin(Tau * 1760f * t) * Mathf.Exp(-(t - 0.06f) * 22f) : 0f)) * 0.6f + Click(t, 0f) * 0.3f);
             clips[(int)Sound.Whiz] = Whiz("Near Miss", 0.2f);
+            clips[(int)Sound.Rotary] = Shot("Rotary Gun", 0.16f, 60f, 0.8f, 260f, 120f, 45f, 0.6f, 20f, 0.15f);
+            clips[(int)Sound.Launcher] = Make("Launcher", 0.4f, t => Mathf.Sin(Tau * (180f - 260f * t) * t) * Mathf.Exp(-t * 9f) + Click(t, 0f) * 0.6f + Noise() * 0.25f * Mathf.Exp(-t * 30f));
+            clips[(int)Sound.SpinUp] = Make("Spin Up", 0.45f, t => (Mathf.Sin(Tau * (120f + 900f * t) * t) * 0.4f + Noise() * 0.12f) * Mathf.Clamp01(t * 8f) * Mathf.Clamp01((0.45f - t) * 10f));
+            clips[(int)Sound.Burst] = Bang("Paint Burst", 0.7f, 6f, 0.3f, 60f);
             clips[(int)Sound.Empty] = Make("Empty", 0.08f, t => Click(t, 0f));
             clips[(int)Sound.Footstep] = Thud("Footstep", 0.12f, 45f, 80f);
             clips[(int)Sound.DoorOpen] = Make("Door", 0.45f, t => Mathf.Sin(Tau * (260f + 90f * Mathf.Sin(t * 30f)) * t) * Mathf.Sin(Mathf.PI * t / 0.45f) * 0.5f + Noise() * 0.1f * Mathf.Exp(-t * 8f));

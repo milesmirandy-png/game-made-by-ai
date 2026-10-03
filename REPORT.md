@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has five parts: the **game modes, arsenal and
-sprite update** (newest, first), the **pixel-art style**, the **ten levels,
+and what is still unverified. It has six parts: the **gun pack, NPC and
+arsenal update** (newest, first), the **game modes, arsenal and sprite
+update**, the **pixel-art style**, the **ten levels,
 main menu and Level Creator**, the **quality-of-life, graphics, lighting and
 polish update**, and the original build (updated where later work changed
 something).
@@ -12,6 +13,68 @@ compiles in three configurations and the shaders pass a syntax check, but
 **the game has not been run inside the Unity editor yet**. No play-testing, no
 profiling or performance measurements, and no screenshots exist. Treat
 everything below as "implemented in code" unless it says otherwise.
+
+# Part 0c: Gun pack sprites, NPC models and four more guns
+
+## What was added
+
+- **Weapon icons from a pixel-art gun pack** (`Weapons/WeaponSprites.cs`,
+  `Weapons/WeaponSpritePack.cs`, `Resources/SWAT/WeaponSprites/`): the owner
+  supplied a sheet of side-view pixel-art guns from a free-to-use pack and asked
+  for the game's guns to match it 1:1, so each of the 24 weapons now uses one
+  of the pack's sprites unchanged (see [CREDITS.md](CREDITS.md)). The sheet was
+  checked to be at native resolution (no upscaling pattern), each gun was cut
+  out by flood fill on its white background, and the pale anti-aliasing
+  pixels reachable from the background were removed so the guns don't get a
+  white halo on dark panels. The PNGs are stored as `<weapon id>.bytes`
+  TextAssets and decoded with `Texture2D.LoadImage`, so Unity's texture
+  importer can't resize, compress or filter them (the project now lists the
+  built-in `com.unity.modules.imageconversion` module).
+  - `WeaponSpritePack` (pure C#) holds each primary weapon's muzzle, optic
+    rail and light mount positions and draws a fitted suppressor, red dot or
+    weapon light onto a copy of the sprite in the pack's palette (skipped where
+    the gun already has one, e.g. the scoped rifles, or on launchers).
+  - `WeaponSprites` keeps a point-filtered texture for whole-pixel drawing and
+    a mipmapped, filtered copy for slots smaller than the sprite (weapon wheel,
+    loadout list, officer cards). The code-drawn `WeaponSpriteArt` style is the
+    fallback for a weapon without an image (mirrored to face the same way);
+    the short-lived "weapon icon style" setting was removed.
+  - The 3D guns were recoloured to the pack's charcoal steel, with orange wood
+    or amber furniture where the weapon's sprite has it.
+- **Four new weapons** (24 in total): RG6 rotary gun (`spinUp`: a rising
+  spin-up sound, then fire), D20 drum shotgun, KV vector SMG and GL6 marker
+  launcher (`blastRadius`: `WeaponEffects.Blast` tags everyone within 3.5 m
+  who is in line of sight of the burst, with damage falling to a third at the
+  edge). New categories with 3D models, sounds (`Rotary`, `Launcher`,
+  `SpinUp`, `Burst`) and bot support. The rotary gun and launcher are
+  `versusOnly`: hidden from the campaign loadout, and a saved campaign loadout
+  holding one falls back to a default weapon.
+- **NPC models** (`CharacterFactory`): bodies built from more parts (waist,
+  chest, neck; shoulder, sleeve, forearm and hand per arm; thigh, shin, shoe
+  and sole per leg), faces with a nose, brows and a beard or mouth, seven
+  hairstyles, glasses or sunglasses, and clothing details (hood up, bandana,
+  gloves, holster, backpack, lanyard with ID, skirt, short sleeves, sneakers,
+  bandages on injured civilians). `SuspectLook` and `CivilianLook` pick these
+  per role; officers and game-mode bots get holsters.
+
+## Limitations
+
+- The pack has no sprite of its own for attachments, so the suppressor, red
+  dot and light are drawn by the game in the pack's colours; their mount
+  positions were picked by hand per sprite and checked on rendered sheets.
+- Each icon matches its weapon by type, not by name: the guns in the pack are
+  real-world-looking designs, while the game's names stay fictional.
+- The pack's name, author and link still need to be added to CREDITS.md.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors).
+- **The icon compositing ran outside Unity:** `WeaponSpritePack.cs` was
+  compiled with Mono together with a small program that loads every packed
+  sprite, fits all three attachments and saves the result; the rendered sheet
+  was inspected for each primary weapon.
+- **Not done:** loading the PNGs through Unity's `Resources`/`LoadImage` path,
+  seeing the new icons, NPCs or the four new guns in the running game.
 
 # Part 0b: Game modes, arsenal and sprites
 
@@ -82,7 +145,8 @@ everything below as "implemented in code" unless it says otherwise.
   tactics, and they can't take stairs (maps with several floors aren't
   offered). The apartment map is not in the game-mode list.
 - Weapon sprites are generated from a handful of shapes per category, so two
-  weapons of the same category differ only by colour and attachments.
+  weapons of the same category differ only by colour and attachments
+  (superseded by the gun pack in Part 0c).
 
 ## Testing performed for this part
 

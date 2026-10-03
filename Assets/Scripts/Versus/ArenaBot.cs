@@ -232,7 +232,9 @@ namespace Swat
             Vector3 direction = (aim - origin).normalized;
             var damage = new DamageInfo { amount = data.damage, attacker = Team, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, shooter = this };
             Vector3 muzzle = Parts.muzzle.position;
-            for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
+            if (data.blastRadius > 0f)
+                WeaponEffects.Blast(WeaponEffects.Trace(origin, WeaponEffects.Scatter(direction, error), data.range, muzzle, data.tracerColor, data.tracerWidth), data.blastRadius, damage);
+            else for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
                 WeaponEffects.Shoot(origin, WeaponEffects.Scatter(direction, error), data.range, damage, muzzle, data.tracerColor);
             Gun.Magazine--;
             LastShotTime = Time.time;

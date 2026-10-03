@@ -97,6 +97,11 @@ namespace Swat
         {
             var primary = GameData.Weapon(loadout.primaryId);
             var sidearm = GameData.Weapon(loadout.sidearmId) ?? GameData.Weapon("pistol_p17");
+            // Game-mode-only weapons stay at headquarters on real missions.
+            var mission = OfficerSelectionManager.Mission;
+            bool versus = mission != null && mission.IsVersus;
+            if (primary != null && primary.versusOnly && !versus) primary = GameData.Weapon("rifle_compact");
+            if (sidearm.versusOnly && !versus) sidearm = GameData.Weapon("pistol_p17");
             if (primary != null) Primary = new Weapon(primary, loadout);
             Sidearm = new Weapon(sidearm, loadout);
             PrimaryBlocked = loadout.useShield || Primary == null;

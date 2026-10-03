@@ -3,55 +3,108 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Turns WeaponSpriteArt drawings into point-filtered textures (cached per
-    // weapon and attachment set) and draws them crisply: whole screen pixels
-    // per sprite pixel whenever the space allows. Used for weapon icons in the
-    // loadout, HUD and weapon wheel, and for weapon pickups in the game modes.
+    // Weapon icons for the loadout, HUD and weapon wheel. Each weapon's sprite
+    // comes from the pixel-art gun pack in Resources/SWAT/WeaponSprites (PNG
+    // files saved as <weapon id>.bytes), with the loadout's attachments drawn
+    // on by WeaponSpritePack; a weapon without a file falls back to the
+    // code-drawn WeaponSpriteArt. Textures are cached per weapon and attachment
+    // set and drawn crisply: whole screen pixels per sprite pixel whenever the
+    // space allows, smoothly filtered when an icon has to be drawn smaller.
     public static class WeaponSprites
     {
+        const string Folder = "SWAT/WeaponSprites/";
+
         static readonly Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
+        static readonly Dictionary<Texture2D, Texture2D> smooth = new Dictionary<Texture2D, Texture2D>();
+        static readonly Dictionary<string, WeaponSpriteArt.Image> packImages = new Dictionary<string, WeaponSpriteArt.Image>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             cache.Clear();
+            smooth.Clear();
+            packImages.Clear();
         }
 
         public static Texture2D Get(WeaponData weapon, OfficerLoadout attachments = null)
         {
             if (weapon == null) return null;
             bool fitted = attachments != null && !weapon.isSidearm;
-            var options = new WeaponSpriteArt.Options
-            {
-                r = weapon.accent.r, g = weapon.accent.g, b = weapon.accent.b,
-                suppressor = fitted && !string.IsNullOrEmpty(attachments.muzzleId),
-                optic = fitted && !string.IsNullOrEmpty(attachments.opticId),
-                light = fitted && !string.IsNullOrEmpty(attachments.lightId),
-            };
-            string key = weapon.id + (options.suppressor ? "s" : "") + (options.optic ? "o" : "") + (options.light ? "l" : "");
+            bool suppressor = fitted && !string.IsNullOrEmpty(attachments.muzzleId);
+            bool optic = fitted && !string.IsNullOrEmpty(attachments.opticId);
+            bool light = fitted && !string.IsNullOrEmpty(attachments.lightId);
+            string key = weapon.id + (suppressor ? "s" : "") + (optic ? "o" : "") + (light ? "l" : "");
             Texture2D texture;
             if (cache.TryGetValue(key, out texture) && texture != null) return texture;
 
-            var image = WeaponSpriteArt.Draw(weapon.category, options);
-            texture = new Texture2D(image.Width, image.Height, TextureFormat.RGBA32, false)
-            {
-                name = "SWAT Sprite " + key,
-                filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
-                hideFlags = HideFlags.DontSave,
-            };
+            var image = PackImage(weapon.id);
+            bool drawn = image == null;
+            if (!drawn) image = WeaponSpritePack.Fit(image, weapon.id, suppressor, optic, light);
+            else
+                image = WeaponSpriteArt.Draw(weapon.category, new WeaponSpriteArt.Options
+                {
+                    r = weapon.accent.r, g = weapon.accent.g, b = weapon.accent.b,
+                    suppressor = suppressor, optic = optic, light = light,
+                });
+
             var pixels = new Color32[image.Width * image.Height];
             for (int y = 0; y < image.Height; y++)
                 for (int x = 0; x < image.Width; x++)
                 {
                     uint p = image.Pixels[y * image.Width + x];
-                    // The drawing's row 0 is the top; a texture's row 0 is the bottom.
-                    pixels[(image.Height - 1 - y) * image.Width + x] = new Color32((byte)(p >> 24), (byte)(p >> 16), (byte)(p >> 8), (byte)p);
+                    // The image's row 0 is the top; a texture's row 0 is the bottom. Code-drawn
+                    // sprites point left, so they are mirrored to face right like the pack.
+                    int column = drawn ? image.Width - 1 - x : x;
+                    pixels[(image.Height - 1 - y) * image.Width + column] = new Color32((byte)(p >> 24), (byte)(p >> 16), (byte)(p >> 8), (byte)p);
                 }
-            texture.SetPixels32(pixels);
-            texture.Apply(false, true);
+            texture = MakeTexture("SWAT Sprite " + key, image.Width, image.Height, pixels, false);
             cache[key] = texture;
+            smooth[texture] = MakeTexture("SWAT Sprite (smooth) " + key, image.Width, image.Height, pixels, true);
             return texture;
+        }
+
+        static Texture2D MakeTexture(string name, int width, int height, Color32[] pixels, bool filtered)
+        {
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, filtered)
+            {
+                name = name,
+                filterMode = filtered ? FilterMode.Trilinear : FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.DontSave,
+            };
+            texture.SetPixels32(pixels);
+            texture.Apply(filtered, true);
+            return texture;
+        }
+
+        // The pack sprite for a weapon id, decoded once; null if the weapon has none.
+        static WeaponSpriteArt.Image PackImage(string id)
+        {
+            WeaponSpriteArt.Image image;
+            if (packImages.TryGetValue(id, out image)) return image;
+            var asset = Resources.Load<TextAsset>(Folder + id);
+            if (asset != null)
+            {
+                var decoded = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (decoded.LoadImage(asset.bytes, false))
+                {
+                    int w = decoded.width, h = decoded.height;
+                    var pixels = decoded.GetPixels32();
+                    image = new WeaponSpriteArt.Image { Width = w, Height = h, Pixels = new uint[w * h] };
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            var c = pixels[(h - 1 - y) * w + x];
+                            image.Pixels[y * w + x] = ((uint)c.r << 24) | ((uint)c.g << 16) | ((uint)c.b << 8) | c.a;
+                        }
+                }
+                else Debug.LogWarning("SWAT: could not decode the weapon sprite " + Folder + id + ".bytes");
+                if (Application.isPlaying) Object.Destroy(decoded);
+                else Object.DestroyImmediate(decoded);
+                Resources.UnloadAsset(asset);
+            }
+            packImages[id] = image;
+            return image;
         }
 
         // Draws the sprite centred in the rect (GUI units), at a whole number of screen pixels per sprite pixel.
@@ -66,9 +119,12 @@ namespace Swat
             // Snap to the screen pixel grid so sprite pixels stay square.
             target.x = Mathf.Round(target.x * scale) / scale;
             target.y = Mathf.Round(target.y * scale) / scale;
+            // Shrunk below one screen pixel per sprite pixel, a filtered copy keeps thin parts from vanishing.
+            Texture2D source = texture, filtered;
+            if (fit < 1f && smooth.TryGetValue(texture, out filtered) && filtered != null) source = filtered;
             var old = GUI.color;
             GUI.color = new Color(1f, 1f, 1f, alpha * UITheme.Alpha);
-            GUI.DrawTexture(target, texture, ScaleMode.StretchToFill, true);
+            GUI.DrawTexture(target, source, ScaleMode.StretchToFill, true);
             GUI.color = old;
         }
     }

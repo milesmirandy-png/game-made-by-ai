@@ -109,7 +109,11 @@ namespace Swat
                 Section(ref y, x, cw, loadout.useShield ? "PRIMARY WEAPON (not usable with the shield)" : "PRIMARY WEAPON");
                 var primaries = new List<WeaponData>();
                 var sidearms = new List<WeaponData>();
-                foreach (var weapon in GameData.AllWeapons) (weapon.isSidearm ? sidearms : primaries).Add(weapon);
+                // Game-mode-only weapons are offered only when preparing a game-mode match.
+                var forMission = OfficerSelectionManager.Mission;
+                bool versus = forMission != null && forMission.IsVersus;
+                foreach (var weapon in GameData.AllWeapons)
+                    if (!weapon.versusOnly || versus || GameManager.Instance.BrowseMode) (weapon.isSidearm ? sidearms : primaries).Add(weapon);
                 changed |= WeaponGrid(ref y, x, cw, primaries, officer, loadout, true);
                 Section(ref y, x, cw, "SIDEARM");
                 changed |= WeaponGrid(ref y, x, cw, sidearms, officer, loadout, false);
@@ -335,6 +339,10 @@ namespace Swat
                 case WeaponCategory.MachinePistol: return "Machine pistol";
                 case WeaponCategory.Revolver: return "Revolver";
                 case WeaponCategory.StunPistol: return "Stun pistol (less-lethal)";
+                case WeaponCategory.Rotary: return "Rotary gun (game modes)";
+                case WeaponCategory.DrumShotgun: return "Drum-fed automatic shotgun";
+                case WeaponCategory.VectorSMG: return "Submachine gun";
+                case WeaponCategory.GrenadeLauncher: return "Marking-grenade launcher (game modes)";
                 default: return "Heavy sidearm";
             }
         }

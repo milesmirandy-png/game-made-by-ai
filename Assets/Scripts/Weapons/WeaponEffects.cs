@@ -43,6 +43,49 @@ namespace Swat
             return victim;
         }
 
+        // A launched round: no damage on the way, just where it lands (and a thick tracer).
+        public static Vector3 Trace(Vector3 origin, Vector3 direction, float range, Vector3 muzzle, Color tracer, float width)
+        {
+            Vector3 end = origin + direction * range;
+            RaycastHit hit;
+            if (Physics.Raycast(origin, direction, out hit, range, Layers.ShootableMask, QueryTriggerInteraction.Ignore)) end = hit.point - direction * 0.1f;
+            EffectsManager.Instance.SpawnTracer(muzzle, end, tracer, width, 0.09f);
+            return end;
+        }
+
+        // Game modes: a marking grenade bursts and tags everyone in range who isn't behind a wall
+        // (full effect in the middle, a third at the edge). A paint-like burst, nothing graphic.
+        public static int Blast(Vector3 point, float radius, DamageInfo damage)
+        {
+            int tagged = 0;
+            var seen = new System.Collections.Generic.HashSet<IDamageable>();
+            foreach (var collider in Physics.OverlapSphere(point, radius, 1 << Layers.Characters, QueryTriggerInteraction.Ignore))
+            {
+                var victim = collider.GetComponentInParent<IDamageable>();
+                if (victim == null || !victim.IsAlive || !seen.Add(victim)) continue;
+                Vector3 center = collider.bounds.center;
+                if (Physics.Linecast(point + Vector3.up * 0.3f, center, Layers.WorldMask, QueryTriggerInteraction.Ignore)) continue;
+                var info = damage;
+                info.amount = damage.amount * (1f - Mathf.Clamp01(Vector3.Distance(point, center) / radius) * 0.67f);
+                info.point = center;
+                Vector3 push = center - point;
+                push.y = 0f;
+                info.direction = push.sqrMagnitude > 0.01f ? push.normalized : Vector3.forward;
+                victim.TakeDamage(info);
+                if (!victim.IsAlive) tagged++;
+            }
+            var effects = EffectsManager.Instance;
+            effects.Burst(point + Vector3.up * 0.2f, Vector3.up, new Color(1f, 0.55f, 0.15f), 14, 5f, 0.12f, 1.5f);
+            effects.Burst(point + Vector3.up * 0.2f, Vector3.up, new Color(0.95f, 0.95f, 0.9f), 8, 3f, 0.1f);
+            effects.HitSpark(point + Vector3.up * 0.4f, radius * 0.6f);
+            effects.FlashLight(point + Vector3.up * 0.5f, new Color(1f, 0.6f, 0.25f), 6f, radius * 3f, 0.15f);
+            AudioManager.Play(Sound.Burst, point, 0.9f, Random.Range(0.95f, 1.05f), SoundCategory.Weapons);
+            Noise.Emit(point, 30f, NoiseKind.Explosion);
+            var game = GameManager.Instance;
+            if (game != null && game.Player != null && (game.Player.Position - point).sqrMagnitude < 15f * 15f) game.CameraRig.Shake(0.35f);
+            return tagged;
+        }
+
         // Shots that pass close to the player without hitting make a sharp whiz.
         static void NearMiss(Vector3 from, Vector3 to, IDamageable victim)
         {
