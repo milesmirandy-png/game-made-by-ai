@@ -31,6 +31,8 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Training" + (SaveManager.Progress.trainingComplete ? "  (completed)" : "  (recommended first)"), training != null) && training != null) game.OpenBriefing(training);
             y += bh + gap;
+            if (UITheme.Button(new Rect(x, y, bw, bh), "Game Modes  (Deathmatch, Flag, Zone)")) game.OpenVersusSetup();
+            y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Level Creator  (build and play your own)")) game.OpenLevelEditor();
             y += bh + gap;
             float half = (bw - gap) * 0.5f;

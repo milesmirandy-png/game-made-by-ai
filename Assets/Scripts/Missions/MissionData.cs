@@ -6,6 +6,9 @@ namespace Swat
 {
     public enum MissionType { BuildingClearance, CivilianRescue, Investigation, Emergency, Training }
 
+    // Mission = the normal SWAT operation; the others are team-versus-team exercises (game modes).
+    public enum GameMode { Mission, TeamDeathmatch, CaptureTheFlag, ZoneControl }
+
     public enum ObjectiveType
     {
         EnterBuilding, RescueCivilians, SecureSuspects, ArrestSuspects, SecureRoom, InvestigateRoom, SecureEvidence,
@@ -104,6 +107,9 @@ namespace Swat
         public bool isTraining;
         [Tooltip("Made in the level creator (not part of campaign progress)")] public bool isCustom;
         public Color thumbnailColor = new Color(0.2f, 0.3f, 0.45f);
+        [Tooltip("Game modes: a team exercise on this map instead of a mission")] public GameMode mode;
+
+        public bool IsVersus { get { return mode != GameMode.Mission; } }
 
         public TimeOfDay DefaultTime { get { return timeOfDay != TimeOfDay.Day ? timeOfDay : night ? TimeOfDay.Night : TimeOfDay.Day; } }
 

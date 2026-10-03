@@ -76,7 +76,76 @@ namespace Swat
             launcher.lessLethal = true;
             launcher.stunDuration = 3f;
             launcher.tracerColor = new Color(1f, 0.6f, 0.2f);
+
+            // The arsenal update: ten more weapons (all fictional game abstractions).
+            var heavy = Roles(OfficerRole.Leader, OfficerRole.Breacher, OfficerRole.Tactical);
+            var precise = Roles(OfficerRole.Leader, OfficerRole.Recon, OfficerRole.Tactical);
+            list.Add(Weapon("pdw_x4", "X4 Defense Weapon", WeaponCategory.PDW, false, FireMode.FullAuto, true, 18f, 13f, 40, 160, 2f, 30f, 2.8f, 0.55f, 1, 20f, 1f, 0.45f, Sound.Pdw, 0,
+                "Big top-loaded magazine and very little kick. Easy to control on the move."));
+            list.Add(Weapon("rifle_b4", "B4 Burst Rifle", WeaponCategory.BurstRifle, false, FireMode.Burst, true, 28f, 14f, 30, 90, 2.2f, 42f, 1.4f, 0.8f, 1, 27f, 0.94f, 0.55f, Sound.BurstRifle, 0,
+                "Fires three quick rounds per pull. Switch to single shots with B."));
+            list.Add(Weapon("rifle_cx", "CX Bullpup Rifle", WeaponCategory.Bullpup, false, FireMode.FullAuto, true, 27f, 10f, 30, 90, 2.6f, 40f, 1.8f, 0.95f, 1, 27f, 0.97f, 0.55f, Sound.Rifle, 0,
+                "A long barrel in a short body: rifle range with compact handling, but slower to reload."));
+            list.Add(Weapon("dmr_dm2", "DM2 Marksman Rifle", WeaponCategory.Marksman, false, FireMode.SemiAuto, false, 62f, 2.2f, 10, 40, 2.6f, 70f, 0.35f, 2.6f, 1, 32f, 0.88f, 0.7f, Sound.Marksman, precise,
+                "Hard-hitting and pinpoint accurate. Hold steady aim to see much further."));
+            list.Add(Weapon("lmg_lm8", "LM8 Light MG", WeaponCategory.LMG, false, FireMode.FullAuto, false, 24f, 12f, 75, 150, 4.2f, 45f, 3.2f, 0.85f, 1, 30f, 0.84f, 0.9f, Sound.Lmg, heavy,
+                "A huge magazine and a long reload. Crouch to steady it."));
+            list.Add(Weapon("shotgun_as12", "AS12 Auto Shotgun", WeaponCategory.AutoShotgun, false, FireMode.SemiAuto, false, 11f, 3.2f, 8, 32, 3f, 13f, 10f, 2.4f, 8, 28f, 0.93f, 0.6f, Sound.AutoShotgun, heavy,
+                "Fires as fast as you can pull the trigger. Brutal up close, useless at range."));
+            list.Add(Weapon("pepper_pb3", "PB3 Pepperball", WeaponCategory.Pepperball, false, FireMode.SemiAuto, false, 4f, 5f, 15, 60, 2.2f, 22f, 2f, 0.5f, 1, 10f, 1f, 0.5f, Sound.Pepperball, 0,
+                "Rapid less-lethal rounds that briefly stun. Several hits wear down a suspect's resolve."));
+            list.Add(Weapon("mp_m9", "M9 Machine Pistol", WeaponCategory.MachinePistol, true, FireMode.FullAuto, true, 15f, 15f, 20, 80, 1.5f, 18f, 5f, 0.9f, 1, 19f, 1f, 0.3f, Sound.MachinePistol, 0,
+                "A sidearm that empties its magazine in a heartbeat. Wild but fast."));
+            list.Add(Weapon("revolver_r6", "R6 Revolver", WeaponCategory.Revolver, true, FireMode.SemiAuto, false, 55f, 1.8f, 6, 36, 2.4f, 32f, 1.8f, 3.4f, 1, 27f, 1f, 0.35f, Sound.Revolver, 0,
+                "Six heavy rounds and a slow reload. Every shot counts."));
+            list.Add(Weapon("stun_s2", "S2 Stun Pistol", WeaponCategory.StunPistol, true, FireMode.SemiAuto, false, 2f, 1f, 1, 8, 2.5f, 9f, 1.5f, 0.6f, 1, 6f, 1f, 0.3f, Sound.Zap, 0,
+                "One short-range stun dart per load. Almost silent, very likely to make a suspect give up."));
+
+            // Look and feel per weapon: furniture colour (the sprite and 3D model), kick, muzzle flash and extras.
+            foreach (var w in list)
+            {
+                switch (w.id)
+                {
+                    case "smg_compact": Feel(w, Polymer, 0.6f, 0.45f); break;
+                    case "smg_v10": Feel(w, Polymer, 0.7f, 0.5f); break;
+                    case "rifle_compact": Feel(w, new Color(0.3f, 0.3f, 0.33f), 0.9f, 0.6f); break;
+                    case "rifle_service": Feel(w, new Color(0.62f, 0.18f, 0.24f), 1f, 0.7f); break;
+                    case "shotgun_ts8": Feel(w, new Color(0.5f, 0.28f, 0.15f), 2.2f, 0.95f); w.pumpAction = true; w.tracerWidth = 0.035f; break;
+                    case "carbine_pc9": Feel(w, new Color(0.55f, 0.3f, 0.16f), 1.6f, 0.8f); w.steadyLookAhead = 3f; w.pumpAction = true; break;
+                    case "launcher_ll40": Feel(w, Polymer, 1.4f, 0.5f); w.ejectsShells = false; w.tracerWidth = 0.08f; break;
+                    case "pistol_p17": Feel(w, Polymer, 0.7f, 0.4f); break;
+                    case "pistol_bk6": Feel(w, Polymer, 0.6f, 0.35f); break;
+                    case "pistol_h50": Feel(w, new Color(0.5f, 0.28f, 0.15f), 1.5f, 0.55f); break;
+                    case "pdw_x4": Feel(w, new Color(0.26f, 0.3f, 0.21f), 0.55f, 0.45f); break;
+                    case "rifle_b4": Feel(w, new Color(0.55f, 0.47f, 0.33f), 0.9f, 0.65f); w.burstCount = 3; break;
+                    case "rifle_cx": Feel(w, new Color(0.32f, 0.36f, 0.22f), 1f, 0.7f); break;
+                    case "dmr_dm2": Feel(w, new Color(0.55f, 0.47f, 0.33f), 2f, 0.9f); w.steadyLookAhead = 7f; w.pumpAction = true; w.tracerWidth = 0.06f; break;
+                    case "lmg_lm8": Feel(w, new Color(0.32f, 0.36f, 0.22f), 0.9f, 0.75f); w.crouchSpread = 0.45f; break;
+                    case "shotgun_as12": Feel(w, new Color(0.3f, 0.3f, 0.33f), 1.8f, 0.9f); w.tracerWidth = 0.035f; break;
+                    case "pepper_pb3":
+                        Feel(w, new Color(0.3f, 0.25f, 0.55f), 0.3f, 0.25f);
+                        w.lessLethal = true; w.stunDuration = 0.8f; w.surrenderBonus = 0.06f; w.ejectsShells = false;
+                        w.tracerColor = new Color(0.85f, 0.4f, 1f);
+                        break;
+                    case "mp_m9": Feel(w, Polymer, 0.6f, 0.4f); break;
+                    case "revolver_r6": Feel(w, new Color(0.55f, 0.3f, 0.16f), 1.9f, 0.6f); w.ejectsShells = false; break;
+                    case "stun_s2":
+                        Feel(w, Polymer, 0.3f, 0.2f);
+                        w.lessLethal = true; w.stunDuration = 3.5f; w.surrenderBonus = 0.5f; w.ejectsShells = false;
+                        w.tracerColor = new Color(0.45f, 0.9f, 1f); w.tracerWidth = 0.025f;
+                        break;
+                }
+            }
             return list;
+        }
+
+        static readonly Color Polymer = new Color(0.17f, 0.19f, 0.24f);
+
+        static void Feel(WeaponData w, Color accent, float kick, float flash)
+        {
+            w.accent = accent;
+            w.kick = kick;
+            w.flashSize = flash;
         }
 
         static AttachmentData Attachment(string id, string name, AttachmentSlot slot, float spread, float recoil, float noise, float move, float light, int unlock, string description)

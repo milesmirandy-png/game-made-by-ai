@@ -13,13 +13,13 @@ namespace Swat
     public static class ProceduralTextures
     {
         static readonly Dictionary<int, Texture2D> surfaces = new Dictionary<int, Texture2D>();
-        static Texture2D radial, edge, cone, dot;
+        static Texture2D radial, edge, cone, dot, star, flame;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             surfaces.Clear();
-            radial = edge = cone = dot = null;
+            radial = edge = cone = dot = star = flame = null;
         }
 
         // Pixel art uses small textures with hard-edged texels so they match the chunky screen pixels.
@@ -255,6 +255,38 @@ namespace Swat
                     return Mathf.Clamp01((1f - d) * 3f);
                 });
                 return dot;
+            }
+        }
+
+        // Muzzle flash: a hot core with four sharp rays.
+        public static Texture2D Star
+        {
+            get
+            {
+                if (star == null) star = Gradient("SWAT Star", 32, (u, v) =>
+                {
+                    float x = Mathf.Abs(u - 0.5f) * 2f, y = Mathf.Abs(v - 0.5f) * 2f;
+                    float core = 1f - Mathf.Clamp01(Mathf.Sqrt(x * x + y * y) * 2.4f);
+                    float rays = Mathf.Max(Mathf.Clamp01(1f - x * 7f) * (1f - y), Mathf.Clamp01(1f - y * 7f) * (1f - x));
+                    return Mathf.Clamp01(core * 1.6f + rays);
+                });
+                return star;
+            }
+        }
+
+        // Muzzle flame: a teardrop that starts at v = 0 (the muzzle) and points along +v.
+        public static Texture2D Flame
+        {
+            get
+            {
+                if (flame == null) flame = Gradient("SWAT Flame", 32, (u, v) =>
+                {
+                    float half = Mathf.Sin(Mathf.Clamp01(v * 1.4f) * Mathf.PI * 0.5f) * (1f - v) * 0.5f;
+                    float d = Mathf.Abs(u - 0.5f);
+                    if (half <= 0.001f) return 0f;
+                    return Mathf.Clamp01((half - d) / half * 2.5f) * Mathf.Clamp01((1f - v) * 2f);
+                });
+                return flame;
             }
         }
 

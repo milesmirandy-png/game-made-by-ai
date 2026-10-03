@@ -4,7 +4,7 @@ using UnityEngine.AI;
 
 namespace Swat
 {
-    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Loading, Deploying, Playing, Paused, Debrief, LevelEditor }
+    public enum GameState { MainMenu, Headquarters, Briefing, OfficerSelection, Loadout, Loading, Deploying, Playing, Paused, Debrief, LevelEditor, VersusSetup }
 
     // Owns the game's lifecycle. Everything lives in one scene that is built
     // at runtime: the headquarters diorama behind the menus and, while
@@ -38,6 +38,7 @@ namespace Swat
         public Transform PoolRoot { get; private set; }
         public MissionPlan Plan { get; private set; }
         public MissionResult LastResult { get; private set; }
+        public VersusResult LastMatch { get; private set; }
         public bool BrowseMode { get; private set; } // roster/equipment opened from the main menu
         public string FailReason { get; private set; }
 
@@ -54,7 +55,7 @@ namespace Swat
         float nextAutoLight;
         VehicleArrival arrival;
         Transform van;
-        float stateChangedAt, failAt = -1f, deployStarted;
+        float stateChangedAt, failAt = -1f, deployStarted, hitStopUntil;
         bool indoorAmbience;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -86,6 +87,7 @@ namespace Swat
             gameObject.AddComponent<EffectsManager>();
             gameObject.AddComponent<AIManager>();
             gameObject.AddComponent<MissionManager>();
+            gameObject.AddComponent<VersusMatch>();
             gameObject.AddComponent<TacticalIntel>();
             gameObject.AddComponent<SquadCommandManager>();
             gameObject.AddComponent<UIManager>();
@@ -158,6 +160,7 @@ namespace Swat
             {
                 if (PlanningMode) scale = SaveManager.Settings.planningPauses ? 0f : 0.2f;
                 else if (SquadCommandManager.Instance != null && SquadCommandManager.Instance.WheelOpen) scale = 0.3f;
+                else if (Time.unscaledTime < hitStopUntil) scale = 0.06f;
             }
             if (!Mathf.Approximately(Time.timeScale, scale)) Time.timeScale = scale;
             // World audio stops with the game (menus and music keep playing) and resumes where it left off.
@@ -230,11 +233,51 @@ namespace Swat
             OpenBriefing(CustomLevelBuilder.ToMission(level));
         }
 
+        // ---- Game modes ----
+
+        public void OpenVersusSetup()
+        {
+            if (Level != null) ClearMission();
+            ShowHeadquarters(Headquarters.missionsCamera, Headquarters.missionsTarget, false);
+            BrowseMode = false;
+            SetState(GameState.VersusSetup);
+        }
+
+        // Prepares a match from the chosen options; the squad and loadout screens and Deploy work as for missions.
+        public void PrepareVersus()
+        {
+            var mission = VersusMatch.CreateMission(SaveManager.Progress.versus);
+            OfficerSelectionManager.TimeOverride = -1;
+            SelectMission(mission);
+            SaveManager.Save();
+        }
+
+        public void StartVersus()
+        {
+            PrepareVersus();
+            Deploy();
+        }
+
+        public void EndMatch(VersusResult result)
+        {
+            if (State != GameState.Playing && State != GameState.Paused) return;
+            LastMatch = result;
+            LastResult = null;
+            var options = SaveManager.Progress.versus;
+            options.matchesPlayed++;
+            if (result.winner == 0) options.matchesWon++;
+            SaveManager.Save();
+            AudioManager.Play2D(result.winner == 0 ? Sound.Complete : Sound.Fail, 0.7f, 1f, SoundCategory.Interface);
+            AudioManager.Instance.SetMusic(Sound.MusicMenu);
+            SetState(GameState.Debrief);
+        }
+
         // The "back" target for screens shown before or after a mission.
         public void LeaveMissionScreens()
         {
             var mission = OfficerSelectionManager.Mission;
-            if (mission != null && mission.isCustom) OpenLevelEditor();
+            if (mission != null && mission.IsVersus) OpenVersusSetup();
+            else if (mission != null && mission.isCustom) OpenLevelEditor();
             else GoToHeadquarters();
         }
 
@@ -342,6 +385,7 @@ namespace Swat
             failAt = -1f;
             FailReason = null;
             MissionManager.Instance.Abort();
+            VersusMatch.Instance.Clear();
             if (missionRoot != null)
             {
                 missionRoot.gameObject.SetActive(false);
@@ -376,7 +420,9 @@ namespace Swat
 
             var actors = new GameObject("Actors").transform;
             actors.SetParent(missionRoot, false);
-            MissionRandomizer.Populate(plan, Level, actors);
+            bool versus = mission.IsVersus;
+            // Game modes have no suspects, civilians, security devices or locked doors.
+            if (!versus) MissionRandomizer.Populate(plan, Level, actors);
             ApplyLighting();
             dresser = MapDresser.Dress(Level, Lighting, plan.seed, true);
             dust = AmbientDust.Create(missionRoot);
@@ -388,7 +434,7 @@ namespace Swat
             dust.Follow(Player.transform);
             AIManager.Instance.RegisterPlayer(Player);
             var squad = OfficerSelectionManager.Squad;
-            for (int i = 0; i < squad.Count && i < Level.squadSpawns.Count; i++)
+            for (int i = 0; i < squad.Count && i < Level.squadSpawns.Count && !versus; i++)
             {
                 var officer = SquadAI.Spawn(actors, squad[i], GameData.LoadoutFor(squad[i]), i, Level.squadSpawns[i], Level.playerYaw);
                 officer.Area = Level.AreaAt(officer.Position);
@@ -400,7 +446,13 @@ namespace Swat
             VanSupply.Attach(van);
             SetTeamVisible(false);
 
-            MissionManager.Instance.Begin(plan);
+            if (versus)
+            {
+                MissionManager.Instance.Clear();
+                VersusMatch.Instance.Begin(mission, SaveManager.Progress.versus, Level, actors, Player);
+                VersusMatch.Instance.ShowTeams(false);
+            }
+            else MissionManager.Instance.Begin(plan);
             TacticalIntel.Instance.Begin();
             SquadCommandManager.Instance.Begin();
 
@@ -442,6 +494,7 @@ namespace Swat
         {
             if (Player != null) Player.Parts.SetVisible(visible);
             foreach (var officer in AIManager.Instance.Officers) officer.SetVisible(visible);
+            if (VersusMatch.Active) VersusMatch.Instance.ShowTeams(visible);
         }
 
         void FinishDeployment()
@@ -460,7 +513,8 @@ namespace Swat
             AudioManager.Play(Sound.DoorOpen, Level.vanParking, 0.6f, 0.7f);
             CameraRig.Follow(Player, CameraFocusLimits());
             SetState(GameState.Playing);
-            SquadCommandManager.Instance.Radio(null, Plan.mission.isTraining ? "Instructors are standing by. Follow the steps on the left." : "TOC to TRU, you are clear to enter. Good luck.");
+            SquadCommandManager.Instance.Radio(null, Plan.mission.IsVersus ? "Exercise is live. Marking rounds only. " + VersusMatch.ModeGoals[(int)Plan.mission.mode]
+                : Plan.mission.isTraining ? "Instructors are standing by. Follow the steps on the left." : "TOC to TRU, you are clear to enter. Good luck.");
         }
 
         Bounds CameraFocusLimits()
@@ -475,6 +529,12 @@ namespace Swat
         public void OnPlayerDown()
         {
             if (State != GameState.Playing) return;
+            if (VersusMatch.Active)
+            {
+                // Game modes: tagged out until the respawn, never a failed mission.
+                VersusMatch.Instance.OnPlayerDown();
+                return;
+            }
             MissionManager.Instance.OnPlayerDown();
             FailReason = "The team leader is down.";
             failAt = Time.time + 2f; // let the fall play out first
@@ -518,6 +578,7 @@ namespace Swat
         {
             if (State != GameState.Playing && State != GameState.Paused) return;
             failAt = -1f;
+            LastMatch = null;
             LastResult = MissionManager.Instance.Finish(success, reason ?? FailReason);
             RecordProgress(LastResult);
             AudioManager.Play2D(success ? Sound.Complete : Sound.Fail, 0.7f, 1f, SoundCategory.Interface);
@@ -569,6 +630,13 @@ namespace Swat
             progress.totalRescues += result.stats.civilians.evacuated;
             result.unlocks.AddRange(Progression.NewUnlocks(before, progress.missionsCompleted, progress.trainingComplete && !trainingBefore));
             SaveManager.Save();
+        }
+
+        // A tiny freeze when the player takes someone down: it makes the hit land.
+        public void HitStop(float seconds)
+        {
+            if (!SaveManager.Settings.hitStop || State != GameState.Playing) return;
+            hitStopUntil = Mathf.Max(hitStopUntil, Time.unscaledTime + seconds);
         }
 
         public void Pause()

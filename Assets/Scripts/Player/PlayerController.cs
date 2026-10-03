@@ -160,6 +160,13 @@ namespace Swat
             AimPoint = aimTarget = position + transform.forward * 3f;
         }
 
+        // Game modes: stand up again after a respawn.
+        public void ResetStance()
+        {
+            if (IsCrouched) SetCrouch(false);
+            treatUntil = 0f;
+        }
+
         // Short "applying a bandage" pose used by the medical kit.
         public void PlayTreatAnimation(float seconds)
         {

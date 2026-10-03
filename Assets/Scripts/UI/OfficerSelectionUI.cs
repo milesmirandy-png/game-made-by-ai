@@ -40,7 +40,12 @@ namespace Swat
             }
             else
             {
-                if (UITheme.Button(new Rect(60f, h - 90f, 200f, 50f), "< Briefing")) game.OpenBriefingKeepPlan();
+                bool versus = mission != null && mission.IsVersus;
+                if (UITheme.Button(new Rect(60f, h - 90f, 200f, 50f), versus ? "< Match setup" : "< Briefing"))
+                {
+                    if (versus) game.OpenVersusSetup();
+                    else game.OpenBriefingKeepPlan();
+                }
                 if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), "Loadout  >", true, true, 21)) game.OpenLoadout(false);
             }
         }

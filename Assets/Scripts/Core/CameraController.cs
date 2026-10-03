@@ -29,6 +29,7 @@ namespace Swat
         PlayerController player;
         Vector3 focus, focusVelocity;
         float distance, targetDistance, shake;
+        Vector3 kick;
         Bounds bounds;
         bool hasBounds;
 
@@ -116,6 +117,17 @@ namespace Swat
             shake = Mathf.Min(1f, shake + amount * scale);
         }
 
+        // Recoil: the view jolts away from where the gun points, then springs back.
+        // Scaled by the Camera Shake setting like everything else.
+        public void Kick(Vector3 direction, float amount)
+        {
+            int level = SaveManager.Settings.cameraShake;
+            float scale = level <= 0 ? 0f : level == 1 ? 0.6f : 1f;
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 0.0001f || scale <= 0f) return;
+            kick = Vector3.ClampMagnitude(kick - direction.normalized * amount * scale, 0.5f);
+        }
+
         // Automatic indoor/outdoor zoom: the chosen preset indoors, one step wider outside.
         public void SetEnvironment(bool indoor)
         {
@@ -179,7 +191,10 @@ namespace Swat
             {
                 Vector3 ahead = player.AimPoint - player.Position;
                 ahead.y = 0f;
-                desired += Vector3.ClampMagnitude(ahead * Mathf.Clamp(settings.lookAhead, 0f, 0.5f), maxLookAhead);
+                // Marksman weapons let the view reach further while steady aiming.
+                float reach = player.IsSteadyAiming && player.Weapons != null ? player.Weapons.Current.Data.steadyLookAhead : 0f;
+                float factor = Mathf.Clamp(settings.lookAhead, 0f, 0.5f) + (reach > 0f ? 0.3f : 0f);
+                desired += Vector3.ClampMagnitude(ahead * factor, maxLookAhead + reach);
             }
             UpdateEdgeScroll(live && settings.edgeScrolling && !GameInput.UsingGamepad, dt);
             desired += edgeOffset;
@@ -197,6 +212,11 @@ namespace Swat
             {
                 transform.position += Random.insideUnitSphere * shake * 0.35f;
                 shake = Mathf.MoveTowards(shake, 0f, dt * 3f);
+            }
+            if (kick.sqrMagnitude > 0.000001f)
+            {
+                transform.position += kick;
+                kick = Vector3.Lerp(kick, Vector3.zero, 1f - Mathf.Exp(-16f * dt));
             }
             ApplyProjection(distance);
             SnapToPixels();

@@ -274,6 +274,11 @@ namespace Swat
 
         void DrawZones(LevelLayout level)
         {
+            if (VersusMatch.Active)
+            {
+                DrawVersusAreas(VersusMatch.Instance);
+                return;
+            }
             if (level.extraction != null && level.extraction.Area == viewArea)
             {
                 var r = ToMap(level.extraction.Bounds);
@@ -323,11 +328,52 @@ namespace Swat
             }
         }
 
+        // Game modes: bases, the zone and the flags.
+        void DrawVersusAreas(VersusMatch match)
+        {
+            for (int side = 0; side < 2; side++)
+            {
+                Vector2 b = ToMap(match.Bases[side]);
+                var color = VersusHUD.SideColor(side);
+                RingAt(b, Mathf.Clamp(1.3f * scale, 6f, 14f), color, 2f);
+                Label(new Rect(b.x - 40f, b.y + 10f, 80f, 16f), side == 0 ? "BLUE BASE" : "RED BASE", 11, color, TextAnchor.UpperCenter, true);
+            }
+            if (match.Mode == GameMode.ZoneControl)
+            {
+                var r = ToMap(match.Zone);
+                var color = match.ZoneOwner < 0 ? Color.white : VersusHUD.SideColor(match.ZoneOwner);
+                BoxFrame(r, color, 2f);
+                Label(new Rect(r.x, r.yMax + 2f, Mathf.Max(r.width, 60f), 16f), "ZONE", 11, color, TextAnchor.UpperLeft, true);
+            }
+            if (match.Mode == GameMode.CaptureTheFlag)
+                for (int side = 0; side < 2; side++)
+                {
+                    var flag = match.Flags[side];
+                    if (flag == null) continue;
+                    var carrier = flag.carrier as ArenaBot;
+                    if (carrier != null && carrier.Side == 1 && !carrier.Seen) continue;
+                    Vector2 p = ToMap(flag.position);
+                    var color = VersusHUD.SideColor(side);
+                    Box(new Rect(p.x - 1f, p.y - 10f, 2f, 10f), Color.white);
+                    Box(new Rect(p.x + 1f, p.y - 10f, 8f, 5f), color);
+                }
+        }
+
+        void DrawVersusPeople(VersusMatch match, float r)
+        {
+            foreach (var bot in match.Bots)
+            {
+                if (!bot.IsAlive || (bot.Side == 1 && !bot.Seen)) continue;
+                Dot(ToMap(bot.Position), r * 0.9f, VersusHUD.SideColor(bot.Side));
+            }
+        }
+
         void DrawPeople(GameManager game)
         {
             var level = game.Level;
             var intel = TacticalIntel.Instance;
             float r = Mathf.Clamp(0.4f * scale, 4f, 9f);
+            if (VersusMatch.Active) DrawVersusPeople(VersusMatch.Instance, r);
 
             foreach (var civilian in AIManager.Instance.Civilians)
             {

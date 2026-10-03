@@ -54,3 +54,8 @@ Also worth capturing (not in the required list):
 - **Level Creator** with the example level open (main menu -> Level Creator).
 - A custom level being played (Level Creator -> Play level).
 - One of the new levels, e.g. Level 5 (bank) or Level 8 (nightclub).
+- **Game Modes:** the setup screen, a Capture the Flag match with a flag being
+  carried, a Zone Control match with the zone contested, and the match results.
+- **Loadout -> Weapons** tab showing the pixel-art gun sprites.
+- A firefight close up (zoom in with the mouse wheel) to show muzzle flashes,
+  tracers and the hit flash.

@@ -28,6 +28,13 @@ namespace Swat
             GameManager.Instance.OnPlayerDown();
         }
 
+        protected override void OnRevived()
+        {
+            var player = GetComponent<PlayerController>();
+            if (player != null) player.Animator.SetDown(false);
+            DamageFlash = HitIndicator = Blind = 0f;
+        }
+
         public void Flashbang(float amount)
         {
             Blind = Mathf.Max(Blind, Mathf.Clamp01(amount));

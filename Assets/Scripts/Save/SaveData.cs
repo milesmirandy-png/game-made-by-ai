@@ -67,6 +67,7 @@ namespace Swat
         public bool autoReload = true;
         public bool autoSwitchWhenEmpty;
         public bool autoFlashlight;
+        public bool hitStop = true;        // brief freeze when the player takes someone down
         public bool minimap = true;
         public float minimapScale = 1f;
         public float minimapOpacity = 0.85f;
@@ -107,6 +108,21 @@ namespace Swat
         public List<OfficerLoadout> loadouts = new List<OfficerLoadout>();
         public string lastMissionId;
         public int totalShots, totalHits, totalArrests, totalRescues;
+        public VersusOptions versus = new VersusOptions();
+    }
+
+    // The last match settings chosen on the Game Modes screen.
+    [Serializable]
+    public class VersusOptions
+    {
+        public int mode = 1;               // GameMode: 1 Team Deathmatch, 2 Capture the Flag, 3 Zone Control
+        public string mapId = "warehouse";
+        public int teamSize = 4;           // per side, including you
+        public int scoreIndex = 1;
+        public int timeIndex = 1;
+        public int botSkill = 1;           // 0 easy, 1 normal, 2 hard
+        public int timeOfDay;
+        public int matchesPlayed, matchesWon;
     }
 
     [Serializable]

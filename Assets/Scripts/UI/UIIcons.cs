@@ -42,6 +42,13 @@ namespace Swat
 
         public static void Weapon(Rect rect, WeaponData weapon, Color color)
         {
+            Weapon(rect, weapon, color, null);
+        }
+
+        // A custom icon texture if the weapon has one, otherwise its pixel-art sprite
+        // (with the loadout's attachments drawn on). Faint colours draw it greyed out.
+        public static void Weapon(Rect rect, WeaponData weapon, Color color, OfficerLoadout attachments)
+        {
             if (weapon == null) return;
             if (weapon.icon != null)
             {
@@ -51,32 +58,8 @@ namespace Swat
                 GUI.color = old;
                 return;
             }
-            // Proportions per category: body length, barrel length, stock, magazine.
-            float body = 0.4f, barrel = 0.25f, stock = 0.2f, mag = 0.12f, height = 0.22f;
-            switch (weapon.category)
-            {
-                case WeaponCategory.CompactSMG: body = 0.38f; barrel = 0.08f; stock = 0.08f; mag = 0.18f; break;
-                case WeaponCategory.SMG: body = 0.42f; barrel = 0.14f; stock = 0.18f; mag = 0.16f; break;
-                case WeaponCategory.CompactRifle: body = 0.4f; barrel = 0.2f; stock = 0.2f; mag = 0.15f; break;
-                case WeaponCategory.Rifle: body = 0.4f; barrel = 0.3f; stock = 0.24f; mag = 0.15f; break;
-                case WeaponCategory.Shotgun: body = 0.36f; barrel = 0.36f; stock = 0.24f; mag = 0f; height = 0.18f; break;
-                case WeaponCategory.Carbine: body = 0.4f; barrel = 0.34f; stock = 0.22f; mag = 0.1f; break;
-                case WeaponCategory.LessLethal: body = 0.36f; barrel = 0.22f; stock = 0.18f; mag = 0f; height = 0.3f; break;
-                default: body = 0.42f; barrel = 0.05f; stock = 0f; mag = 0f; height = 0.24f; break;
-            }
-            float total = body + barrel + stock;
-            float scale = rect.width * 0.9f / Mathf.Max(0.5f, total);
-            float x = rect.x + (rect.width - total * scale) * 0.5f;
-            float y = rect.center.y - height * scale * 0.5f;
-            float bh = height * scale;
-            if (stock > 0f) UITheme.Fill(new Rect(x, y + bh * 0.15f, stock * scale, bh * 0.6f), color);
-            UITheme.Fill(new Rect(x + stock * scale, y, body * scale, bh), color);
-            float barrelHeight = weapon.category == WeaponCategory.LessLethal ? bh * 0.6f : bh * 0.3f;
-            UITheme.Fill(new Rect(x + (stock + body) * scale, y + bh * 0.15f, barrel * scale, barrelHeight), color);
-            // Grip and magazine.
-            bool pistol = weapon.isSidearm;
-            UITheme.Fill(new Rect(x + stock * scale + body * scale * (pistol ? 0.08f : 0.35f), y + bh, bh * 0.45f, bh * (pistol ? 1.3f : 0.9f)), color);
-            if (mag > 0f) UITheme.Fill(new Rect(x + stock * scale + body * scale * 0.62f, y + bh, bh * 0.4f, mag * scale), color);
+            bool dim = color.a < 0.5f || (color.r + color.g + color.b) < (UITheme.Faint.r + UITheme.Faint.g + UITheme.Faint.b) + 0.05f;
+            WeaponSprites.Draw(rect, WeaponSprites.Get(weapon, attachments), dim ? 0.35f : 1f);
         }
 
         // Simple glyphs for squad orders, used on the command wheel and squad panel.

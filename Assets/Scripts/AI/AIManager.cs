@@ -215,6 +215,15 @@ namespace Swat
                 if ((officer.Position - center).sqrMagnitude < sqrRadius * 0.5f && !Physics.Linecast(center, officer.Position + Vector3.up * 1.5f, Layers.WorldMask, QueryTriggerInteraction.Ignore))
                     officer.Dazzle(duration * 0.4f);
             }
+            // Game-mode bots on either team.
+            if (VersusMatch.Active)
+                foreach (var bot in VersusMatch.Instance.Bots)
+                {
+                    Vector3 head = bot.Position + Vector3.up * 1.5f;
+                    float sqr = (head - center).sqrMagnitude;
+                    if (bot.IsAlive && sqr < sqrRadius && !Physics.Linecast(center, head, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                        bot.Stun(duration * 0.6f * (1f - 0.5f * Mathf.Sqrt(sqr) / radius));
+                }
         }
 
         public bool AnyThreatNear(Vector3 position, float radius)

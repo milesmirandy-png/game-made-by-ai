@@ -22,6 +22,8 @@ namespace Swat
         public Team Team { get { return Team.Police; } }
         public bool IsAlive { get { return !IsDown; } }
         public float DamageTaken { get; private set; }
+        public DamageInfo LastHit { get; private set; }
+        public float ProtectedUntil { get; set; }   // game modes: a moment of safety after respawning
 
         float armorPoints, extraReduction, healPerSecond, healRemaining;
 
@@ -52,6 +54,8 @@ namespace Swat
             if (IsDown || info.attacker == Team.Police) return;
             var game = GameManager.Instance;
             if (game == null || !game.IsPlaying) return;
+            if (Time.time < ProtectedUntil) return;
+            LastHit = info;
 
             float amount = info.amount;
             Vector3 incoming = -info.direction;
@@ -104,6 +108,16 @@ namespace Swat
             if (!IsDown) return;
             Current = Mathf.Min(Max, health);
             OnRevived();
+        }
+
+        // Game modes: back to full health and armor after respawning.
+        public void RestoreFull()
+        {
+            bool wasDown = IsDown;
+            Current = Max;
+            armorPoints = Armor != null ? Armor.durability : 0f;
+            healRemaining = 0f;
+            if (wasDown) OnRevived();
         }
 
         protected virtual void Update()

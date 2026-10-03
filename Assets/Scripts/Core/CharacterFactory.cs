@@ -24,11 +24,48 @@ namespace Swat
     // poses and states. Animation itself is done by ProceduralAnimator.
     public class CharacterParts
     {
-        public Transform root, model, leftArm, rightArm, leftLeg, rightLeg, gunRoot, muzzle, shield;
+        public Transform root, model, head, leftArm, rightArm, leftLeg, rightLeg, gunRoot, muzzle, shield;
         public Renderer ring;
         public GameObject alertMarker, visuals;
         public Light flashlight;
         public WeaponData weapon;
+
+        // Hit flash: the whole figure turns white for a few frames when hit (no gore, just a blink).
+        Renderer[] bodyRenderers;
+        float flashUntil;
+        bool flashing;
+        static MaterialPropertyBlock flashBlock;
+
+        public void CacheRenderers()
+        {
+            var list = new System.Collections.Generic.List<Renderer>();
+            if (model != null) list.AddRange(model.GetComponentsInChildren<Renderer>(true));
+            bodyRenderers = list.ToArray();
+        }
+
+        public void Flash(Color color, float seconds)
+        {
+            if (bodyRenderers == null || seconds <= 0f) return;
+            if (flashBlock == null) flashBlock = new MaterialPropertyBlock();
+            flashBlock.Clear();
+            flashBlock.SetColor("_Color", color);
+            flashBlock.SetColor("_BaseColor", color); // URP Lit
+            foreach (var renderer in bodyRenderers) if (renderer != null) renderer.SetPropertyBlock(flashBlock);
+            flashUntil = Time.time + seconds;
+            flashing = true;
+        }
+
+        public void UpdateFlash()
+        {
+            if (flashing && Time.time >= flashUntil) ClearFlash();
+        }
+
+        public void ClearFlash()
+        {
+            if (!flashing) return;
+            flashing = false;
+            foreach (var renderer in bodyRenderers) if (renderer != null) renderer.SetPropertyBlock(null);
+        }
 
         public void SetArms(Vector3 left, Vector3 right)
         {
@@ -54,12 +91,22 @@ namespace Swat
 
         public void Fall()
         {
+            ClearFlash();
             model.localRotation = Quaternion.Euler(-90f, 0f, 0f);
             model.localPosition = new Vector3(0f, 0.2f, 0f);
             if (ring != null) ring.enabled = false;
             if (alertMarker != null) alertMarker.SetActive(false);
             ShowWeapon(false);
             if (flashlight != null) flashlight.enabled = false;
+        }
+
+        // Back on their feet (respawning in the game modes).
+        public void Rise()
+        {
+            model.localRotation = Quaternion.identity;
+            model.localPosition = Vector3.zero;
+            if (ring != null) ring.enabled = true;
+            ShowWeapon(weapon != null);
         }
     }
 
@@ -117,32 +164,61 @@ namespace Swat
             }
             if (tactical) Shapes.Box("Belt", m, new Vector3(0f, 0.84f, 0f), new Vector3(0.5f, 0.07f, 0.3f), Gear, false);
 
-            Shapes.Make(PrimitiveType.Sphere, "Head", m, new Vector3(0f, 1.62f, 0f), Vector3.one * 0.32f, look.skin, false);
+            // The head sits on its own pivot. In pixel art it is drawn a little larger
+            // ("chibi" proportions), so faces and helmets stay readable at low resolution.
+            float headScale = QualityManager.PixelArt ? 1.18f : 1f;
+            parts.head = new GameObject("Head Pivot").transform;
+            parts.head.SetParent(m, false);
+            parts.head.localPosition = new Vector3(0f, 1.62f + (headScale - 1f) * 0.12f, 0f);
+            parts.head.localScale = Vector3.one * headScale;
+            var hd = parts.head;
+            Shapes.Make(PrimitiveType.Sphere, "Head", hd, Vector3.zero, Vector3.one * 0.32f, look.skin, false);
+            bool eyes = true;
             switch (look.head)
             {
                 case HeadStyle.Helmet:
-                    Shapes.Make(PrimitiveType.Sphere, "Helmet", m, new Vector3(0f, 1.7f, -0.01f), new Vector3(0.36f, 0.22f, 0.38f), look.headwear, false);
-                    if (tactical) Shapes.Box("Goggles", m, new Vector3(0f, 1.66f, 0.15f), new Vector3(0.24f, 0.05f, 0.05f), new Color(0.1f, 0.12f, 0.14f), false);
+                    Shapes.Make(PrimitiveType.Sphere, "Helmet", hd, new Vector3(0f, 0.08f, -0.01f), new Vector3(0.36f, 0.22f, 0.38f), look.headwear, false);
+                    if (tactical)
+                    {
+                        Shapes.Box("Goggles", hd, new Vector3(0f, 0.04f, 0.15f), new Vector3(0.24f, 0.05f, 0.05f), new Color(0.1f, 0.12f, 0.14f), false);
+                        Shapes.Box("Lens", hd, new Vector3(0f, 0.04f, 0.176f), new Vector3(0.18f, 0.03f, 0.01f), new Color(0.35f, 0.62f, 0.85f), false, 1.2f);
+                        eyes = false;
+                    }
                     break;
                 case HeadStyle.Cap:
-                    Shapes.Box("Cap", m, new Vector3(0f, 1.74f, 0f), new Vector3(0.32f, 0.08f, 0.32f), look.headwear, false);
-                    Shapes.Box("Brim", m, new Vector3(0f, 1.71f, 0.18f), new Vector3(0.26f, 0.03f, 0.12f), look.headwear, false);
+                    Shapes.Box("Cap", hd, new Vector3(0f, 0.12f, 0f), new Vector3(0.32f, 0.08f, 0.32f), look.headwear, false);
+                    Shapes.Box("Brim", hd, new Vector3(0f, 0.09f, 0.18f), new Vector3(0.26f, 0.03f, 0.12f), look.headwear, false);
                     break;
                 case HeadStyle.Balaclava:
-                    Shapes.Make(PrimitiveType.Sphere, "Mask", m, new Vector3(0f, 1.63f, 0f), Vector3.one * 0.34f, look.headwear, false);
-                    Shapes.Box("Eyes", m, new Vector3(0f, 1.66f, 0.15f), new Vector3(0.22f, 0.05f, 0.05f), look.skin, false);
+                    Shapes.Make(PrimitiveType.Sphere, "Mask", hd, new Vector3(0f, 0.01f, 0f), Vector3.one * 0.34f, look.headwear, false);
+                    Shapes.Box("Eyes", hd, new Vector3(0f, 0.04f, 0.15f), new Vector3(0.22f, 0.05f, 0.05f), look.skin, false);
+                    eyes = false;
                     break;
                 default:
-                    Shapes.Box("Hair", m, new Vector3(0f, 1.71f, -0.04f), new Vector3(0.3f, 0.12f, 0.28f), look.headwear, false);
+                    Shapes.Box("Hair", hd, new Vector3(0f, 0.09f, -0.04f), new Vector3(0.3f, 0.12f, 0.28f), look.headwear, false);
                     break;
+            }
+            if (eyes)
+            {
+                // Two dark pixels for eyes: enough to show which way someone faces.
+                var eye = new Color(0.08f, 0.07f, 0.07f);
+                Shapes.Box("Eye L", hd, new Vector3(-0.06f, 0.02f, 0.148f), new Vector3(0.045f, 0.05f, 0.03f), eye, false);
+                Shapes.Box("Eye R", hd, new Vector3(0.06f, 0.02f, 0.148f), new Vector3(0.045f, 0.05f, 0.03f), eye, false);
             }
 
             if (look.idMarker)
             {
                 // Squad identification: colored helmet band, a marker on top (visible from above) and a shoulder patch.
-                float top = look.head == HeadStyle.Helmet ? 1.7f : 1.74f;
-                Shapes.Box("ID Band", m, new Vector3(0f, top - 0.02f, -0.01f), new Vector3(0.37f, 0.035f, 0.39f), look.idColor, false);
-                Shapes.Box("ID Top", m, new Vector3(0f, top + 0.1f, -0.03f), new Vector3(0.12f, 0.02f, 0.16f), look.idColor, false, 1.2f);
+                float top = look.head == HeadStyle.Helmet ? 0.08f : 0.12f;
+                Shapes.Box("ID Band", hd, new Vector3(0f, top - 0.02f, -0.01f), new Vector3(0.37f, 0.035f, 0.39f), look.idColor, false);
+                Shapes.Box("ID Top", hd, new Vector3(0f, top + 0.1f, -0.03f), new Vector3(0.12f, 0.02f, 0.16f), look.idColor, false, 1.2f);
+            }
+            if (tactical)
+            {
+                // Shoulder pads in the squad colour: the first thing you see from above.
+                Color pad = look.idMarker ? Shapes.Shade(look.idColor, 0.85f) : Shapes.Shade(look.vestOn ? look.vest : look.shirt, 1.25f);
+                Shapes.Box("Shoulder L", m, new Vector3(-0.3f, 1.42f, 0f), new Vector3(0.17f, 0.07f, 0.24f), pad, false);
+                Shapes.Box("Shoulder R", m, new Vector3(0.3f, 1.42f, 0f), new Vector3(0.17f, 0.07f, 0.24f), pad, false);
             }
 
             Color hand = tactical ? Gear : look.skin;
@@ -176,6 +252,8 @@ namespace Swat
             Shapes.Box("Bar", parts.alertMarker.transform, new Vector3(0f, 2.45f, 0f), new Vector3(0.12f, 0.4f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
             Shapes.Box("Dot", parts.alertMarker.transform, new Vector3(0f, 2.12f, 0f), new Vector3(0.12f, 0.12f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
             parts.alertMarker.SetActive(false);
+            Shapes.Toonify(m);
+            parts.CacheRenderers();
             return parts;
         }
 
@@ -360,7 +438,11 @@ namespace Swat
             }
             float length = WeaponModels.Build(weapon, parts.gunRoot, attachments);
             parts.muzzle.localPosition = new Vector3(0f, 0.01f, length);
+            // Guns are drawn a bit larger in pixel art so their shapes survive the low resolution.
+            parts.gunRoot.localScale = Vector3.one * (QualityManager.PixelArt ? 1.25f : 1f);
             parts.ShowWeapon(true);
+            Shapes.Toonify(parts.gunRoot);
+            parts.CacheRenderers();
         }
     }
 }

@@ -199,6 +199,15 @@ namespace Swat
             if (Opened != null) Opened(this);
         }
 
+        // Game modes: every usable door swings fully open (sealed doors stay shut).
+        public void OpenForMatch()
+        {
+            if (State == DoorState.Disabled || State == DoorState.Breached || State == DoorState.Open) return;
+            SetState(DoorState.Open);
+            targetAngle = 95f;
+            enabled = true;
+        }
+
         public void Close()
         {
             if (State != DoorState.Open) return;

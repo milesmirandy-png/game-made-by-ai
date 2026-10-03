@@ -13,9 +13,10 @@ namespace Swat
         public Weapon Current { get { return Inventory.Current; } }
         public bool IsReloading { get { return reloadEnd > 0f; } }
         public bool IsSwitching { get { return Time.time < switchEnd; } }
-        public float ReloadProgress { get { return IsReloading ? Mathf.Clamp01(1f - (reloadEnd - Time.time) / Current.Data.reloadTime) : 0f; } }
+        public float ReloadProgress { get { return IsReloading ? Mathf.Clamp01(1f - (reloadEnd - Time.time) / Mathf.Max(0.05f, reloadDuration)) : 0f; } }
         public float Spread { get; private set; }
         public float LastHitTime { get; private set; }
+        public float LastKillTime { get; private set; } = -10f;
         public int ShotsFired { get; private set; }
         public int ShotsHit { get; private set; }
         public bool Overcharged { get; set; }
@@ -45,7 +46,9 @@ namespace Swat
 
         PlayerController player;
         Transform laser;
-        float nextFireTime, reloadEnd, switchEnd, bloom;
+        float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f;
+        int burstLeft;
+        bool reloadFromEmpty;
 
         public void Init(PlayerController owner, WeaponInventory inventory)
         {
@@ -61,6 +64,17 @@ namespace Swat
             {
                 reloadEnd = 0f;
                 Current.FinishReload();
+                AudioManager.Play(Sound.MagIn, player.Position, 0.6f, 1f, SoundCategory.Weapons);
+                if (reloadFromEmpty) AudioManager.Play(Sound.Charge, player.Position, 0.55f, 1f, SoundCategory.Weapons);
+            }
+            // Pump and bolt guns cycle a moment after each shot.
+            if (pumpAt > 0f && Time.time >= pumpAt)
+            {
+                pumpAt = -1f;
+                AudioManager.Play(Sound.Pump, player.Position, 0.55f, Random.Range(0.96f, 1.04f), SoundCategory.Weapons);
+                player.Animator.Fire(0.35f);
+                var cycled = Current.Data;
+                if (cycled.ejectsShells) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, cycled.category == WeaponCategory.Shotgun);
             }
             bloom = Mathf.MoveTowards(bloom, 0f, Current.Data.recoilRecovery * dt);
             player.Animator.SetReload(ReloadProgress);
@@ -98,7 +112,7 @@ namespace Swat
             if (GameInput.Down(InputAction.FireMode) && Current.ToggleFireMode())
             {
                 AudioManager.Ui(Sound.Click);
-                UIManager.Notify(Current.Data.displayName + ": " + (Current.Automatic ? "automatic" : "semi-automatic"));
+                UIManager.Notify(Current.Data.displayName + ": " + (Current.Automatic ? "automatic" : Current.Burst ? Current.Data.burstCount + "-round burst" : "semi-automatic"));
             }
             if (GameInput.Down(InputAction.UseEquipment)) UseSelectedEquipment();
 
@@ -117,6 +131,8 @@ namespace Swat
             Inventory.CurrentIndex = index;
             reloadEnd = 0f;
             bloom = 0f;
+            burstLeft = 0;
+            pumpAt = -1f;
             switchEnd = Time.time + Current.Data.switchTime;
             lowAmmoWarned = Current.Magazine <= Current.Data.magazineSize / 4;
             ApplyWeaponModel();
@@ -221,18 +237,33 @@ namespace Swat
         {
             var weapon = Current;
             var data = weapon.Data;
-            float stance = (player.IsCrouched ? 0.75f : 1f) * (player.IsSteadyAiming ? 0.6f : 1f);
-            Spread = (weapon.Spread + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f);
+            float stance = (player.IsCrouched ? data.crouchSpread : 1f) * (player.IsSteadyAiming ? 0.6f : 1f);
+            // The first shot after a pause is the most accurate.
+            float rested = Time.time - lastShotTime > 0.4f && bloom < 0.01f ? 0.65f : 1f;
+            Spread = (weapon.Spread * rested + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f);
 
             if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
+            bool blocked = IsReloading || IsSwitching || player.IsSprinting;
+
+            // Burst: one pull fires a short string of shots on its own.
+            if (burstLeft > 0)
+            {
+                if (blocked || weapon.Magazine <= 0) { burstLeft = 0; return; }
+                if (Time.time < nextFireTime) return;
+                Fire(weapon);
+                burstLeft--;
+                if (burstLeft == 0) nextFireTime = Time.time + 0.28f;
+                return;
+            }
 
             bool trigger = weapon.Automatic ? GameInput.Held(InputAction.Fire) : GameInput.Down(InputAction.Fire);
-            if (!trigger || IsReloading || IsSwitching || player.IsSprinting) return;
+            if (!trigger || blocked) return;
             if (Time.time < nextFireTime) return;
 
             if (weapon.Magazine > 0)
             {
                 Fire(weapon);
+                if (weapon.Burst) burstLeft = Mathf.Max(0, data.burstCount - 1);
             }
             else
             {
@@ -244,10 +275,25 @@ namespace Swat
 
         void StartReload()
         {
-            reloadEnd = Time.time + Current.Data.reloadTime;
+            // Reloading from empty takes a little longer (and ends with a charging handle).
+            reloadFromEmpty = Current.Magazine == 0;
+            reloadDuration = Current.Data.reloadTime * (reloadFromEmpty ? 1.15f : 1f);
+            reloadEnd = Time.time + reloadDuration;
+            burstLeft = 0;
+            pumpAt = -1f;
             lowAmmoWarned = false;
-            AudioManager.Play(Sound.Reload, player.Position, 0.7f, 1f, SoundCategory.Weapons);
+            AudioManager.Play(Sound.MagOut, player.Position, 0.6f, 1f, SoundCategory.Weapons);
             MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
+        }
+
+        // Game modes: full ammunition again after a respawn.
+        public void Resupply()
+        {
+            if (Inventory.Primary != null) Inventory.Primary.Refill();
+            if (Inventory.Sidearm != null) Inventory.Sidearm.Refill();
+            reloadEnd = 0f;
+            burstLeft = 0;
+            bloom = 0f;
         }
 
         void Fire(Weapon weapon)
@@ -259,27 +305,41 @@ namespace Swat
 
             Vector3 origin = player.ChestPosition;
             Vector3 muzzle = player.Parts.muzzle.position;
-            bool hitSomeone = false;
+            bool hitSomeone = false, tookDown = false;
             float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
-            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost };
+            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player };
 
             for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
             {
                 Vector3 direction = WeaponEffects.Scatter(player.AimDirection, Spread);
-                if (WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor) != null) hitSomeone = true;
+                var victim = WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor);
+                if (victim == null) continue;
+                hitSomeone = true;
+                if (!victim.IsAlive) tookDown = true;
             }
             if (data.lessLethal && Overcharged) Overcharged = false;
+            lastShotTime = Time.time;
 
+            // Feel: the gun and body kick, the camera jolts back along the aim, flame and flash at the muzzle.
             bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
-            player.Animator.Fire(Mathf.Clamp(weapon.Recoil * 0.6f, 0.4f, 1.5f));
-            WeaponEffects.MuzzleFlash(muzzle, data.fireSound, 0.8f, weapon.NoiseRadius, NoiseKind.Gunshot);
-            if (!data.lessLethal) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun);
-            GameManager.Instance.CameraRig.Shake(weapon.Recoil * 0.08f);
+            player.Animator.Fire(Mathf.Clamp(0.45f + data.kick * 0.45f, 0.4f, 1.5f));
+            WeaponEffects.Fired(player.Parts.muzzle, data, 0.85f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            if (data.ejectsShells && !data.pumpAction) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun);
+            if (data.pumpAction && weapon.Magazine > 0) pumpAt = Time.time + Mathf.Min(0.32f, 0.6f / Mathf.Max(0.5f, data.fireRate));
+            var rig = GameManager.Instance.CameraRig;
+            rig.Kick(player.AimDirection, 0.05f + data.kick * 0.05f);
+            if (data.kick >= 1.5f) rig.Shake(data.kick * 0.05f);
             AmmoFeedback(weapon);
             if (!hitSomeone) return;
             ShotsHit++;
             LastHitTime = Time.time;
-            if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f, 1f, SoundCategory.Interface);
+            if (tookDown)
+            {
+                LastKillTime = Time.time;
+                AudioManager.Play2D(Sound.Kill, 0.5f, 1f, SoundCategory.Interface);
+                GameManager.Instance.HitStop(0.045f);
+            }
+            else if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f, 1f, SoundCategory.Interface);
         }
 
         // Low-ammo cue, automatic reload when the magazine runs dry, optional switch to the sidearm.

@@ -12,6 +12,9 @@ namespace Swat
         public Team attacker;
         public bool lessLethal;
         public float stun;
+        public WeaponData weapon;   // optional: what fired the shot (kill feed, less-lethal effects)
+        public bool byPlayer;       // the shot came from the player's own gun
+        public MonoBehaviour shooter; // optional: who fired (game modes credit takedowns with it)
     }
 
     public interface IDamageable

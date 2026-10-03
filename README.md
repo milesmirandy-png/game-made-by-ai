@@ -19,6 +19,37 @@ assets or package dependencies and runs on modest hardware.
 > performance has been measured, and no gameplay screenshots exist yet.
 > [Screenshots/README.md](Screenshots/README.md) explains how to capture them.
 
+## What's new: game modes, 20 guns and better sprites
+
+- **Game Modes** (main menu -> **Game Modes**): **Team Deathmatch**, **Capture
+  the Flag** and **Zone Control**, played as training exercises with marking
+  rounds. You and your squad (as bots) are Blue Team; the Red Team is all
+  bots. Pick the map (nine maps), team size (2 vs 2 up to 6 vs 6), score and
+  time limits, bot skill and time of day. Everyone respawns. See
+  [Game modes](#game-modes) below.
+- **Twenty weapons** (ten new): X4 defense weapon, B4 burst rifle (3-round
+  bursts), CX bullpup rifle, DM2 marksman rifle (steady aim to see further),
+  LM8 light machine gun (crouch to steady it), AS12 auto shotgun, PB3
+  pepperball launcher, M9 machine pistol, R6 revolver and S2 stun pistol. All
+  are fictional game abstractions.
+- **Pixel-art gun sprites** in the loadout, HUD and weapon wheel: side-view
+  sprites with shaded blue-grey steel, coloured furniture (stock, grip,
+  handguard), a dark outline and a white sticker border, drawn by code
+  (`Weapons/WeaponSpriteArt.cs`). The guns in characters' hands use the same
+  colours.
+- **Punchier shooting:** muzzle flame and flash sprites, camera kick along the
+  aim, stronger body and gun recoil, a white hit flash on whoever gets hit, a
+  small shove on hits, a hit spark, a red takedown marker with its own sound,
+  a tiny freeze on takedowns (**Settings -> Gameplay -> Hit stop**, on by
+  default), near-miss whizzes, new layered gunshot sounds, magazine and
+  charging sounds on reload (empty reloads take a bit longer), pump and bolt
+  cycling, first-shot accuracy, burst fire and per-weapon crouch steadiness.
+- **Better sprites (characters):** in pixel art, characters get banded "sprite"
+  lighting (three flat tones, cool shadows, a brighter top face and a rim
+  light; Built-in pipeline), slightly larger heads, eyes or goggle lenses,
+  squad-coloured shoulder pads and bigger guns, so they read clearly at low
+  resolution.
+
 ## Art style: pixel art (default) or smooth
 
 The game now looks like a **pixel-art top-down game that is still 3D**: the
@@ -134,8 +165,9 @@ Loadout -> Deployment (van arrival) -> Gameplay -> Debriefing -> Level Select**
 (Custom levels: **Main Menu -> Level Creator -> Play -> Briefing -> ... ->
 Debriefing -> Level Creator**.)
 
-- **Main menu:** Play/Continue (next level), Level Select, Training, Level
-  Creator, Officers, Equipment, Settings, Credits, Quit; campaign progress.
+- **Main menu:** Play/Continue (next level), Level Select, Training, Game
+  Modes, Level Creator, Officers, Equipment, Settings, Credits, Quit; campaign
+  progress.
 - **Level Select:** Training and Levels 1-10 with thumbnail, level number,
   difficulty, status and best score, and a button into the Level Creator.
 - **Briefing:** situation, intel for this deployment, objectives (the random
@@ -177,7 +209,7 @@ All keys can be remapped in **Settings -> Controls**.
 | **Z (hold)** | Squad command wheel: point at a spot or a door, release on an order (or press 1-0) |
 | **X** | Shout "Police! Show me your hands!" (suspects may surrender, civilians get down) |
 | **T** | Role ability |
-| **B** | Toggle fire mode (weapons that support it) |
+| **B** | Toggle fire mode: automatic or burst to semi-automatic and back (weapons that support it) |
 | **F1 / F2 / F3** | Select squadmate 1 / 2 / 3 for the next order (toggle) |
 | **F4** | Select the whole squad |
 | **Mouse wheel** | Zoom |
@@ -259,6 +291,35 @@ presets and selecting individual officers remain keyboard-only.
 Each deployment uses a seed (shown on the briefing; reroll or keep it) that
 varies suspect and civilian positions, patrol routes, locked doors, optional
 objectives, alarm/camera status and power outages, within fixed map layouts.
+
+## Game modes
+
+Main menu -> **Game Modes**. Choose a mode and a map, set the options, then
+**Start match** (or change your **Squad** or **Loadout** first). The match
+uses the normal deployment: the van arrives, then the exercise starts.
+
+| Mode | How to win |
+| --- | --- |
+| Team Deathmatch | Tag out players on the other team. First team to the limit (15 / 25 / 40) wins. |
+| Capture the Flag | Take the red flag (deep inside the building) back to your flag at the van. Your own flag must be at your base to score. A dropped flag returns after 20 seconds, or straight away when a teammate touches it. |
+| Zone Control | A zone is marked in a room about halfway between the bases. Stand in it with no opponents inside to take it; while it's yours your team scores a point per second. |
+
+- **Teams:** you plus your squadmates (bots using their own loadouts; extra
+  places are filled by other officers) against the Red Team (bots with random
+  weapons). Team size 2 vs 2 to 6 vs 6; bot skill Easy, Normal or Hard.
+- **Respawns:** 5 seconds after being tagged out, at your base, with full
+  health and ammo and a moment of protection. Ammo also refills at the van.
+- **Maps:** warehouse, office, corner store, motel, bank, clinic, nightclub,
+  steelworks and the training facility. Every usable door starts open.
+- **What you see:** the Red Team is only shown while your team can see them
+  (the Line of Sight setting), plus a moment after they fire near you. Flags,
+  the zone and both bases are marked on screen and on the minimap.
+- **HUD:** score and clock at the top, flag or zone status under it, a
+  takedown feed and your team on the right, and a respawn countdown.
+- Flashbangs daze bots on both teams; less-lethal weapons briefly stop a bot
+  from shooting.
+- Match results show both teams' scoreboards; **Rematch** replays the same
+  setup.
 
 ## Level Creator
 

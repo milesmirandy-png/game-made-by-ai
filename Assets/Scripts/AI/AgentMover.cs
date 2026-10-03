@@ -71,6 +71,13 @@ namespace Swat
             return agent.SetDestination(destination);
         }
 
+        // A small push (hits), staying on the NavMesh.
+        public void Nudge(Vector3 offset)
+        {
+            offset.y = 0f;
+            if (agent != null && agent.enabled && agent.isOnNavMesh) agent.Move(offset);
+        }
+
         public void Stop()
         {
             if (!agent.enabled || !agent.isOnNavMesh) return;

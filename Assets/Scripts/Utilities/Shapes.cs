@@ -12,11 +12,12 @@ namespace Swat
         static Material template;
         static readonly Dictionary<string, Material> cache = new Dictionary<string, Material>();
 
-        static Shader unlitShader, decalShader, glowShader;
+        static Shader unlitShader, decalShader, glowShader, toonShader;
         static bool shadersLoaded;
         static readonly Dictionary<int, Mesh> tiledCubes = new Dictionary<int, Mesh>();
         static readonly Dictionary<Texture, Material> decalMaterials = new Dictionary<Texture, Material>();
         static readonly Dictionary<Texture, Material> glowMaterials = new Dictionary<Texture, Material>();
+        static readonly Dictionary<Material, Material> toonMaterials = new Dictionary<Material, Material>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
@@ -26,6 +27,7 @@ namespace Swat
             tiledCubes.Clear();
             decalMaterials.Clear();
             glowMaterials.Clear();
+            toonMaterials.Clear();
             shadersLoaded = false;
         }
 
@@ -40,6 +42,39 @@ namespace Swat
             if (unlitShader != null && !unlitShader.isSupported) unlitShader = null;
             if (decalShader != null && !decalShader.isSupported) decalShader = Shader.Find("Sprites/Default");
             if (glowShader != null && !glowShader.isSupported) glowShader = decalShader;
+            // Built-in pipeline only (it uses the Built-in forward lighting passes).
+            toonShader = GraphicsSettings.currentRenderPipeline == null ? Resources.Load<Shader>("SWAT/Shaders/SwatToon") ?? Shader.Find("SWAT/Toon") : null;
+            if (toonShader != null && !toonShader.isSupported) toonShader = null;
+        }
+
+        // Pixel art: characters (and the guns they carry) get banded "sprite" lighting.
+        public static bool ToonCharacters
+        {
+            get
+            {
+                LoadShaders();
+                return toonShader != null && QualityManager.PixelArt;
+            }
+        }
+
+        // Swaps the lit materials under a character for banded toon versions of the same colours.
+        public static void Toonify(Transform root)
+        {
+            if (root == null || !ToonCharacters) return;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                var source = renderer.sharedMaterial;
+                if (source == null) continue;
+                var shader = source.shader;
+                if (shader == toonShader || shader == unlitShader || shader == decalShader || shader == glowShader || source.mainTexture != null) continue;
+                Material toon;
+                if (!toonMaterials.TryGetValue(source, out toon) || toon == null)
+                {
+                    toon = new Material(toonShader) { name = source.name + " Toon", color = source.color };
+                    toonMaterials[source] = toon;
+                }
+                renderer.sharedMaterial = toon;
+            }
         }
 
         static Material Template

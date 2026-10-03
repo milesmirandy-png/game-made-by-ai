@@ -89,12 +89,16 @@ namespace Swat
 
             var look = CharacterFactory.SuspectLook(data);
             var parts = CharacterFactory.Build(go.transform, look);
+            WeaponData gun = null;
             if (data.armed)
-                CharacterFactory.SetWeapon(parts, GameData.Weapon(data.archetype == EnemyArchetype.Nervous ? "pistol_bk6" : data.archetype == EnemyArchetype.Armored ? "rifle_service" : "smg_compact"), null);
+            {
+                gun = GameData.Weapon(SuspectGun(data.archetype)) ?? GameData.Weapon("smg_compact");
+                CharacterFactory.SetWeapon(parts, gun, null);
+            }
             ai.body = go.AddComponent<EnemyController>();
             ai.body.Init(parts, ai.mover, data.armed);
             ai.weapon = go.AddComponent<EnemyWeapon>();
-            ai.weapon.Init(data, parts.muzzle, accuracyMultiplier);
+            ai.weapon.Init(data, parts.muzzle, accuracyMultiplier, gun);
 
             ai.post = spawn.position;
             ai.postYaw = spawn.yaw;
@@ -104,6 +108,21 @@ namespace Swat
             ai.idleUntil = Time.time + Random.Range(0.5f, 3f);
             Shapes.SetLayer(go, Layers.Characters);
             return ai;
+        }
+
+        // Which model a suspect carries (looks and sound only; damage comes from EnemyData).
+        static string SuspectGun(EnemyArchetype archetype)
+        {
+            switch (archetype)
+            {
+                case EnemyArchetype.Nervous: return Random.value < 0.5f ? "pistol_bk6" : "revolver_r6";
+                case EnemyArchetype.Armored: return Random.value < 0.5f ? "rifle_service" : "shotgun_as12";
+                case EnemyArchetype.Leader: return Random.value < 0.5f ? "pistol_h50" : "rifle_compact";
+                case EnemyArchetype.Guard: return Random.value < 0.6f ? "pistol_p17" : "smg_v10";
+                default:
+                    float roll = Random.value;
+                    return roll < 0.4f ? "smg_compact" : roll < 0.7f ? "mp_m9" : "shotgun_ts8";
+            }
         }
 
         void SetState(EnemyState next)
@@ -563,7 +582,8 @@ namespace Swat
             if (info.lessLethal && info.stun > 0f && Data.archetype != EnemyArchetype.Armored)
             {
                 Stun(info.stun);
-                if (Random.value < Data.surrenderChance + 0.35f) Surrender();
+                float bonus = info.weapon != null ? info.weapon.surrenderBonus : 0.35f;
+                if (Random.value < Data.surrenderChance + bonus) Surrender();
                 return;
             }
 

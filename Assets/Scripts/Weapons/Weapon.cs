@@ -8,7 +8,9 @@ namespace Swat
         public WeaponData Data { get; private set; }
         public int Magazine { get; set; }
         public int Reserve { get; set; }
-        public bool Automatic { get; private set; }
+        public FireMode Mode { get; private set; }
+        public bool Automatic { get { return Mode == FireMode.FullAuto; } }
+        public bool Burst { get { return Mode == FireMode.Burst; } }
         public float SpreadMultiplier { get; private set; }
         public float RecoilMultiplier { get; private set; }
         public float NoiseMultiplier { get; private set; }
@@ -20,7 +22,7 @@ namespace Swat
             Data = data;
             Magazine = data.magazineSize;
             Reserve = data.startingReserve;
-            Automatic = data.fireMode == FireMode.FullAuto;
+            Mode = data.fireMode;
             SpreadMultiplier = RecoilMultiplier = NoiseMultiplier = MoveMultiplier = LightRangeMultiplier = 1f;
             if (loadout == null || data.isSidearm) return;
             foreach (var id in new[] { loadout.lightId, loadout.opticId, loadout.muzzleId, loadout.stockId })
@@ -47,11 +49,21 @@ namespace Swat
             Reserve -= taken;
         }
 
+        // Automatic and burst weapons that allow it switch to semi-automatic and back.
         public bool ToggleFireMode()
         {
-            if (!Data.canToggleFireMode) return false;
-            Automatic = !Automatic;
+            if (!Data.canToggleFireMode || Data.fireMode == FireMode.SemiAuto) return false;
+            Mode = Mode == FireMode.SemiAuto ? Data.fireMode : FireMode.SemiAuto;
             return true;
+        }
+
+        public string ModeName { get { return Mode == FireMode.FullAuto ? "AUTO" : Mode == FireMode.Burst ? Data.burstCount + "-RND BURST" : "SEMI"; } }
+
+        // Fills the magazine and reserve back to what the weapon started with (game-mode respawns).
+        public void Refill()
+        {
+            Magazine = Data.magazineSize;
+            Reserve = Data.startingReserve;
         }
     }
 

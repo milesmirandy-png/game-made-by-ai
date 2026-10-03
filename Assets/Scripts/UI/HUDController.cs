@@ -25,11 +25,12 @@ namespace Swat
             bool reduce = settings.reduceFlashes;
             if (player.Health.Blind > 0f) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(reduce ? 0.85f : 1f, reduce ? 0.87f : 1f, reduce ? 0.9f : 1f, player.Health.Blind * (reduce ? 0.6f : 0.92f)));
             if (player.Health.DamageFlash > 0f) DrawDamageEdges(player.Health.DamageFlash * (reduce ? 0.45f : 1f));
-            if (!player.IsAlive) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.2f, 0f, 0f, 0.4f));
+            if (!player.IsAlive) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.2f, 0f, 0f, VersusMatch.Active ? 0.25f : 0.4f));
             DrawHitIndicator(game, player);
             DrawWorldLabels(game);
 
-            DrawObjectives(game);
+            bool versus = VersusMatch.Active;
+            if (!versus) DrawObjectives(game);
             float y = 30f;
             if (settings.minimap && !game.MapOpen && !game.PlanningMode)
             {
@@ -38,8 +39,12 @@ namespace Swat
                 minimap.DrawMinimap(game, rect, settings.minimapOpacity);
                 y = rect.yMax + 12f;
             }
-            y = DrawStatusTopRight(game, y);
-            DrawSquad(game, Mathf.Max(150f, y + 8f));
+            if (versus) VersusHUD.Draw(game, VersusMatch.Instance, Mathf.Max(110f, y));
+            else
+            {
+                y = DrawStatusTopRight(game, y);
+                DrawSquad(game, Mathf.Max(150f, y + 8f));
+            }
             DrawPlayer(game, player);
             DrawWeapon(player);
             DrawPrompt(game, player);
@@ -223,9 +228,9 @@ namespace Swat
             var weapon = weapons.Current;
             var rect = new Rect(w - 420f, h - 150f, 402f, 132f);
             UITheme.Panel(rect);
-            UIIcons.Weapon(new Rect(rect.x + 12f, rect.y + 14f, 120f, 46f), weapon.Data, UITheme.TextColor);
+            UIIcons.Weapon(new Rect(rect.x + 8f, rect.y + 10f, 128f, 56f), weapon.Data, UITheme.TextColor, weapons.Inventory.CurrentIndex == 0 ? player.Loadout : null);
             UITheme.Text(new Rect(rect.x + 144f, rect.y + 10f, 250f, 22f), weapon.Data.displayName, 16, UITheme.TextColor, TextAnchor.UpperLeft, true);
-            string mode = weapon.Automatic ? "AUTO" : "SEMI";
+            string mode = weapon.ModeName;
             if (weapon.Data.lessLethal) mode += "  LESS-LETHAL";
             UITheme.Text(new Rect(rect.x + 144f, rect.y + 32f, 250f, 18f), mode + (weapons.IsReloading ? "   RELOADING" : weapons.IsSwitching ? "   SWITCHING" : ""), 13, weapons.IsReloading ? UITheme.Warn : UITheme.Dim);
             Color ammoColor = weapon.Magazine == 0 ? UITheme.Bad : weapon.Magazine <= weapon.Data.magazineSize / 4 ? UITheme.Warn : UITheme.TextColor;
@@ -277,7 +282,7 @@ namespace Swat
             }
             // Extraction zone status when close.
             var extraction = game.Level.extraction;
-            if (extraction != null && (extraction.Bounds.center - player.Position).sqrMagnitude < 144f)
+            if (extraction != null && !VersusMatch.Active && (extraction.Bounds.center - player.Position).sqrMagnitude < 144f)
             {
                 bool active = false;
                 foreach (var objective in MissionManager.Instance.Objectives)
@@ -445,7 +450,8 @@ namespace Swat
             Vector2 c = new Vector2(mouse.x / s, (Screen.height - mouse.y) / s);
             var weapons = player.Weapons;
             float hitAge = Time.time - weapons.LastHitTime;
-            DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0);
+            float killAge = Time.time - weapons.LastKillTime;
+            DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
             if (weapons.IsReloading)
             {
                 float size = Mathf.Clamp(SaveManager.Settings.crosshairSize, 0.5f, 2f);
@@ -461,11 +467,11 @@ namespace Swat
             }
         }
 
-        const float HitMarkerTime = 0.18f;
+        const float HitMarkerTime = 0.18f, KillMarkerTime = 0.4f;
 
         // The crosshair itself, using the size, opacity and colour settings. hitAge < 0 means no
         // recent hit; the hit marker only shows when hit confirmation is enabled.
-        public static void DrawCrosshairShape(Vector2 c, float spread, float hitAge, bool empty)
+        public static void DrawCrosshairShape(Vector2 c, float spread, float hitAge, bool empty, float killAge = -1f)
         {
             var settings = SaveManager.Settings;
             float size = Mathf.Clamp(settings.crosshairSize, 0.5f, 2f);
@@ -478,6 +484,15 @@ namespace Swat
             DrawCross(c + new Vector2(1f, 1f), gap, len, t, shadow);
             DrawCross(c, gap, len, t, color);
             UITheme.Dot(c, 1.5f * size, color);
+            if (killAge >= 0f)
+            {
+                // Takedown: a bigger red X that pops out and fades (shown even with hit markers off).
+                float k = killAge / KillMarkerTime;
+                var red = new Color(1f, 0.25f, 0.2f, (1f - k) * opacity);
+                float pop = 1f + (1f - k) * 0.35f;
+                foreach (var d in Diagonals) UITheme.LineTo(c + d * 7f * size * pop, c + d * 18f * size * pop, red, t + 1.5f);
+                return;
+            }
             if (hitAge < 0f || !settings.hitMarker) return;
             // Hit confirmation: a small X that fades out quickly.
             var marker = new Color(1f, 1f, 1f, (1f - hitAge / HitMarkerTime) * opacity);

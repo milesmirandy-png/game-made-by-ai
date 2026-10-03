@@ -2,8 +2,13 @@ using UnityEngine;
 
 namespace Swat
 {
-    public enum FireMode { SemiAuto, FullAuto }
-    public enum WeaponCategory { CompactSMG, SMG, CompactRifle, Rifle, Shotgun, Carbine, LessLethal, ServicePistol, BackupPistol, HeavyPistol }
+    public enum FireMode { SemiAuto, FullAuto, Burst }
+    public enum WeaponCategory
+    {
+        CompactSMG, SMG, CompactRifle, Rifle, Shotgun, Carbine, LessLethal, ServicePistol, BackupPistol, HeavyPistol,
+        // Added with the arsenal update (appended so saved assets keep their values).
+        PDW, BurstRifle, Bullpup, Marksman, LMG, AutoShotgun, Pepperball, MachinePistol, Revolver, StunPistol,
+    }
 
     // Settings for one firearm. The defaults live in DefaultContent; use the
     // menu SWAT > Create Editable Data Assets to get editable copies.
@@ -38,6 +43,18 @@ namespace Swat
         [Tooltip("Optional model to show instead of the built-in block model")] public GameObject modelPrefab;
         public Sound fireSound = Sound.Pistol;
         public Color tracerColor = new Color(1f, 0.85f, 0.45f);
+
+        [Header("Feel (arsenal update)")]
+        [Tooltip("Shots per trigger pull in burst mode")] public int burstCount = 3;
+        [Tooltip("How hard the gun and camera kick on each shot")] public float kick = 1f;
+        [Tooltip("Muzzle flash size in metres")] public float flashSize = 0.6f;
+        public float tracerWidth = 0.05f;
+        [Tooltip("Plays a pump or bolt sound after each shot")] public bool pumpAction;
+        [Tooltip("Extra camera reach while steady aiming (marksman rifles)")] public float steadyLookAhead;
+        [Tooltip("Spread multiplier while crouched (light machine guns steady when crouched)")] public float crouchSpread = 0.75f;
+        [Tooltip("Less-lethal only: added chance that a stunned suspect gives up")] public float surrenderBonus = 0.35f;
+        public bool ejectsShells = true;
+        [Tooltip("Furniture colour of the built-in model (stock, grip, magazine)")] public Color accent = new Color(0.16f, 0.16f, 0.17f);
 
         public bool AllowedFor(OfficerRole role)
         {

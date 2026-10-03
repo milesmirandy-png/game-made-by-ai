@@ -38,19 +38,26 @@ namespace Swat
             Vector3 local = parts.root != null ? parts.root.InverseTransformDirection(direction) : direction;
             flinchAxis = new Vector3(local.z, 0f, -local.x).normalized;
             if (flinchAxis.sqrMagnitude < 0.01f) flinchAxis = Vector3.right;
+            if (!down) parts.Flash(Color.white, 0.07f);
         }
 
         public void SetDown(bool isDown)
         {
             down = isDown;
             if (down) parts.Fall();
+            else
+            {
+                parts.Rise();
+                crouch = crouchTarget = recoil = flinch = 0f;
+            }
         }
 
         public void Tick(float dt, float speed, bool running)
         {
+            parts.UpdateFlash();
             if (down || dt <= 0f) return;
             crouch = Mathf.MoveTowards(crouch, crouchTarget, dt * 5f);
-            recoil = Mathf.MoveTowards(recoil, 0f, dt * 8f);
+            recoil = Mathf.MoveTowards(recoil, 0f, dt * 7f);
             flinch = Mathf.MoveTowards(flinch, 0f, dt * 5f);
             breath += dt * 1.6f;
 
@@ -65,7 +72,8 @@ namespace Swat
             lean = Mathf.Lerp(lean, runBlend * 8f * moveBlend + crouch * 6f, 1f - Mathf.Exp(-8f * dt));
             parts.model.localPosition = new Vector3(0f, bob + idleBreath - crouch * 0.38f, 0f);
             var flinchRotation = Quaternion.AngleAxis(-flinch * 14f, flinchAxis);
-            parts.model.localRotation = flinchRotation * Quaternion.Euler(lean, 0f, 0f);
+            // Firing rocks the body back a touch (heavier guns more).
+            parts.model.localRotation = flinchRotation * Quaternion.Euler(lean - recoil * 4f, 0f, 0f);
 
             // Legs: swing when walking, stride further when running, bend when crouched.
             if (parts.leftLeg != null)
@@ -121,8 +129,8 @@ namespace Swat
                 // Small sway while moving and a slow idle drift.
                 float swayX = Mathf.Sin(bobPhase * 0.5f) * 2.5f * moveBlend + Mathf.Sin(breath * 0.7f) * 0.6f;
                 float swayY = Mathf.Sin(bobPhase) * 1.5f * moveBlend;
-                Vector3 targetPosition = new Vector3(0.12f, 1.17f - r * 0.12f - switchDip * 0.25f - (lowered ? 0.25f : 0f), 0.22f - recoil * 0.06f - (lowered ? 0.12f : 0f));
-                Quaternion targetRotation = Quaternion.Euler(-recoil * 6f + r * 35f + switchDip * 55f + (lowered ? 45f : 0f) + swayY, swayX, r * -25f);
+                Vector3 targetPosition = new Vector3(0.12f, 1.17f - r * 0.12f - switchDip * 0.25f - (lowered ? 0.25f : 0f), 0.22f - recoil * 0.1f - (lowered ? 0.12f : 0f));
+                Quaternion targetRotation = Quaternion.Euler(-recoil * 10f + r * 35f + switchDip * 55f + (lowered ? 45f : 0f) + swayY, swayX, r * -25f);
                 // Recoil is instant; everything else eases.
                 float gunBlend = recoil > 0.05f ? 1f : 1f - Mathf.Exp(-18f * dt);
                 parts.gunRoot.localPosition = Vector3.Lerp(parts.gunRoot.localPosition, targetPosition, gunBlend);

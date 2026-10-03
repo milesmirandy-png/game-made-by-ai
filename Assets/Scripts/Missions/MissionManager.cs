@@ -333,5 +333,16 @@ namespace Swat
         {
             Running = false;
         }
+
+        // Game modes have no mission: nothing to track or show.
+        public void Clear()
+        {
+            Running = false;
+            Mission = null;
+            Plan = null;
+            Result = null;
+            Stats = new MissionStats();
+            Tracker = new ObjectiveTracker();
+        }
     }
 }

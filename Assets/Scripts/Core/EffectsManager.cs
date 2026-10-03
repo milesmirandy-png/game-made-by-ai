@@ -14,6 +14,7 @@ namespace Swat
         struct Tracer { public GameObject go; public float until; }
         struct Debris { public Transform transform; public Vector3 velocity; public float age, life, size; }
         struct Flash { public Light light; public float age, life, intensity; }
+        struct Glint { public Transform transform; public MeshRenderer renderer; public Vector3 scale; public float age, life; }
 
         readonly Stack<GameObject> tracerPool = new Stack<GameObject>();
         readonly Stack<Transform> debrisPool = new Stack<Transform>();
@@ -21,6 +22,9 @@ namespace Swat
         readonly List<Tracer> tracers = new List<Tracer>();
         readonly List<Debris> debris = new List<Debris>();
         readonly List<Flash> flashes = new List<Flash>();
+        readonly Stack<MeshRenderer> glintPool = new Stack<MeshRenderer>();
+        readonly List<Glint> glints = new List<Glint>();
+        MaterialPropertyBlock glintBlock;
 
         void Awake()
         {
@@ -62,6 +66,44 @@ namespace Swat
                     size = pieceSize,
                 });
             }
+        }
+
+        // ---- Muzzle flashes and hit sparks ----
+
+        // A flat flame along the barrel (it reads from above) plus a bright star facing the camera.
+        public void MuzzleBurst(Vector3 muzzle, Vector3 forward, float size, Color color)
+        {
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+            forward.Normalize();
+            float length = size * Random.Range(0.85f, 1.2f);
+            SpawnGlint(ProceduralTextures.Flame, muzzle + forward * length * 0.5f, Quaternion.LookRotation(Vector3.down, forward), new Vector3(size * 0.55f, length, 1f), color, 0.05f);
+            var cam = GameManager.Instance != null ? GameManager.Instance.CameraRig.Cam : Camera.main;
+            if (cam != null)
+                SpawnGlint(ProceduralTextures.Star, muzzle + forward * 0.05f, cam.transform.rotation * Quaternion.Euler(0f, 0f, Random.Range(0f, 90f)), Vector3.one * size * 0.75f, color, 0.04f);
+        }
+
+        // A small white star where a shot connects with someone: instant, readable hit confirmation.
+        public void HitSpark(Vector3 point, float size)
+        {
+            var cam = GameManager.Instance != null ? GameManager.Instance.CameraRig.Cam : Camera.main;
+            if (cam == null) return;
+            SpawnGlint(ProceduralTextures.Star, point, cam.transform.rotation * Quaternion.Euler(0f, 0f, Random.Range(0f, 90f)), Vector3.one * size, Color.white, 0.06f);
+        }
+
+        void SpawnGlint(Texture texture, Vector3 position, Quaternion rotation, Vector3 scale, Color color, float life)
+        {
+            MeshRenderer renderer;
+            if (glintPool.Count > 0) renderer = glintPool.Pop();
+            else renderer = Shapes.Make(PrimitiveType.Quad, "Glint", transform, Vector3.zero, Vector3.one, Color.white, false).GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = Shapes.GlowMaterial(texture);
+            if (glintBlock == null) glintBlock = new MaterialPropertyBlock();
+            glintBlock.SetColor("_Color", color);
+            renderer.SetPropertyBlock(glintBlock);
+            renderer.transform.SetPositionAndRotation(position, rotation);
+            renderer.transform.localScale = scale;
+            renderer.gameObject.SetActive(true);
+            glints.Add(new Glint { transform = renderer.transform, renderer = renderer, scale = scale, life = life });
         }
 
         // ---- Surface impacts, bullet marks and shell casings ----
@@ -179,6 +221,7 @@ namespace Swat
             for (int i = tracers.Count - 1; i >= 0; i--) ReleaseTracer(i);
             for (int i = debris.Count - 1; i >= 0; i--) ReleaseDebris(i);
             for (int i = flashes.Count - 1; i >= 0; i--) ReleaseFlash(i);
+            for (int i = glints.Count - 1; i >= 0; i--) ReleaseGlint(i);
         }
 
         void Update()
@@ -212,6 +255,21 @@ namespace Swat
                 debris[i] = d;
             }
 
+            for (int i = glints.Count - 1; i >= 0; i--)
+            {
+                var g = glints[i];
+                g.age += dt;
+                if (g.age >= g.life)
+                {
+                    ReleaseGlint(i);
+                    continue;
+                }
+                // Full size for the first half, then shrinks away.
+                float k = g.age / g.life;
+                g.transform.localScale = g.scale * (k < 0.5f ? 1f : 1f - (k - 0.5f) * 1.4f);
+                glints[i] = g;
+            }
+
             for (int i = flashes.Count - 1; i >= 0; i--)
             {
                 var f = flashes[i];
@@ -240,6 +298,14 @@ namespace Swat
             piece.gameObject.SetActive(false);
             debrisPool.Push(piece);
             RemoveAt(debris, index);
+        }
+
+        void ReleaseGlint(int index)
+        {
+            var renderer = glints[index].renderer;
+            renderer.gameObject.SetActive(false);
+            glintPool.Push(renderer);
+            RemoveAt(glints, index);
         }
 
         void ReleaseFlash(int index)

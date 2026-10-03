@@ -56,6 +56,8 @@ namespace Swat
         readonly PauseMenuController pause = new PauseMenuController();
         readonly MissionDebriefUI debrief = new MissionDebriefUI();
         readonly LevelEditorUI levelEditor = new LevelEditorUI();
+        readonly VersusSetupUI versusSetup = new VersusSetupUI();
+        readonly VersusResultUI versusResult = new VersusResultUI();
 
         SecurityConsole console;
         GameState lastState = GameState.MainMenu;
@@ -173,8 +175,12 @@ namespace Swat
                     hud.Draw(game);
                     pause.Draw(game, this);
                     break;
-                case GameState.Debrief: debrief.Draw(game); break;
+                case GameState.Debrief:
+                    if (game.LastMatch != null) versusResult.Draw(game);
+                    else debrief.Draw(game);
+                    break;
                 case GameState.LevelEditor: levelEditor.Draw(game); break;
+                case GameState.VersusSetup: versusSetup.Draw(game); break;
             }
 
             GUI.enabled = true;

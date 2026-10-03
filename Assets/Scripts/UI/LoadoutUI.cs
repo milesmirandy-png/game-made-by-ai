@@ -10,7 +10,7 @@ namespace Swat
     public class LoadoutUI
     {
         static readonly AttachmentSlot[] Slots = { AttachmentSlot.Light, AttachmentSlot.Optic, AttachmentSlot.Muzzle, AttachmentSlot.Stock };
-        int tab;
+        int tab, page;   // page: 0 weapons, 1 armor and equipment
         WeaponData hovered;
 
         public void Draw(GameManager game)
@@ -54,7 +54,10 @@ namespace Swat
                 if (UITheme.Button(new Rect(60f, h - 90f, 220f, 50f), "< Officers")) game.OpenOfficerSelection(false);
                 string warning = TeamWarning(team);
                 if (!string.IsNullOrEmpty(warning)) UITheme.Text(new Rect(300f, h - 84f, w - 700f, 40f), warning, 15, UITheme.Warn, TextAnchor.MiddleLeft);
-                if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), "DEPLOY  >", true, true, 22)) game.Deploy();
+                var mission = OfficerSelectionManager.Mission;
+                bool versus = mission != null && mission.IsVersus;
+                if (versus && UITheme.Button(new Rect(w - 720f, h - 90f, 320f, 50f), "< Match setup", true, false, 18)) game.OpenVersusSetup();
+                if (UITheme.Button(new Rect(w - 380f, h - 90f, 320f, 50f), versus ? "START MATCH  >" : "DEPLOY  >", true, true, 22)) game.Deploy();
             }
         }
 
@@ -74,6 +77,8 @@ namespace Swat
         // Soft mission checks (nothing here blocks deployment; every mission is completable).
         static string TeamWarning(List<OfficerData> team)
         {
+            var current = OfficerSelectionManager.Mission;
+            if (current != null && current.IsVersus) return null;
             int charges = 0, kits = 0;
             foreach (var officer in team)
             {
@@ -93,17 +98,23 @@ namespace Swat
             UITheme.Panel(rect);
             bool changed = false;
             float x = rect.x + 20f, cw = rect.width - 40f, y = rect.y + 14f;
-            UITheme.Text(new Rect(x, y, cw, 24f), officer.displayName + "  -  " + UITheme.RoleName(officer.role), 18, UITheme.TextColor, TextAnchor.UpperLeft, true);
-            y += 30f;
-
-            // Primary weapons (two columns).
-            Section(ref y, x, cw, loadout.useShield ? "PRIMARY WEAPON (not usable with the shield)" : "PRIMARY WEAPON");
-            var primaries = new List<WeaponData>();
-            var sidearms = new List<WeaponData>();
-            foreach (var weapon in GameData.AllWeapons) (weapon.isSidearm ? sidearms : primaries).Add(weapon);
-            changed |= WeaponGrid(ref y, x, cw, primaries, officer, loadout, true);
-            Section(ref y, x, cw, "SIDEARM");
-            changed |= WeaponGrid(ref y, x, cw, sidearms, officer, loadout, false);
+            UITheme.Text(new Rect(x, y, cw * 0.5f, 24f), officer.displayName + "  -  " + UITheme.RoleName(officer.role), 18, UITheme.TextColor, TextAnchor.UpperLeft, true);
+            // The arsenal no longer fits on one page with the gear, so weapons and gear have their own tabs.
+            float pw = 150f;
+            if (UITheme.Button(new Rect(rect.xMax - 20f - pw * 2f - 6f, y - 4f, pw, 32f), "Weapons", true, page == 0, 15)) page = 0;
+            if (UITheme.Button(new Rect(rect.xMax - 20f - pw, y - 4f, pw, 32f), "Armor & gear", true, page == 1, 15)) page = 1;
+            y += 36f;
+            if (page == 0)
+            {
+                Section(ref y, x, cw, loadout.useShield ? "PRIMARY WEAPON (not usable with the shield)" : "PRIMARY WEAPON");
+                var primaries = new List<WeaponData>();
+                var sidearms = new List<WeaponData>();
+                foreach (var weapon in GameData.AllWeapons) (weapon.isSidearm ? sidearms : primaries).Add(weapon);
+                changed |= WeaponGrid(ref y, x, cw, primaries, officer, loadout, true);
+                Section(ref y, x, cw, "SIDEARM");
+                changed |= WeaponGrid(ref y, x, cw, sidearms, officer, loadout, false);
+                return changed;
+            }
 
             Section(ref y, x, cw, "ARMOR");
             var armors = GameData.AllArmor;
@@ -185,8 +196,8 @@ namespace Swat
                     else loadout.sidearmId = weapon.id;
                     changed = true;
                 }
-                UIIcons.Weapon(new Rect(r.x + 8f, r.y + 6f, 62f, 26f), weapon, unlocked && allowed ? UITheme.TextColor : UITheme.Faint);
-                UITheme.Text(new Rect(r.x + 78f, r.y, r.width - 82f, r.height), label, 15, unlocked && allowed ? UITheme.TextColor : UITheme.Faint, TextAnchor.MiddleLeft, selected);
+                UIIcons.Weapon(new Rect(r.x + 4f, r.y + 3f, 92f, 32f), weapon, unlocked && allowed ? UITheme.TextColor : UITheme.Faint);
+                UITheme.Text(new Rect(r.x + 102f, r.y, r.width - 106f, r.height), label, 15, unlocked && allowed ? UITheme.TextColor : UITheme.Faint, TextAnchor.MiddleLeft, selected);
                 if (UITheme.Hover(r)) hovered = weapon;
             }
             y += Mathf.Ceil(weapons.Count / 2f) * 42f + 6f;
@@ -207,7 +218,7 @@ namespace Swat
             var weapon = hovered ?? GameData.Weapon(loadout.useShield ? loadout.sidearmId : loadout.primaryId);
             if (weapon != null)
             {
-                UIIcons.Weapon(new Rect(x, y, 150f, 56f), weapon, UITheme.TextColor);
+                UIIcons.Weapon(new Rect(x, y, 150f, 56f), weapon, UITheme.TextColor, weapon == GameData.Weapon(loadout.primaryId) ? loadout : null);
                 UITheme.Text(new Rect(x + 166f, y, cw - 166f, 28f), weapon.displayName, 21, UITheme.TextColor, TextAnchor.UpperLeft, true);
                 UITheme.Text(new Rect(x + 166f, y + 30f, cw - 166f, 22f), Category(weapon.category) + (weapon.lessLethal ? "  |  less-lethal" : ""), 15, UITheme.Accent);
                 y += 66f;
@@ -224,7 +235,8 @@ namespace Swat
                 Stat(ref y, x, cw, "Recoil control", Mathf.InverseLerp(2f, 0.2f, preview.Recoil), (10f - preview.Recoil * 4f).ToString("0.0"));
                 Stat(ref y, x, cw, "Handling", Mathf.InverseLerp(0.85f, 1.05f, weapon.moveSpeedMultiplier * preview.MoveMultiplier), Mathf.RoundToInt(weapon.moveSpeedMultiplier * preview.MoveMultiplier * 100f) + "%");
                 Stat(ref y, x, cw, "Noise", Mathf.InverseLerp(10f, 32f, preview.NoiseRadius), preview.NoiseRadius.ToString("0") + "m");
-                UITheme.Text(new Rect(x, y, cw, 22f), "Mode: " + (weapon.fireMode == FireMode.FullAuto ? "Automatic" : "Semi-automatic") + (weapon.canToggleFireMode ? " (toggle with " + UITheme.KeyFor(InputAction.FireMode) + ")" : ""), 15, UITheme.Dim);
+                string modeName = weapon.fireMode == FireMode.FullAuto ? "Automatic" : weapon.fireMode == FireMode.Burst ? weapon.burstCount + "-round burst" : "Semi-automatic";
+                UITheme.Text(new Rect(x, y, cw, 22f), "Mode: " + modeName + (weapon.canToggleFireMode && weapon.fireMode != FireMode.SemiAuto ? " (toggle semi with " + UITheme.KeyFor(InputAction.FireMode) + ")" : ""), 15, UITheme.Dim);
                 y += 30f;
             }
 
@@ -313,6 +325,16 @@ namespace Swat
                 case WeaponCategory.LessLethal: return "Less-lethal launcher";
                 case WeaponCategory.ServicePistol: return "Service pistol";
                 case WeaponCategory.BackupPistol: return "Backup pistol";
+                case WeaponCategory.PDW: return "Personal defense weapon";
+                case WeaponCategory.BurstRifle: return "Burst rifle";
+                case WeaponCategory.Bullpup: return "Bullpup rifle";
+                case WeaponCategory.Marksman: return "Marksman rifle";
+                case WeaponCategory.LMG: return "Light machine gun";
+                case WeaponCategory.AutoShotgun: return "Automatic shotgun";
+                case WeaponCategory.Pepperball: return "Pepperball launcher (less-lethal)";
+                case WeaponCategory.MachinePistol: return "Machine pistol";
+                case WeaponCategory.Revolver: return "Revolver";
+                case WeaponCategory.StunPistol: return "Stun pistol (less-lethal)";
                 default: return "Heavy sidearm";
             }
         }

@@ -31,7 +31,8 @@ namespace Swat
             float x = rect.x + 30f, bw = rect.width - 60f, y = rect.y + 100f, bh = 52f, gap = 10f;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Resume")) { confirm = null; game.Resume(); }
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "restart" ? "Click again to restart" : "Restart mission", true, confirm == "restart"))
+            bool versus = VersusMatch.Active;
+            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "restart" ? "Click again to restart" : versus ? "Restart match" : "Restart mission", true, confirm == "restart"))
             {
                 if (confirm == "restart") { confirm = null; game.RestartMission(); }
                 else confirm = "restart";
@@ -41,7 +42,7 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(4);
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? "Click again to quit the mission" : "Quit mission", true, confirm == "hq"))
+            if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? (versus ? "Click again to leave the match" : "Click again to quit the mission") : versus ? "Leave match" : "Quit mission", true, confirm == "hq"))
             {
                 if (confirm == "hq") { confirm = null; game.LeaveMissionScreens(); }
                 else confirm = "hq";

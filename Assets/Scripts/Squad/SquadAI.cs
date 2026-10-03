@@ -402,12 +402,13 @@ namespace Swat
             Vector3 direction = (aim - origin).normalized;
             if (!onTarget) direction = Quaternion.Euler(0f, Random.Range(3f, 8f) * (Random.value < 0.5f ? -1f : 1f), 0f) * direction;
 
-            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration };
+            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data };
             Vector3 muzzle = body.Parts.muzzle.position;
             for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
                 WeaponEffects.Shoot(origin, i == 0 ? direction : WeaponEffects.Scatter(direction, data.spread), data.range, damage, muzzle, data.tracerColor);
-            body.Animator.Fire(Mathf.Clamp(weapon.Recoil * 0.6f, 0.4f, 1.5f));
-            WeaponEffects.MuzzleFlash(muzzle, data.fireSound, 0.7f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            body.Animator.Fire(Mathf.Clamp(0.45f + data.kick * 0.45f, 0.4f, 1.5f));
+            WeaponEffects.Fired(body.Parts.muzzle, data, 0.7f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            if (data.ejectsShells) WeaponEffects.EjectShell(body.Parts.gunRoot.position, transform.right, data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun);
         }
 
         bool IsReloading { get { return reloadEnd > 0f; } }

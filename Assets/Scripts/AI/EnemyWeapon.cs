@@ -7,13 +7,17 @@ namespace Swat
     public class EnemyWeapon : MonoBehaviour
     {
         EnemyData data;
+        WeaponData model;   // the gun in the suspect's hands: its sound, flash and tracer
         Transform muzzle;
+        EnemyController body;
         float nextShot, accuracyMultiplier = 1f;
         int burstLeft;
 
-        public void Init(EnemyData profile, Transform muzzlePoint, float difficultyAccuracy)
+        public void Init(EnemyData profile, Transform muzzlePoint, float difficultyAccuracy, WeaponData gun = null)
         {
             data = profile;
+            model = gun;
+            body = GetComponent<EnemyController>();
             muzzle = muzzlePoint;
             accuracyMultiplier = difficultyAccuracy;
         }
@@ -50,9 +54,12 @@ namespace Swat
             if (!onTarget) direction = Quaternion.Euler(0f, Random.Range(4f, 10f) * (Random.value < 0.5f ? -1f : 1f), 0f) * direction;
 
             Vector3 from = muzzle != null ? muzzle.position : origin;
-            var damage = new DamageInfo { amount = data.weaponDamage, attacker = Team.Suspect };
+            var damage = new DamageInfo { amount = data.weaponDamage, attacker = Team.Suspect, weapon = model };
             WeaponEffects.Shoot(origin, direction, data.detectionRange * 1.5f, damage, from, new Color(1f, 0.5f, 0.25f));
-            WeaponEffects.MuzzleFlash(from, Sound.EnemyShot, 0.8f, 20f, NoiseKind.EnemyGunshot);
+            if (muzzle != null) WeaponEffects.Fired(muzzle, model, 0.8f, 20f, NoiseKind.EnemyGunshot, 0.94f);
+            else WeaponEffects.MuzzleFlash(from, Sound.EnemyShot, 0.8f, 20f, NoiseKind.EnemyGunshot);
+            if (model != null && model.ejectsShells) WeaponEffects.EjectShell(transform.position + Vector3.up * 1.15f, transform.right, model.category == WeaponCategory.Shotgun);
+            if (body != null && body.Animator != null) body.Animator.Fire(model != null ? Mathf.Clamp(0.45f + model.kick * 0.45f, 0.4f, 1.5f) : 0.8f);
         }
     }
 }

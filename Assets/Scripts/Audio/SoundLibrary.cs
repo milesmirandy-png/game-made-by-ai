@@ -13,6 +13,9 @@ namespace Swat
         DoorClose, DoorOpenMetal, DoorHandle, Shell, RicochetMetal, ImpactGlass,
         RadioVoice1, RadioVoice2, RadioVoice3, RadioOrder, ObjectiveTone, Warning, FlashlightClick,
         MusicMenu, MusicMission, Hum, Equip, WeaponRaise,
+        // Added with the arsenal update.
+        Pdw, BurstRifle, Marksman, Lmg, AutoShotgun, Pepperball, MachinePistol, Revolver, Zap,
+        Pump, MagOut, MagIn, Charge, Kill, Whiz,
     }
 
     // Placeholder sound effects synthesized from simple waveforms at startup,
@@ -27,16 +30,34 @@ namespace Swat
         public static AudioClip[] Build()
         {
             var clips = new AudioClip[System.Enum.GetValues(typeof(Sound)).Length];
-            clips[(int)Sound.Pistol] = Gunshot("Pistol", 18f, 120f, 0.6f, 0.4f);
-            clips[(int)Sound.Smg] = Gunshot("SMG", 24f, 140f, 0.7f, 0.3f);
-            clips[(int)Sound.CompactSmg] = Gunshot("Compact SMG", 28f, 160f, 0.75f, 0.25f);
-            clips[(int)Sound.Rifle] = Gunshot("Rifle", 13f, 80f, 0.5f, 0.5f);
-            clips[(int)Sound.Carbine] = Gunshot("Carbine", 10f, 70f, 0.55f, 0.6f);
-            clips[(int)Sound.Shotgun] = Gunshot("Shotgun", 8f, 55f, 0.35f, 0.7f);
-            clips[(int)Sound.HeavyPistol] = Gunshot("Heavy Pistol", 11f, 65f, 0.45f, 0.55f);
+            // Gunshots: a sharp transient, a bright crack, a low thump that drops in pitch and a
+            // short rumble tail, soft-clipped together so they hit hard without distorting.
+            clips[(int)Sound.Pistol] = Shot("Pistol", 0.42f, 34f, 0.62f, 190f, 70f, 26f, 0.9f, 9f, 0.35f);
+            clips[(int)Sound.Smg] = Shot("SMG", 0.32f, 40f, 0.7f, 210f, 80f, 30f, 0.75f, 12f, 0.25f);
+            clips[(int)Sound.CompactSmg] = Shot("Compact SMG", 0.28f, 46f, 0.76f, 240f, 90f, 34f, 0.7f, 14f, 0.2f);
+            clips[(int)Sound.Rifle] = Shot("Rifle", 0.55f, 26f, 0.55f, 150f, 48f, 20f, 1.05f, 6f, 0.45f);
+            clips[(int)Sound.Carbine] = Shot("Carbine", 0.65f, 20f, 0.58f, 140f, 44f, 16f, 1.1f, 5f, 0.5f);
+            clips[(int)Sound.Shotgun] = Shot("Shotgun", 0.8f, 15f, 0.38f, 120f, 36f, 11f, 1.35f, 4f, 0.65f);
+            clips[(int)Sound.HeavyPistol] = Shot("Heavy Pistol", 0.6f, 22f, 0.5f, 140f, 42f, 15f, 1.2f, 5f, 0.5f);
             clips[(int)Sound.LessLethal] = Make("Less Lethal", 0.35f, t => (Noise() * 0.4f + Mathf.Sin(Tau * 90f * t)) * Mathf.Exp(-t * 18f));
-            clips[(int)Sound.EnemyShot] = Gunshot("Enemy Shot", 15f, 100f, 0.55f, 0.45f);
+            clips[(int)Sound.EnemyShot] = Shot("Enemy Shot", 0.5f, 28f, 0.55f, 170f, 60f, 22f, 0.9f, 7f, 0.4f);
+            clips[(int)Sound.Pdw] = Shot("PDW", 0.3f, 42f, 0.72f, 220f, 85f, 32f, 0.7f, 13f, 0.22f);
+            clips[(int)Sound.BurstRifle] = Shot("Burst Rifle", 0.5f, 28f, 0.57f, 160f, 52f, 22f, 1f, 7f, 0.4f);
+            clips[(int)Sound.Marksman] = Shot("Marksman Rifle", 0.85f, 17f, 0.6f, 130f, 38f, 12f, 1.25f, 3.5f, 0.6f);
+            clips[(int)Sound.Lmg] = Shot("Light Machine Gun", 0.45f, 26f, 0.52f, 140f, 46f, 22f, 1.1f, 7f, 0.4f);
+            clips[(int)Sound.AutoShotgun] = Shot("Auto Shotgun", 0.6f, 18f, 0.4f, 125f, 38f, 13f, 1.3f, 5f, 0.55f);
+            clips[(int)Sound.MachinePistol] = Shot("Machine Pistol", 0.26f, 48f, 0.74f, 250f, 95f, 36f, 0.65f, 15f, 0.18f);
+            clips[(int)Sound.Revolver] = Shot("Revolver", 0.8f, 18f, 0.48f, 130f, 38f, 12f, 1.3f, 4f, 0.6f);
+            clips[(int)Sound.Pepperball] = Make("Pepperball", 0.18f, t => (Noise() * 0.5f * Mathf.Exp(-t * 60f) + Mathf.Sin(Tau * (320f - 600f * t) * t) * Mathf.Exp(-t * 30f) * 0.6f));
+            clips[(int)Sound.Zap] = Make("Zap", 0.45f, t => (Mathf.Sign(Mathf.Sin(Tau * 95f * t)) * 0.4f + Noise() * 0.5f) * (0.6f + 0.4f * Mathf.Sin(Tau * 23f * t)) * Mathf.Min(1f, (0.45f - t) * 10f) + Click(t, 0f));
             clips[(int)Sound.Reload] = Make("Reload", 0.5f, t => Click(t, 0f) + Click(t, 0.32f));
+            // Weapon handling: pump or bolt after a shot, magazine out and in, charging handle.
+            clips[(int)Sound.Pump] = Make("Pump", 0.3f, t => Slide(t, 0f, 0.08f) + Click(t, 0.08f) * 0.9f + Slide(t, 0.14f, 0.07f) + Click(t, 0.21f));
+            clips[(int)Sound.MagOut] = Make("Mag Out", 0.22f, t => Click(t, 0f) * 0.8f + Slide(t, 0.03f, 0.12f) * 0.7f);
+            clips[(int)Sound.MagIn] = Make("Mag In", 0.2f, t => Thump(t, 0f, 160f) * 0.8f + Click(t, 0.02f) + Click(t, 0.05f) * 0.5f);
+            clips[(int)Sound.Charge] = Make("Charge", 0.28f, t => Slide(t, 0f, 0.1f) + Click(t, 0.1f) * 0.7f + Slide(t, 0.13f, 0.06f) * 0.8f + Click(t, 0.19f) * 1.1f);
+            clips[(int)Sound.Kill] = Make("Kill Confirm", 0.22f, t => (Mathf.Sin(Tau * 1320f * t) * Mathf.Exp(-t * 26f) + (t > 0.06f ? Mathf.Sin(Tau * 1760f * t) * Mathf.Exp(-(t - 0.06f) * 22f) : 0f)) * 0.6f + Click(t, 0f) * 0.3f);
+            clips[(int)Sound.Whiz] = Whiz("Near Miss", 0.2f);
             clips[(int)Sound.Empty] = Make("Empty", 0.08f, t => Click(t, 0f));
             clips[(int)Sound.Footstep] = Thud("Footstep", 0.12f, 45f, 80f);
             clips[(int)Sound.DoorOpen] = Make("Door", 0.45f, t => Mathf.Sin(Tau * (260f + 90f * Mathf.Sin(t * 30f)) * t) * Mathf.Sin(Mathf.PI * t / 0.45f) * 0.5f + Noise() * 0.1f * Mathf.Exp(-t * 8f));
@@ -113,13 +134,49 @@ namespace Swat
             return Noise() * Mathf.Exp(-local * 180f) + Mathf.Sin(Tau * 2400f * local) * Mathf.Exp(-local * 120f) * 0.5f;
         }
 
-        static AudioClip Gunshot(string name, float decay, float thump, float brightness, float seconds)
+        // seconds: clip length; crackDecay/brightness: the noise crack; bodyStart/bodyEnd/bodyDecay/bodyLevel:
+        // the pitch-dropping thump; tailDecay/tailLevel: the rumble after the shot.
+        static AudioClip Shot(string name, float seconds, float crackDecay, float brightness, float bodyStart, float bodyEnd, float bodyDecay, float bodyLevel, float tailDecay, float tailLevel)
         {
-            float filtered = 0f;
+            float filtered = 0f, rumble = 0f, phase = 0f;
             return Make(name, seconds, t =>
             {
+                float click = t < 0.004f ? Noise() * (1f - t / 0.004f) * 1.3f : 0f;
                 filtered = Mathf.Lerp(filtered, Noise(), brightness);
-                return filtered * Mathf.Exp(-t * decay) + Mathf.Sin(Tau * thump * t) * Mathf.Exp(-t * 28f) * 0.8f;
+                float crack = filtered * Mathf.Exp(-t * crackDecay);
+                float frequency = Mathf.Lerp(bodyEnd, bodyStart, Mathf.Exp(-t * 28f));
+                phase += Tau * frequency / SampleRate;
+                float body = Mathf.Sin(phase) * Mathf.Exp(-t * bodyDecay) * bodyLevel;
+                rumble = Mathf.Lerp(rumble, Noise(), 0.035f);
+                float tail = rumble * 4f * Mathf.Exp(-t * tailDecay) * tailLevel * Mathf.Clamp01(t * 40f);
+                return SoftClip((click + crack + body + tail) * 1.8f);
+            });
+        }
+
+        static float SoftClip(float x)
+        {
+            return x / (1f + Mathf.Abs(x));
+        }
+
+        // A short metallic slide (pump, bolt, magazine).
+        static float Slide(float t, float at, float length)
+        {
+            float local = t - at;
+            if (local < 0f || local > length) return 0f;
+            return Noise() * 0.35f * Mathf.Sin(Mathf.PI * local / length) + Mathf.Sin(Tau * 900f * local) * 0.1f * Mathf.Sin(Mathf.PI * local / length);
+        }
+
+        // A bullet passing close by: band-limited noise sweeping down in pitch.
+        static AudioClip Whiz(string name, float seconds)
+        {
+            float filtered = 0f, slow = 0f;
+            return Make(name, seconds, t =>
+            {
+                float n = Noise();
+                float k = Mathf.Lerp(0.6f, 0.15f, t / seconds);
+                filtered = Mathf.Lerp(filtered, n, k);
+                slow = Mathf.Lerp(slow, filtered, 0.25f);
+                return (filtered - slow) * Mathf.Sin(Mathf.PI * t / seconds) + Mathf.Sin(Tau * (2400f - 5000f * t) * t) * 0.15f * Mathf.Sin(Mathf.PI * t / seconds);
             });
         }
 

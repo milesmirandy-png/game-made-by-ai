@@ -1,16 +1,100 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has four parts: the **pixel-art style** (newest,
-first), the **ten levels, main menu and Level Creator**, the
-**quality-of-life, graphics, lighting and polish update**, and the original
-build (updated where later work changed something).
+and what is still unverified. It has five parts: the **game modes, arsenal and
+sprite update** (newest, first), the **pixel-art style**, the **ten levels,
+main menu and Level Creator**, the **quality-of-life, graphics, lighting and
+polish update**, and the original build (updated where later work changed
+something).
 
-The short version: everything is implemented in C# (plus four small shaders),
+The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check, but
 **the game has not been run inside the Unity editor yet**. No play-testing, no
 profiling or performance measurements, and no screenshots exist. Treat
 everything below as "implemented in code" unless it says otherwise.
+
+# Part 0b: Game modes, arsenal and sprites
+
+## What was added
+
+- **Game modes** (`Scripts/Versus/`, `UI/VersusSetupUI.cs`, `UI/VersusHUD.cs`,
+  `UI/VersusResultUI.cs`): Team Deathmatch, Capture the Flag and Zone Control,
+  framed as training exercises with marking rounds (non-graphic: players are
+  "tagged out" and respawn). A match is a `MissionData` with `mode` set, so it
+  reuses the squad, loadout, deployment, pause and restart flow; the
+  randomizer is skipped (no suspects, civilians, security devices or locked
+  doors) and `VersusMatch` runs instead of `MissionManager`.
+  - `VersusMatch`: picks the bases (blue at the arrival point, red in the
+    indoor room furthest away by NavMesh path), the zone (the room most evenly
+    reachable from both bases, at most 9 x 9 m), flags, spawn points, teams,
+    respawns with protection, scoring, flag rules (pick up, drop on takedown,
+    return by touch or after 20 s, capture only with your own flag home), zone
+    control (alone in the zone pushes control your way, contested stalls),
+    fog of war for the red team, a takedown feed and the end-of-match result.
+  - `ArenaBot`: one class for bots on both teams: line-of-sight targeting with
+    the shared `AIVisibility` rules, reaction time and aim error by skill,
+    strafing while shooting, per-weapon firing rhythm (bursts for automatic
+    and burst weapons), reloads, teammates sharing sightings, and objectives
+    by role (roam/hunt, attack or defend a flag, hold the zone). Blue bots use
+    your squadmates' names and loadouts.
+  - The player respawns instead of failing (`GameManager.OnPlayerDown`);
+    `OperatorHealth` gained `LastHit`, spawn protection and `RestoreFull`.
+  - Doors start open (`DoorController.OpenForMatch`) and reopen when a bot
+    walks up to one you closed; flashbangs daze bots.
+  - HUD: score and clock, flag/zone status, takedown feed, team list, respawn
+    countdown, name labels, edge-pinned flag and zone markers; the minimap
+    shows bases, zone, flags and bots. The pause menu and debrief adapt.
+- **Arsenal:** ten new weapons (`DefaultContent.Weapons`), new categories
+  (appended to the enum so saved assets keep their values), `FireMode.Burst`,
+  and per-weapon feel fields on `WeaponData` (kick, flash size, tracer width,
+  pump action, steady look-ahead, crouch spread, less-lethal surrender bonus,
+  shell ejection, accent colour). The loadout screen splits weapons and
+  armor/gear into two tabs so the bigger arsenal fits.
+- **Gun feel:** `WeaponEffects.Fired` (flame and star sprites from
+  `EffectsManager.MuzzleBurst`, light flash, the gun's own sound),
+  `CameraController.Kick`, stronger recoil animation, white hit flash
+  (`CharacterParts.Flash`), hit spark, a shove via `AgentMover.Nudge`,
+  takedown marker and sound, hit stop (`GameManager.HitStop`, setting),
+  near-miss whiz, magazine/charge/pump sounds, first-shot accuracy, empty
+  reload penalty. New gunshots are synthesized from a transient, a noise
+  crack, a pitch-dropping thump and a rumble tail, soft-clipped.
+- **Pixel-art gun sprites:** `WeaponSpriteArt` draws each category in pure C#
+  (no Unity types): shaded parts, blue-grey steel, furniture from the weapon's
+  accent colour, hue-shifted shadows and highlights, a dark outline, a white
+  border, and attachments (suppressor, optic, light). `WeaponSprites` caches
+  them as point-filtered textures and draws them at whole-pixel scales.
+- **Character sprites:** `SwatToon.shader` (Built-in pipeline, three light
+  bands, cool shadow tint, top-face highlight, rim light; additive point and
+  spot lights; VertexLit fallback for shadows), applied to characters and
+  their guns in pixel art by `Shapes.Toonify`. Heads sit on a pivot and are
+  18% larger in pixel art; eyes, goggle lenses and squad-coloured shoulder
+  pads were added; guns are drawn 25% larger in pixel art.
+
+## Limitations
+
+- The toon shader is Built-in only; under URP characters keep the default
+  lit material. Switching art style mid-mission affects characters from the
+  next deployment.
+- Bots are simple: they don't use cover points, equipment or doors as
+  tactics, and they can't take stairs (maps with several floors aren't
+  offered). The apartment map is not in the game-mode list.
+- Weapon sprites are generated from a handful of shapes per category, so two
+  weapons of the same category differ only by colour and attachments.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings), and
+  every shader (including the new toon shader, with stand-ins for Unity's
+  lighting macros) passes the HLSL syntax check.
+- **The gun sprites were rendered outside Unity:** `WeaponSpriteArt.cs` was
+  compiled with Mono together with a small program that saves each sprite as
+  an image, and the resulting sheet was inspected. That is the real output of
+  the sprite code; how it looks in the HUD also depends on the UI scale.
+- **Not done:** running any of it in Unity. The game modes, bots, toon
+  shading, hit stop and new sounds have never been seen, heard or played.
+  Expect tuning work: bot accuracy and reaction times, spawn points that land
+  in awkward places on some maps, zone placement, sound levels, and how
+  strong the camera kick and hit flash feel.
 
 # Part 0a: Pixel-art style
 
