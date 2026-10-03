@@ -32,11 +32,13 @@ assets or package dependencies and runs on modest hardware.
   LM8 light machine gun (crouch to steady it), AS12 auto shotgun, PB3
   pepperball launcher, M9 machine pistol, R6 revolver and S2 stun pistol. All
   are fictional game abstractions.
-- **Pixel-art gun sprites** in the loadout, HUD and weapon wheel: side-view
-  sprites with shaded blue-grey steel, coloured furniture (stock, grip,
-  handguard), a dark outline and a white sticker border, drawn by code
-  (`Weapons/WeaponSpriteArt.cs`). The guns in characters' hands use the same
-  colours.
+- **Pixel-art gun sprites** in the loadout, HUD and weapon wheel, in a
+  hand-drawn sticker style: navy and slate steel with pale blue highlights,
+  coloured furniture (red, brown or tan wood with grain; black, grey or olive
+  polymer), rounded corners, curved magazines, an outline in a darker shade
+  of each part's colour and a thick white border. Drawn by code
+  (`Weapons/WeaponSpriteArt.cs`, no image files). The guns in characters'
+  hands use the same colours.
 - **Punchier shooting:** muzzle flame and flash sprites, camera kick along the
   aim, stronger body and gun recoil, a white hit flash on whoever gets hit, a
   small shove on hits, a hit spark, a red takedown marker with its own sound,

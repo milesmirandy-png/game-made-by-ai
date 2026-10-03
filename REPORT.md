@@ -59,9 +59,12 @@ everything below as "implemented in code" unless it says otherwise.
   reload penalty. New gunshots are synthesized from a transient, a noise
   crack, a pitch-dropping thump and a rumble tail, soft-clipped.
 - **Pixel-art gun sprites:** `WeaponSpriteArt` draws each category in pure C#
-  (no Unity types): shaded parts, blue-grey steel, furniture from the weapon's
-  accent colour, hue-shifted shadows and highlights, a dark outline, a white
-  border, and attachments (suppressor, optic, light). `WeaponSprites` caches
+  (no Unity types), styled after reference sprites the user supplied: shaded
+  parts with six hue-shifted tones, navy and slate steel with pale blue
+  highlights, furniture from the weapon's accent colour (warm colours get
+  wood grain), rounded corners, curved magazines, an outline in a darker
+  shade of each part's own colour, a two-pixel white border, and attachments
+  (suppressor, optic, light). `WeaponSprites` caches
   them as point-filtered textures and draws them at whole-pixel scales.
 - **Character sprites:** `SwatToon.shader` (Built-in pipeline, three light
   bands, cool shadow tint, top-face highlight, rim light; additive point and

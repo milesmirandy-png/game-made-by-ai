@@ -108,27 +108,27 @@ namespace Swat
                 {
                     case "smg_compact": Feel(w, Polymer, 0.6f, 0.45f); break;
                     case "smg_v10": Feel(w, Polymer, 0.7f, 0.5f); break;
-                    case "rifle_compact": Feel(w, new Color(0.3f, 0.3f, 0.33f), 0.9f, 0.6f); break;
-                    case "rifle_service": Feel(w, new Color(0.62f, 0.18f, 0.24f), 1f, 0.7f); break;
-                    case "shotgun_ts8": Feel(w, new Color(0.5f, 0.28f, 0.15f), 2.2f, 0.95f); w.pumpAction = true; w.tracerWidth = 0.035f; break;
-                    case "carbine_pc9": Feel(w, new Color(0.55f, 0.3f, 0.16f), 1.6f, 0.8f); w.steadyLookAhead = 3f; w.pumpAction = true; break;
+                    case "rifle_compact": Feel(w, new Color(0.32f, 0.32f, 0.36f), 0.9f, 0.6f); break;
+                    case "rifle_service": Feel(w, new Color(0.75f, 0.2f, 0.32f), 1f, 0.7f); break;
+                    case "shotgun_ts8": Feel(w, new Color(0.62f, 0.3f, 0.16f), 2.2f, 0.95f); w.pumpAction = true; w.tracerWidth = 0.035f; break;
+                    case "carbine_pc9": Feel(w, new Color(0.66f, 0.24f, 0.2f), 1.6f, 0.8f); w.steadyLookAhead = 3f; w.pumpAction = true; break;
                     case "launcher_ll40": Feel(w, Polymer, 1.4f, 0.5f); w.ejectsShells = false; w.tracerWidth = 0.08f; break;
                     case "pistol_p17": Feel(w, Polymer, 0.7f, 0.4f); break;
                     case "pistol_bk6": Feel(w, Polymer, 0.6f, 0.35f); break;
-                    case "pistol_h50": Feel(w, new Color(0.5f, 0.28f, 0.15f), 1.5f, 0.55f); break;
-                    case "pdw_x4": Feel(w, new Color(0.26f, 0.3f, 0.21f), 0.55f, 0.45f); break;
-                    case "rifle_b4": Feel(w, new Color(0.55f, 0.47f, 0.33f), 0.9f, 0.65f); w.burstCount = 3; break;
-                    case "rifle_cx": Feel(w, new Color(0.32f, 0.36f, 0.22f), 1f, 0.7f); break;
-                    case "dmr_dm2": Feel(w, new Color(0.55f, 0.47f, 0.33f), 2f, 0.9f); w.steadyLookAhead = 7f; w.pumpAction = true; w.tracerWidth = 0.06f; break;
-                    case "lmg_lm8": Feel(w, new Color(0.32f, 0.36f, 0.22f), 0.9f, 0.75f); w.crouchSpread = 0.45f; break;
-                    case "shotgun_as12": Feel(w, new Color(0.3f, 0.3f, 0.33f), 1.8f, 0.9f); w.tracerWidth = 0.035f; break;
+                    case "pistol_h50": Feel(w, new Color(0.62f, 0.3f, 0.16f), 1.5f, 0.55f); break;
+                    case "pdw_x4": Feel(w, new Color(0.24f, 0.3f, 0.22f), 0.55f, 0.45f); break;
+                    case "rifle_b4": Feel(w, new Color(0.6f, 0.5f, 0.34f), 0.9f, 0.65f); w.burstCount = 3; break;
+                    case "rifle_cx": Feel(w, new Color(0.34f, 0.4f, 0.24f), 1f, 0.7f); break;
+                    case "dmr_dm2": Feel(w, new Color(0.6f, 0.5f, 0.34f), 2f, 0.9f); w.steadyLookAhead = 7f; w.pumpAction = true; w.tracerWidth = 0.06f; break;
+                    case "lmg_lm8": Feel(w, new Color(0.34f, 0.4f, 0.24f), 0.9f, 0.75f); w.crouchSpread = 0.45f; break;
+                    case "shotgun_as12": Feel(w, new Color(0.32f, 0.32f, 0.36f), 1.8f, 0.9f); w.tracerWidth = 0.035f; break;
                     case "pepper_pb3":
-                        Feel(w, new Color(0.3f, 0.25f, 0.55f), 0.3f, 0.25f);
+                        Feel(w, new Color(0.36f, 0.28f, 0.62f), 0.3f, 0.25f);
                         w.lessLethal = true; w.stunDuration = 0.8f; w.surrenderBonus = 0.06f; w.ejectsShells = false;
                         w.tracerColor = new Color(0.85f, 0.4f, 1f);
                         break;
                     case "mp_m9": Feel(w, Polymer, 0.6f, 0.4f); break;
-                    case "revolver_r6": Feel(w, new Color(0.55f, 0.3f, 0.16f), 1.9f, 0.6f); w.ejectsShells = false; break;
+                    case "revolver_r6": Feel(w, new Color(0.66f, 0.24f, 0.2f), 1.9f, 0.6f); w.ejectsShells = false; break;
                     case "stun_s2":
                         Feel(w, Polymer, 0.3f, 0.2f);
                         w.lessLethal = true; w.stunDuration = 3.5f; w.surrenderBonus = 0.5f; w.ejectsShells = false;
@@ -139,7 +139,7 @@ namespace Swat
             return list;
         }
 
-        static readonly Color Polymer = new Color(0.17f, 0.19f, 0.24f);
+        static readonly Color Polymer = new Color(0.2f, 0.22f, 0.3f);
 
         static void Feel(WeaponData w, Color accent, float kick, float flash)
         {
