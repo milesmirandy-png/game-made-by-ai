@@ -21,7 +21,9 @@ static class NetSocketTest
         var discovery = NetDiscovery.Responder(new UdpNetSocket(NetDiscovery.DiscoveryPort, true), hostSocket.Port, () => { var w = new NetWriter(); w.String("Test host"); return w.ToArray(); });
 
         var searcher = NetDiscovery.Searcher(new UdpNetSocket(0, true));
-        searcher.Query(new[] { new IPEndPoint(IPAddress.Loopback, NetDiscovery.DiscoveryPort) });
+        var targets = NetDiscovery.BroadcastTargets(NetDiscovery.DiscoveryPort);
+        Console.WriteLine("      searching: " + string.Join(", ", targets));
+        searcher.Query(targets);
         var hello = new NetWriter(); hello.String("player one");
         var clientSocket = new UdpNetSocket(0, false);
         var client = NetPeer.Client(clientSocket, new IPEndPoint(IPAddress.Loopback, 27777), hello.ToArray(), now());
@@ -50,7 +52,9 @@ static class NetSocketTest
             if (i == 350) client.Close("bye");
             Thread.Sleep(5);
         }
-        check(searcher.Found.Count == 1 && new NetReader(searcher.Found[0].info).String() == "Test host" && searcher.Found[0].host.Port == 27777, "LAN discovery finds the host and its game port");
+        foreach (var g in searcher.Found) Console.WriteLine("      found " + g.host);
+        check(searcher.Found.Count >= 1 && searcher.Found.TrueForAll(g => new NetReader(g.info).String() == "Test host" && g.host.Port == 27777), "LAN discovery (broadcast, each adapter's broadcast, this PC) finds the host and its game port");
+        check(NetDiscovery.LocalAddresses().Count >= 1, "this computer's network address is found (" + string.Join(", ", NetDiscovery.LocalAddresses()) + ")");
         check(helloSeen == "player one", "host receives the player's hello over a real UDP socket");
         check(welcomeId >= 1, "player receives the host's welcome (id " + welcomeId + ")");
         check(toHost > 250, "player's messages reach the host (" + toHost + ")");

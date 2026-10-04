@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -784,6 +785,80 @@ namespace Swat
         public static NetDiscovery Searcher(INetSocket socket)
         {
             return new NetDiscovery(socket, false);
+        }
+
+        // Where to send a search: the general broadcast address, each network adapter's own
+        // broadcast address (some routers and PCs only pass those on), and this computer itself
+        // (a second copy of the game running on the same PC).
+        public static List<IPEndPoint> BroadcastTargets(int port)
+        {
+            var targets = new List<IPEndPoint> { new IPEndPoint(IPAddress.Broadcast, port), new IPEndPoint(IPAddress.Loopback, port) };
+            foreach (var adapter in Adapters())
+            {
+                var ip = adapter.Key.GetAddressBytes();
+                var mask = adapter.Value.GetAddressBytes();
+                var broadcast = new byte[4];
+                for (int i = 0; i < 4; i++) broadcast[i] = (byte)(ip[i] | ~mask[i]);
+                var address = new IPAddress(broadcast);
+                if (!address.Equals(IPAddress.Broadcast) && !targets.Exists(t => t.Address.Equals(address))) targets.Add(new IPEndPoint(address, port));
+            }
+            return targets;
+        }
+
+        // This computer's addresses on its networks (what other players type to join), most likely first.
+        public static List<string> LocalAddresses()
+        {
+            var list = new List<string>();
+            foreach (var adapter in Adapters())
+            {
+                string text = adapter.Key.ToString();
+                if (!list.Contains(text)) list.Add(text);
+            }
+            if (list.Count == 0)
+            {
+                try
+                {
+                    foreach (var address in Dns.GetHostAddresses(Dns.GetHostName()))
+                        if (address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address) && !list.Contains(address.ToString())) list.Add(address.ToString());
+                }
+                catch (Exception) { }
+            }
+            // Home and office networks usually use 192.168.x.x or 10.x.x.x; list those before the rest.
+            list.Sort((a, b) => Rank(a).CompareTo(Rank(b)));
+            return list;
+        }
+
+        static int Rank(string address)
+        {
+            if (address.StartsWith("192.168.")) return 0;
+            if (address.StartsWith("10.")) return 1;
+            if (address.StartsWith("172.")) return 2;
+            if (address.StartsWith("169.254.")) return 4; // no router answered: probably not the right adapter
+            return 3;
+        }
+
+        // IPv4 address and subnet mask of each working, non-loopback network adapter.
+        static List<KeyValuePair<IPAddress, IPAddress>> Adapters()
+        {
+            var list = new List<KeyValuePair<IPAddress, IPAddress>>();
+            try
+            {
+                foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (adapter.OperationalStatus != OperationalStatus.Up || adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    foreach (var unicast in adapter.GetIPProperties().UnicastAddresses)
+                    {
+                        if (unicast.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(unicast.Address)) continue;
+                        IPAddress mask = null;
+                        try { mask = unicast.IPv4Mask; }
+                        catch (Exception) { }
+                        if (mask == null || mask.Equals(IPAddress.Any)) mask = IPAddress.Parse("255.255.255.0");
+                        list.Add(new KeyValuePair<IPAddress, IPAddress>(unicast.Address, mask));
+                    }
+                }
+            }
+            catch (Exception) { } // some platforms can't list adapters; the general broadcast still works
+            return list;
         }
 
         // Searcher: ask everyone on the local network (and optionally specific addresses).

@@ -36,7 +36,7 @@ namespace Swat
             var session = NetSession.Instance;
             UITheme.Panel(rect);
             float x = rect.x + 16f, y = rect.y + 10f, cw = rect.width - 32f;
-            UITheme.Text(new Rect(x, y, cw, 22f), "ONLINE  -  PEER TO PEER", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
+            UITheme.Text(new Rect(x, y, cw, 22f), "PLAY WITH FRIENDS  -  LAN OR INTERNET", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
             y += 28f;
             if (session == null) return;
             if (session.Role == NetRole.Host)
@@ -51,48 +51,58 @@ namespace Swat
                 return;
             }
 
-            // Not connected.
+            // Not connected: your name and Host (the same game serves the local network and the internet).
             UITheme.Text(new Rect(x, y, 110f, 32f), "Your name", 15, UITheme.Dim, TextAnchor.MiddleLeft);
-            string name = Field(new Rect(x + 110f, y, Mathf.Min(260f, cw - 110f), 32f), nameText, 16);
+            string name = Field(new Rect(x + 110f, y, Mathf.Min(240f, cw - 330f), 32f), nameText, 16);
             if (name != nameText) nameText = name;
-            if (UITheme.Button(new Rect(x + cw - 210f, y - 2f, 210f, 36f), "Host a match", true, true, 17))
+            if (UITheme.Button(new Rect(x + cw - 210f, y - 2f, 210f, 36f), "Host a game", true, true, 17))
             {
                 Remember();
                 if (session.Host(nameText)) AudioManager.Play2D(Sound.RadioOrder, 0.5f, 1f, SoundCategory.Interface);
             }
             y += 44f;
+
+            // LAN: games on the same Wi-Fi or wired network appear here by themselves.
+            var games = session.LanGames;
+            string dots = new string('.', 1 + Mathf.FloorToInt(Time.unscaledTime * 2f) % 3);
+            UITheme.Text(new Rect(x, y, cw, 20f), "LAN GAMES ON YOUR NETWORK" + (session.Searching ? "   searching" + dots : ""), 13, UITheme.Dim, TextAnchor.UpperLeft, true);
+            y += 22f;
+            float listTop = y;
+            for (int i = 0; i < games.Count && i < 3; i++)
+            {
+                var game2 = games[i];
+                var row = new Rect(x, y, cw, 30f);
+                UITheme.Fill(row, new Color(UITheme.Good.r, UITheme.Good.g, UITheme.Good.b, 0.08f));
+                string modeName = game2.mode >= 1 && game2.mode <= 3 ? VersusMatch.ModeNames[game2.mode] : "";
+                UITheme.Text(new Rect(row.x + 8f, row.y, cw - 130f, 30f), game2.host + "'s game   " + modeName + "  -  " + MissionBriefing.MapName(game2.map) + "   " + game2.players + "/" + game2.max + (game2.open ? "" : "   (in a match)"),
+                    14, UITheme.TextColor, TextAnchor.MiddleLeft);
+                if (UITheme.Button(new Rect(row.xMax - 110f, row.y + 2f, 110f, 26f), "Join", game2.open && game2.players < game2.max, true, 14))
+                {
+                    addressText = game2.address.Address + (game2.address.Port != NetSession.GamePort ? ":" + game2.address.Port : "");
+                    Remember();
+                    session.Join(addressText, nameText);
+                }
+                y += 32f;
+            }
+            if (games.Count == 0)
+            {
+                string hint = "None yet. When a friend on the same Wi-Fi or network presses Host a game, it shows up here.";
+                if (session.SearchingFor > 8f) hint += " Not showing? Let the game through the firewall on private networks (Windows asks the first time), or join by address below.";
+                UITheme.Text(new Rect(x, y, cw, 64f), hint, 13, UITheme.Faint);
+            }
+            y = listTop + 3 * 32f + 4f;
+
+            // Internet (or a LAN that blocks the search): type the host's address.
+            UITheme.Text(new Rect(x, y, cw, 20f), "OVER THE INTERNET OR BY ADDRESS", 13, UITheme.Dim, TextAnchor.UpperLeft, true);
+            y += 22f;
             UITheme.Text(new Rect(x, y, 110f, 32f), "Host address", 15, UITheme.Dim, TextAnchor.MiddleLeft);
-            string address = Field(new Rect(x + 110f, y, Mathf.Min(260f, cw - 110f), 32f), addressText, 64);
+            string address = Field(new Rect(x + 110f, y, Mathf.Min(240f, cw - 330f), 32f), addressText, 64);
             if (address != addressText) addressText = address;
             if (UITheme.Button(new Rect(x + cw - 210f, y - 2f, 210f, 36f), "Join", !string.IsNullOrEmpty(addressText), false, 17))
             {
                 Remember();
                 session.Join(addressText, nameText);
             }
-            y += 44f;
-            if (UITheme.Button(new Rect(x, y, 300f, 34f), session.Searching ? "Searching this network..." : "Find games on this network", !session.Searching, false, 15)) session.SearchLan();
-            y += 40f;
-            var found = session.Found;
-            for (int i = 0; i < found.Count && i < 3; i++)
-            {
-                string host, map;
-                int mode, players, max;
-                bool open;
-                NetSession.ReadInfo(found[i].info, out host, out mode, out map, out players, out max, out open);
-                var row = new Rect(x, y, cw, 30f);
-                UITheme.Fill(row, new Color(1f, 1f, 1f, 0.04f));
-                string modeName = mode >= 1 && mode <= 3 ? VersusMatch.ModeNames[mode] : "";
-                UITheme.Text(new Rect(row.x + 8f, row.y, cw - 130f, 30f), host + "   " + modeName + "  -  " + MissionBriefing.MapName(map) + "   " + players + "/" + max + (open ? "" : "   (in a match)"), 14, UITheme.TextColor, TextAnchor.MiddleLeft);
-                if (UITheme.Button(new Rect(row.xMax - 110f, row.y + 2f, 110f, 26f), "Join", open && players < max, false, 14))
-                {
-                    addressText = found[i].host.Address + (found[i].host.Port != NetSession.GamePort ? ":" + found[i].host.Port : "");
-                    Remember();
-                    session.Join(addressText, nameText);
-                }
-                y += 34f;
-            }
-            if (found.Count == 0 && session.Status == null)
-                UITheme.Text(new Rect(x, y, cw, 40f), "Play with friends: one of you hosts, the others join with the host's address (or find it here when on the same network).", 13, UITheme.Faint);
             if (session.Status != null)
                 UITheme.Text(new Rect(x, rect.yMax - 46f, cw, 40f), session.Status, 14, session.StatusBad ? UITheme.Bad : UITheme.Dim);
         }
@@ -110,7 +120,8 @@ namespace Swat
             UITheme.Text(new Rect(x, y, cw - 130f, 24f), "HOSTING  -  " + session.Players.Count + " / " + NetSession.MaxPlayers + " players", 17, UITheme.Good, TextAnchor.UpperLeft, true);
             if (UITheme.Button(new Rect(x + cw - 120f, y - 4f, 120f, 30f), "Close", true, false, 14)) session.Leave("You closed the online game.");
             y += 28f;
-            UITheme.Text(new Rect(x, y, cw, 20f), "Others join with: " + session.Addresses + (session.Port != NetSession.GamePort ? "  (port " + session.Port + ")" : ""), 14, UITheme.TextColor);
+            UITheme.Text(new Rect(x, y, cw, 20f), session.LanVisible ? "Same network (LAN): your game appears in their LAN list. Or they type " + session.Addresses + (session.Port != NetSession.GamePort ? ":" + session.Port : "") + "."
+                : "Others join with " + session.Addresses + (session.Port != NetSession.GamePort ? ":" + session.Port : "") + " (the LAN list is busy: another copy of the game hosts on this PC).", 14, UITheme.TextColor);
             y += 20f;
             UITheme.Text(new Rect(x, y, cw, 20f), "Over the internet, forward UDP port " + session.Port + " on your router to this computer and share your public IP.", 12, UITheme.Faint);
             y += 26f;

@@ -19,7 +19,8 @@ mono sockettest.exe
   messages arrive once and in order, plus timeouts, refusals, sequence
   wrap-around, garbage packets and large messages.
 - `NetSocketTest` uses real UDP sockets on this computer (ports 27777 and
-  27778 must be free): local-network discovery, connecting, messages both ways,
-  leaving, and that two hosts can't share a port.
+  27778 must be free): LAN discovery (broadcast, each network adapter's
+  broadcast address, this computer), finding this computer's address,
+  connecting, messages both ways, leaving, and that two hosts can't share a port.
 
 Each prints PASS/FAIL per check and exits with the number of failures.

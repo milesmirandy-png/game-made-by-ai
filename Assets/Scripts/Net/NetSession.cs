@@ -21,6 +21,15 @@ namespace Swat
         public int ping;              // milliseconds, as the host measures it
     }
 
+    // A game found on the local network.
+    public class LanGame
+    {
+        public IPEndPoint address;
+        public string host, map;
+        public int mode, players, max;
+        public bool open;
+    }
+
     // One person or bot as the host describes them at the start of a match.
     public struct RosterEntry
     {
@@ -78,14 +87,17 @@ namespace Swat
         public string LocalName { get; private set; }
         public string HostName { get; private set; }
         public string Addresses { get; private set; }
+        public bool LanVisible { get { return responder != null; } }   // hosting: answering LAN searches
         public int Port { get; private set; }
         public int MyPeerId { get; private set; }
         public int LocalSide { get; private set; }
         public VersusOptions Options { get; private set; }
         public MatchSetup PendingSetup { get; private set; }
         public readonly List<NetPlayer> Players = new List<NetPlayer>();
-        public bool Searching { get { return searcher != null && Now < searchUntil; } }
-        public List<NetGameInfo> Found { get { return searcher != null ? searcher.Found : emptyFound; } }
+        // The local network is searched automatically while the Game Modes screen is open.
+        public bool Searching { get { return searcher != null; } }
+        public float SearchingFor { get { return searcher != null ? (float)(Now - searchStarted) : 0f; } }
+        public readonly List<LanGame> LanGames = new List<LanGame>();
 
         public List<NetPlayer> RemotePlayers
         {
@@ -100,11 +112,12 @@ namespace Swat
         NetPeer peer;
         NetDiscovery responder, searcher;
         readonly List<NetEvent> events = new List<NetEvent>();
-        readonly List<NetGameInfo> emptyFound = new List<NetGameInfo>();
         readonly NetWriter writer = new NetWriter();
         readonly Vector3[] shotBuffer = new Vector3[16];
-        float nextSnapshot, nextState, nextLobby;
-        double searchUntil, nextQuery;
+        float nextSnapshot, nextState, nextLobby, nextSearchAttempt;
+        double searchStarted, nextQuery, nextTargets;
+        List<IPEndPoint> searchTargets;
+        int hostToken;
         int snapshotSeq, lastSnapshotSeq = -1;
         int seed;
         int lastAttackerId = -1, lastAttackerWeapon = -1;
@@ -160,6 +173,7 @@ namespace Swat
                 writer.Byte(connection.Id);
                 return writer.ToArray();
             };
+            hostToken = Random.Range(1, int.MaxValue);
             try { responder = NetDiscovery.Responder(new UdpNetSocket(NetDiscovery.DiscoveryPort, true), Port, Describe); }
             catch (SocketException) { responder = null; } // another game on this computer answers the local network
             Role = NetRole.Host;
@@ -224,9 +238,10 @@ namespace Swat
         {
             if (searcher != null) searcher.Close();
             searcher = null;
+            LanGames.Clear();
         }
 
-        // Asks the local network who is hosting.
+        // Starts (or restarts) asking the local network who is hosting; repeats every two seconds.
         public void SearchLan()
         {
             if (searcher == null)
@@ -237,16 +252,45 @@ namespace Swat
                     SetStatus("Couldn't search the local network: " + e.Message, true);
                     return;
                 }
+                searchStarted = Now;
             }
-            searcher.Found.Clear();
+            nextTargets = 0.0;
             Query();
-            searchUntil = Now + 2.0;
         }
 
         void Query()
         {
-            nextQuery = Now + 3.0;
-            searcher.Query(new[] { new IPEndPoint(IPAddress.Broadcast, NetDiscovery.DiscoveryPort), new IPEndPoint(IPAddress.Loopback, NetDiscovery.DiscoveryPort) });
+            nextQuery = Now + 2.0;
+            // Network adapters can change (Wi-Fi reconnects); look them up again now and then.
+            if (searchTargets == null || Now >= nextTargets)
+            {
+                searchTargets = NetDiscovery.BroadcastTargets(NetDiscovery.DiscoveryPort);
+                nextTargets = Now + 10.0;
+            }
+            searcher.Query(searchTargets);
+        }
+
+        // The games found, one entry per host (a host on this computer answers on several addresses;
+        // its network address is shown rather than 127.0.0.1).
+        void RefreshLanGames()
+        {
+            LanGames.Clear();
+            var tokens = new List<int>();
+            foreach (var found in searcher.Found)
+            {
+                var r = new NetReader(found.info);
+                int token = r.Int();
+                var game = new LanGame { address = found.host, host = r.String(), mode = r.Byte(), map = r.String(), players = r.Byte(), max = r.Byte(), open = r.Bool() };
+                if (r.Failed) continue;
+                int existing = tokens.IndexOf(token);
+                if (existing >= 0)
+                {
+                    if (IPAddress.IsLoopback(LanGames[existing].address.Address) && !IPAddress.IsLoopback(game.address.Address)) LanGames[existing] = game;
+                    continue;
+                }
+                tokens.Add(token);
+                LanGames.Add(game);
+            }
         }
 
         void SetStatus(string text, bool bad)
@@ -339,14 +383,9 @@ namespace Swat
 
         static string LocalAddresses()
         {
-            try
-            {
-                var list = new List<string>();
-                foreach (var address in Dns.GetHostAddresses(Dns.GetHostName()))
-                    if (address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(address)) list.Add(address.ToString());
-                return list.Count > 0 ? string.Join(" or ", list.ToArray()) : "this computer's IP address";
-            }
-            catch (System.Exception) { return "this computer's IP address"; }
+            var list = NetDiscovery.LocalAddresses();
+            if (list.Count > 3) list.RemoveRange(3, list.Count - 3);
+            return list.Count > 0 ? string.Join(" or ", list.ToArray()) : "this computer's IP address";
         }
 
         // ---- Host: lobby ----
@@ -366,6 +405,7 @@ namespace Swat
         byte[] Describe()
         {
             var w = new NetWriter();
+            w.Int(hostToken);
             w.String(HostName);
             w.Byte(Options != null ? Options.mode : 1);
             w.String(Options != null ? Options.mapId : "");
@@ -373,17 +413,6 @@ namespace Swat
             w.Byte(MaxPlayers);
             w.Bool(Phase == NetPhase.Lobby);
             return w.ToArray();
-        }
-
-        public static void ReadInfo(byte[] info, out string host, out int mode, out string map, out int players, out int max, out bool open)
-        {
-            var r = new NetReader(info);
-            host = r.String();
-            mode = r.Byte();
-            map = r.String();
-            players = r.Byte();
-            max = r.Byte();
-            open = r.Bool();
         }
 
         void PlayerJoined(NetConnection connection, byte[] hello)
@@ -783,16 +812,24 @@ namespace Swat
 
         void Update()
         {
+            // LAN: while the Game Modes screen is open and you aren't in a game, keep the list of local games fresh.
+            var screen = GameManager.Instance;
+            bool lookForGames = Role == NetRole.None && screen != null && screen.State == GameState.VersusSetup;
+            if (lookForGames && searcher == null && Time.unscaledTime >= nextSearchAttempt)
+            {
+                nextSearchAttempt = Time.unscaledTime + 5f; // if the socket can't open, don't retry every frame
+                SearchLan();
+            }
             if (searcher != null)
             {
-                var game = GameManager.Instance;
-                if (Role != NetRole.None || game == null || game.State != GameState.VersusSetup) StopSearching();
+                if (!lookForGames) StopSearching();
                 else
                 {
                     searcher.Update(Now);
-                    // Keep asking while the list is on screen; hosts that stop answering drop off it.
                     if (Now >= nextQuery) Query();
-                    searcher.Found.RemoveAll(g => Now - g.seenAt > 7.0);
+                    // Hosts that stop answering drop off the list.
+                    searcher.Found.RemoveAll(g => Now - g.seenAt > 6.0);
+                    RefreshLanGames();
                 }
             }
             if (peer == null) return;

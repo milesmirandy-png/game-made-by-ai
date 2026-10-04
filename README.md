@@ -24,9 +24,11 @@ icons: pixel-art guns from a free-to-use sprite pack (see [CREDITS.md](CREDITS.m
 
 ## What's new: online multiplayer and a screenshot tour
 
-- **Play the game modes online with friends (peer to peer).** One player
-  hosts from the Game Modes screen; the others join with the host's address,
-  or pick the game from **Find games on this network**. Up to 8 players, on
+- **Play the game modes with friends over LAN or the internet (peer to
+  peer).** One player hosts from the Game Modes screen. On the same Wi-Fi or
+  network (LAN) the game shows up by itself under **LAN games on your
+  network** and the others click **Join**; over the internet they type the
+  host's address. Up to 8 players, on
   either team, with bots filling each team up to the team size (1 vs 1 up to
   6 vs 6, so pure player-against-player works too). Team Deathmatch, Capture
   the Flag and Zone Control all work online. No server, account or extra
@@ -373,19 +375,28 @@ Online play is peer to peer: one player's game hosts the match and runs the
 bots, scoring, flags and zone; the other players' games connect straight to
 it over UDP (port **27777**). There is no server, account or matchmaking.
 
-1. **Host:** Game Modes -> type a name -> **Host a match**. The panel shows the
-   address(es) other players should use. Pick the mode, map, team size and
+1. **Host:** Game Modes -> type a name -> **Host a game**. The same game is open
+   to your local network and (if your router lets it through) the internet; the
+   panel shows the address(es) other players can type. Pick the mode, map, team size and
    limits as usual, move players between teams by clicking their team, then
    press **START ONLINE MATCH**.
-2. **Join:** Game Modes -> type the host's address (for example
-   `192.168.1.20`, or `192.168.1.20:27778` if the host's panel shows another
-   port) -> **Join**. On the same network you can instead click **Find games
-   on this network** and **Join** the one listed. In the lobby, pick **Blue
-   team** or **Red team** and wait for the host to start.
-3. **Over the internet:** the host forwards **UDP port 27777** on their router
+2. **Join on a LAN** (same Wi-Fi, same router, or one network cable): open Game
+   Modes. Games hosted on the network appear by themselves under **LAN games on
+   your network** (the list refreshes every two seconds); click **Join**. No
+   address needed. Two copies of the game on one computer find each other too.
+3. **Join by address:** type the host's address under **Over the internet or by
+   address** (for example `192.168.1.20`, or `192.168.1.20:27780` if the
+   host's panel shows another port) -> **Join**. This also works on a LAN whose
+   router blocks the search.
+
+   In the lobby, pick **Blue team** or **Red team** and wait for the host to
+   start.
+4. **Over the internet:** the host forwards **UDP port 27777** on their router
    to their computer and gives the others their public IP address. (A
    virtual-LAN tool that puts everyone on one private network also works.)
-   Allow the game through the host's firewall when Windows asks.
+   Allow the game through the firewall when Windows asks (tick **Private
+   networks**); if no LAN games show up, that permission is the usual reason.
+   LAN search uses UDP port 27778.
 
 During an online match:
 

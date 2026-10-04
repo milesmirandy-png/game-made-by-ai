@@ -29,8 +29,14 @@ everything below as "implemented in code" unless it says otherwise.
   and are retried for 10 seconds; the host can refuse with a reason (lobby
   full, match in progress, different game version: a hash of the weapon,
   officer and map lists). Keep-alives every 0.4 s; 10 seconds of silence is a
-  disconnect. `NetDiscovery` answers or sends a broadcast query on UDP 27778
-  to list games on the local network. Malformed packets are dropped.
+  disconnect. `NetDiscovery` finds games on the local network (LAN): the
+  Game Modes screen sends a query on UDP 27778 every two seconds to the
+  general broadcast address, to each network adapter's own broadcast address
+  (computed from its IP and subnet mask; some routers and PCs only pass
+  those) and to this computer, and hosts answer with their name, mode, map,
+  players and game port; the list merges a host that answers on several
+  addresses (by a per-session token) and drops hosts that stop answering.
+  Malformed packets are dropped.
 - **Session** (`Net/NetSession.cs`): host / join / leave, the lobby (players,
   teams, pings, the host's match settings), starting a match (everyone builds
   the same map from the host's seed; UnityEngine.Random is seeded too), the
@@ -63,8 +69,8 @@ everything below as "implemented in code" unless it says otherwise.
   goes on), tactical equipment and door changes are disabled so every copy of
   the building stays the same, the host is always on Blue, joining only from
   the lobby.
-- **UI:** an online panel on the Game Modes screen (name, Host a match, Join by
-  address, Find games on this network), the host's lobby list (click a team to
+- **UI:** a panel on the Game Modes screen (name, Host a game, the LAN games
+  on your network with Join buttons, and Join by address), the host's lobby list (click a team to
   move a player), a lobby screen for joined players (host's settings, teams,
   team buttons, Squad, Loadout, Leave), online buttons on the results screen
   and pause menu.
@@ -107,10 +113,13 @@ everything below as "implemented in code" unless it says otherwise.
   and messages of 3,000 and 7,900 bytes mixed with small ones. 23 checks pass
   (`Tests/NetTransportTest.cs`; `Tests/README.md` says how to run them).
 - **Transport, real sockets:** the same code over real UDP sockets on this
-  machine's loopback: LAN discovery found the host and its port, hello and
+  machine: LAN discovery (general broadcast, the adapter's broadcast address
+  and loopback) found the host and its port, at both its loopback and network
+  address, which the game merges into one entry; the machine's network
+  address was found; hello and
   welcome went through, about 300 messages each way arrived, the host saw the
   player leave, and a second host on the same port was refused (Mono enables
-  address reuse by default; the socket now turns it off). 7 checks pass
+  address reuse by default; the socket now turns it off). 8 checks pass
   (`Tests/NetSocketTest.cs`).
 - **Not done:** two copies of the game playing each other, any measurement of
   bandwidth or smoothness in practice, the screenshot tour itself.
