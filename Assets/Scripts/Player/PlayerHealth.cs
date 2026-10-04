@@ -18,6 +18,7 @@ namespace Swat
             AudioManager.Play2D(Sound.Hurt, 0.7f);
             var player = GetComponent<PlayerController>();
             if (player != null && player.Animator != null) player.Animator.Hit(info.direction);
+            if (player != null && player.Weapons != null) player.Weapons.Flinch(amount);
             GameManager.Instance.CameraRig.Shake(0.25f);
         }
 

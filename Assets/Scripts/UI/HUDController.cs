@@ -195,7 +195,8 @@ namespace Swat
             UIIcons.Portrait(new Rect(rect.x + 10f, rect.y + 12f, 80f, 96f), player.Officer, player.Loadout);
             float x = rect.x + 102f, cw = rect.width - 116f;
             UITheme.Text(new Rect(x, rect.y + 8f, cw, 22f), player.Officer.displayName, 16, UITheme.TextColor, TextAnchor.UpperLeft, true);
-            string state = !player.IsAlive ? "DOWN" : player.Health.Bracing ? "Shield braced" : player.IsSprinting ? "Sprinting" : player.IsCrouched ? "Crouched"
+            string state = !player.IsAlive ? "DOWN" : player.Health.Bracing ? "Shield braced" : player.IsSliding ? "Sliding"
+                : player.Peeking ? (player.Lean < -0.1f ? "Peeking left" : player.Lean > 0.1f ? "Peeking right" : "Peeking") : player.IsSprinting ? "Sprinting" : player.IsCrouched ? "Crouched"
                 : player.IsSteadyAiming ? "Steady aim" : player.IsMoving ? "Moving" : "Ready";
             UITheme.Text(new Rect(x, rect.y + 28f, cw, 20f), UITheme.RoleName(player.Officer.role) + "  |  " + state + (player.FlashlightOn ? "  |  Light on" : ""), 13, UITheme.Dim);
             var health = player.Health;
@@ -489,14 +490,16 @@ namespace Swat
                 // Takedown: a bigger red X that pops out and fades (shown even with hit markers off).
                 float k = killAge / KillMarkerTime;
                 var red = new Color(1f, 0.25f, 0.2f, (1f - k) * opacity);
-                float pop = 1f + (1f - k) * 0.35f;
+                float pop = 1f + (1f - k) * (1f - k) * 0.6f;
                 foreach (var d in Diagonals) UITheme.LineTo(c + d * 7f * size * pop, c + d * 18f * size * pop, red, t + 1.5f);
+                UITheme.Ring(c, Mathf.Lerp(10f, 30f, k) * size, new Color(1f, 0.25f, 0.2f, (1f - k) * 0.6f * opacity), 2f);
                 return;
             }
             if (hitAge < 0f || !settings.hitMarker) return;
             // Hit confirmation: a small X that fades out quickly.
-            var marker = new Color(1f, 1f, 1f, (1f - hitAge / HitMarkerTime) * opacity);
-            float inner = 5f * size, outer = 12f * size;
+            float fresh = 1f - hitAge / HitMarkerTime;
+            var marker = new Color(1f, 1f, 1f, fresh * opacity);
+            float inner = 5f * size * (1f + fresh * 0.3f), outer = 12f * size * (1f + fresh * 0.3f);
             foreach (var d in Diagonals) UITheme.LineTo(c + d * inner, c + d * outer, marker, t);
         }
 

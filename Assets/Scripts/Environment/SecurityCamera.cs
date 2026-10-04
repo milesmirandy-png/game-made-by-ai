@@ -83,7 +83,7 @@ namespace Swat
                 foreach (var target in AIManager.Instance.PoliceTargets)
                 {
                     if (!target.IsAlive) continue;
-                    float visibility = AIVisibility.VisibilityOf(target.Position, target.IsCrouched, target.FlashlightOn);
+                    float visibility = AIVisibility.VisibilityOf(target);
                     if (AIVisibility.CanSee(eye, forward, FieldOfView, Range, target.ChestPosition, visibility)) { seeing = true; break; }
                 }
             }

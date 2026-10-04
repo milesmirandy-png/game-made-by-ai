@@ -338,7 +338,7 @@ namespace Swat
                 if (!candidate.IsAlive) continue;
                 float distance = Vector3.Distance(candidate.Position, Position);
                 if (distance > Data.detectionRange * 1.3f || distance >= bestDistance) continue;
-                float visibility = AIVisibility.VisibilityOf(candidate.Position, candidate.IsCrouched, candidate.FlashlightOn);
+                float visibility = AIVisibility.VisibilityOf(candidate);
                 if (!AIVisibility.CanSee(eye, transform.forward, fov, Data.detectionRange, candidate.ChestPosition, visibility)) continue;
                 best = candidate;
                 bestDistance = distance;
@@ -567,7 +567,8 @@ namespace Swat
 
         public void OnHit(DamageInfo info, bool lethal)
         {
-            if (!lethal) body.Animator.Hit(info.direction);
+            // A takedown too: the flash shows the hit, and they fall away from the shot.
+            body.Animator.Hit(info.direction);
             bool unjustified = State == EnemyState.Surrendering || State == EnemyState.Restrained
                 || (!Data.armed && !info.lessLethal) || Data.archetype == EnemyArchetype.TrainingDummy;
             if (info.attacker == Team.Police && unjustified) MissionManager.Instance.OnUnauthorizedForce(Data.displayName);
@@ -578,6 +579,8 @@ namespace Swat
                 return;
             }
             if (IsNeutralized || State == EnemyState.Surrendering) return;
+            // Getting hit throws their aim off for a moment.
+            if (Data.armed && !info.lessLethal) weapon.Stagger(0.35f);
 
             if (info.lessLethal && info.stun > 0f && Data.archetype != EnemyArchetype.Armored)
             {

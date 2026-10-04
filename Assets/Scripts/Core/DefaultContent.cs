@@ -59,7 +59,7 @@ namespace Swat
                     "General-purpose rifle with a short barrel for tight corridors."),
                 Weapon("rifle_service", "SR3 Service Rifle", WeaponCategory.Rifle, false, FireMode.FullAuto, true, 30f, 8.5f, 30, 90, 2.3f, 45f, 1.6f, 1.1f, 1, 28f, 0.92f, 0.6f, Sound.Rifle, noShield,
                     "Standard-issue rifle. Switch between automatic and semi-automatic with B."),
-                Weapon("shotgun_ts8", "TS8 Tactical Shotgun", WeaponCategory.Shotgun, false, FireMode.SemiAuto, false, 13f, 1.3f, 7, 28, 2.8f, 14f, 9f, 3f, 8, 28f, 0.95f, 0.6f, Sound.Shotgun,
+                Weapon("shotgun_ts8", "TS8 Tactical Shotgun", WeaponCategory.Shotgun, false, FireMode.SemiAuto, false, 15f, 1.4f, 7, 28, 2.8f, 14f, 9f, 3f, 8, 28f, 0.95f, 0.6f, Sound.Shotgun,
                     Roles(OfficerRole.Leader, OfficerRole.Breacher, OfficerRole.Tactical), "Wide spread, slow reload. Devastating up close, poor at range."),
                 Weapon("carbine_pc9", "PC9 Precision Carbine", WeaponCategory.Carbine, false, FireMode.SemiAuto, false, 45f, 3f, 15, 60, 2.4f, 60f, 0.6f, 2f, 1, 30f, 0.9f, 0.65f, Sound.Carbine,
                     Roles(OfficerRole.Leader, OfficerRole.Recon, OfficerRole.Tactical), "Accurate and long-ranged, but slow to fire."),
@@ -67,9 +67,9 @@ namespace Swat
                     "Fires low-damage impact rounds that stagger and stun. Doesn't stop everyone."),
                 Weapon("pistol_p17", "P17 Service Pistol", WeaponCategory.ServicePistol, true, FireMode.SemiAuto, false, 28f, 5f, 15, 60, 1.3f, 28f, 2.2f, 1.4f, 1, 20f, 1f, 0.3f, Sound.Pistol, 0,
                     "Dependable standard sidearm."),
-                Weapon("pistol_bk6", "BK6 Backup Pistol", WeaponCategory.BackupPistol, true, FireMode.SemiAuto, false, 22f, 6f, 8, 40, 1.1f, 20f, 3f, 1.2f, 1, 18f, 1f, 0.25f, Sound.Pistol, 0,
+                Weapon("pistol_bk6", "BK6 Backup Pistol", WeaponCategory.BackupPistol, true, FireMode.SemiAuto, false, 24f, 6f, 8, 40, 1.1f, 20f, 3f, 1.2f, 1, 18f, 1f, 0.25f, Sound.Pistol, 0,
                     "Small and quick to draw, with a small magazine."),
-                Weapon("pistol_h50", "H50 Heavy Sidearm", WeaponCategory.HeavyPistol, true, FireMode.SemiAuto, false, 48f, 2.2f, 7, 35, 1.6f, 30f, 2.5f, 3.2f, 1, 26f, 1f, 0.35f, Sound.HeavyPistol, 0,
+                Weapon("pistol_h50", "H50 Heavy Sidearm", WeaponCategory.HeavyPistol, true, FireMode.SemiAuto, false, 48f, 2.5f, 7, 35, 1.6f, 30f, 2.5f, 3.2f, 1, 26f, 1f, 0.35f, Sound.HeavyPistol, 0,
                     "Hits hard, kicks hard, fires slowly."),
             };
             var launcher = list[6];
@@ -88,7 +88,7 @@ namespace Swat
                 "A long barrel in a short body: rifle range with compact handling, but slower to reload."));
             list.Add(Weapon("dmr_dm2", "DM2 Marksman Rifle", WeaponCategory.Marksman, false, FireMode.SemiAuto, false, 62f, 2.2f, 10, 40, 2.6f, 70f, 0.35f, 2.6f, 1, 32f, 0.88f, 0.7f, Sound.Marksman, precise,
                 "Hard-hitting and pinpoint accurate. Hold steady aim to see much further."));
-            list.Add(Weapon("lmg_lm8", "LM8 Light MG", WeaponCategory.LMG, false, FireMode.FullAuto, false, 24f, 12f, 75, 150, 4.2f, 45f, 3.2f, 0.85f, 1, 30f, 0.84f, 0.9f, Sound.Lmg, heavy,
+            list.Add(Weapon("lmg_lm8", "LM8 Light MG", WeaponCategory.LMG, false, FireMode.FullAuto, false, 21f, 12f, 75, 150, 4.2f, 45f, 3.2f, 0.85f, 1, 30f, 0.84f, 0.9f, Sound.Lmg, heavy,
                 "A huge magazine and a long reload. Crouch to steady it."));
             list.Add(Weapon("shotgun_as12", "AS12 Auto Shotgun", WeaponCategory.AutoShotgun, false, FireMode.SemiAuto, false, 11f, 3.2f, 8, 32, 3f, 13f, 10f, 2.4f, 8, 28f, 0.93f, 0.6f, Sound.AutoShotgun, heavy,
                 "Fires as fast as you can pull the trigger. Brutal up close, useless at range."));
@@ -96,18 +96,18 @@ namespace Swat
                 "Rapid less-lethal rounds that briefly stun. Several hits wear down a suspect's resolve."));
             list.Add(Weapon("mp_m9", "M9 Machine Pistol", WeaponCategory.MachinePistol, true, FireMode.FullAuto, true, 15f, 15f, 20, 80, 1.5f, 18f, 5f, 0.9f, 1, 19f, 1f, 0.3f, Sound.MachinePistol, 0,
                 "A sidearm that empties its magazine in a heartbeat. Wild but fast."));
-            list.Add(Weapon("revolver_r6", "R6 Revolver", WeaponCategory.Revolver, true, FireMode.SemiAuto, false, 55f, 1.8f, 6, 36, 2.4f, 32f, 1.8f, 3.4f, 1, 27f, 1f, 0.35f, Sound.Revolver, 0,
+            list.Add(Weapon("revolver_r6", "R6 Revolver", WeaponCategory.Revolver, true, FireMode.SemiAuto, false, 60f, 1.8f, 6, 36, 2.4f, 32f, 1.8f, 3.4f, 1, 27f, 1f, 0.35f, Sound.Revolver, 0,
                 "Six heavy rounds and a slow reload. Every shot counts."));
             list.Add(Weapon("stun_s2", "S2 Stun Pistol", WeaponCategory.StunPistol, true, FireMode.SemiAuto, false, 2f, 1f, 1, 8, 2.5f, 9f, 1.5f, 0.6f, 1, 6f, 1f, 0.3f, Sound.Zap, 0,
                 "One short-range stun dart per load. Almost silent, very likely to make a suspect give up."));
 
             // Heavier hardware, inspired by classic arcade shooters. The rotary gun and the marking-round
             // launcher are game-mode only (they don't fit a SWAT entry).
-            list.Add(Weapon("rotary_rg6", "RG6 Rotary Gun", WeaponCategory.Rotary, false, FireMode.FullAuto, false, 14f, 20f, 150, 150, 5f, 40f, 4.5f, 0.5f, 1, 34f, 0.75f, 1.2f, Sound.Rotary, 0,
+            list.Add(Weapon("rotary_rg6", "RG6 Rotary Gun", WeaponCategory.Rotary, false, FireMode.FullAuto, false, 15f, 20f, 150, 150, 5f, 40f, 4.5f, 0.5f, 1, 34f, 0.75f, 1.2f, Sound.Rotary, 0,
                 "Spins up, then pours out rounds. Very heavy: you move slowly while carrying it."));
             list.Add(Weapon("shotgun_d20", "D20 Drum Shotgun", WeaponCategory.DrumShotgun, false, FireMode.FullAuto, false, 9f, 4f, 20, 40, 3.6f, 12f, 11f, 2f, 8, 30f, 0.9f, 0.7f, Sound.AutoShotgun, heavy,
                 "A fully automatic shotgun with a 20-round drum. Clears a room, kicks like a mule."));
-            list.Add(Weapon("smg_kv", "KV Vector SMG", WeaponCategory.VectorSMG, false, FireMode.FullAuto, true, 17f, 18f, 25, 125, 1.8f, 22f, 3.2f, 0.4f, 1, 21f, 1f, 0.45f, Sound.CompactSmg, 0,
+            list.Add(Weapon("smg_kv", "KV Vector SMG", WeaponCategory.VectorSMG, false, FireMode.FullAuto, true, 16f, 18f, 25, 125, 1.8f, 22f, 3.2f, 0.4f, 1, 21f, 1f, 0.45f, Sound.CompactSmg, 0,
                 "Blistering fire rate and almost no muzzle climb, but it empties fast."));
             list.Add(Weapon("launcher_gl6", "GL6 Marker Launcher", WeaponCategory.GrenadeLauncher, false, FireMode.SemiAuto, false, 70f, 1.2f, 6, 18, 4f, 30f, 1f, 3f, 1, 30f, 0.85f, 0.8f, Sound.Launcher, 0,
                 "Six marking grenades that burst on impact and tag everyone close by. Game modes only."));
@@ -140,7 +140,7 @@ namespace Swat
                         break;
                     case "mp_m9": Feel(w, Polymer, 0.6f, 0.4f); break;
                     case "revolver_r6": Feel(w, Polymer, 1.9f, 0.6f); w.ejectsShells = false; break;
-                    case "rotary_rg6": Feel(w, Polymer, 0.7f, 0.7f); w.spinUp = 0.6f; w.versusOnly = true; w.crouchSpread = 0.6f; break;
+                    case "rotary_rg6": Feel(w, Polymer, 0.7f, 0.7f); w.spinUp = 0.5f; w.versusOnly = true; w.crouchSpread = 0.6f; break;
                     case "shotgun_d20": Feel(w, Polymer, 1.9f, 0.9f); w.tracerWidth = 0.035f; break;
                     case "smg_kv": Feel(w, Amber, 0.45f, 0.45f); break;
                     case "launcher_gl6":

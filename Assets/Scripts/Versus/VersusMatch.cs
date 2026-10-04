@@ -717,11 +717,12 @@ namespace Swat
                 if (!seen)
                 {
                     Vector3 chest = other.ChestPosition;
-                    float visibility = AIVisibility.VisibilityOf(other.Position, other.IsCrouched, other.FlashlightOn);
+                    float visibility = AIVisibility.VisibilityOf(other);
                     foreach (var friend in members[MySide])
                     {
                         if (friend == null || !friend.IsAlive) continue;
-                        if (AIVisibility.CanSee(friend.Position + Vector3.up * 1.5f, Vector3.forward, 360f, 26f, chest, visibility)) { seen = true; break; }
+                        // From the friend's chest, so a teammate peeking past a door frame spots what they see.
+                        if (AIVisibility.CanSee(friend.ChestPosition + Vector3.up * 0.3f, Vector3.forward, 360f, 26f, chest, visibility)) { seen = true; break; }
                     }
                 }
                 other.SetSeen(seen);

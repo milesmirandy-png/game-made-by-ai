@@ -4,9 +4,10 @@ using UnityEngine.AI;
 namespace Swat
 {
     // The team leader you control: WASD movement relative to the screen,
-    // facing the mouse, sprint with stamina, crouch, steady aim, flashlight and
-    // the selected officer's role ability. Health, weapons and interaction are
-    // separate components.
+    // facing the mouse, sprint with stamina, crouch, slide (crouch while
+    // sprinting), peek / lean around corners and door frames (hold Ctrl),
+    // steady aim, flashlight and the selected officer's role ability. Health,
+    // weapons and interaction are separate components.
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour, ICombatTarget
     {
@@ -18,6 +19,10 @@ namespace Swat
         [SerializeField] float maxStamina = 100f;
         [SerializeField] float staminaDrain = 16f;
         [SerializeField] float staminaRegen = 14f;
+        public const float LeanReach = 0.55f;           // how far your upper body moves out when you peek
+        [SerializeField] float leanDistance = LeanReach;
+        [SerializeField] float slideSpeed = 9.5f;
+        [SerializeField] float slideTime = 0.6f;
 
         public OfficerData Officer { get; private set; }
         public OfficerLoadout Loadout { get; private set; }
@@ -29,7 +34,13 @@ namespace Swat
         public ProceduralAnimator Animator { get; private set; }
 
         public Vector3 Position { get { return transform.position; } }
-        public Vector3 ChestPosition { get { return transform.position + Vector3.up * (IsCrouched ? 0.85f : 1.2f); } }
+        // Peeking moves your chest and eyes out to the side: you see, shoot and are seen from there.
+        public Vector3 ChestPosition { get { return transform.position + LeanOffset + Vector3.up * (IsCrouched ? 0.85f : 1.2f); } }
+        public Vector3 EyePosition { get { return transform.position + LeanOffset + Vector3.up * (IsCrouched ? 1.05f : 1.6f); } }
+        public Vector3 LeanOffset { get { return transform.right * leanMeters; } }
+        public float Lean { get { return leanDistance > 0f ? leanMeters / leanDistance : 0f; } } // -1 left .. +1 right
+        public bool Peeking { get; private set; }
+        public bool IsSliding { get; private set; }
         public Vector3 AimPoint { get; private set; }
         public Vector3 AimDirection { get; private set; }
         public bool IsMoving { get; private set; }
@@ -50,6 +61,11 @@ namespace Swat
         float verticalVelocity, stepTimer, abilityReadyAt, treatUntil;
         bool exhausted, sprintLatch;
         Vector3 aimTarget;
+        float leanMeters;
+        int leanSide;               // the side chosen while the peek key is held (-1 left, +1 right)
+        float slideStart, slideReadyAt, nextSlideDust;
+        Vector3 slideVelocity;
+        CapsuleCollider leanBox;
 
         public static PlayerController Spawn(Transform parent, Vector3 position, float yaw, OfficerData officer, OfficerLoadout loadout, System.Collections.Generic.List<EquipmentCount> bonus, int versusSide = 0)
         {
@@ -95,6 +111,7 @@ namespace Swat
             player.Flashlight = go.AddComponent<FlashlightController>();
             float lightRange = 13f * inventory.Primary.LightRangeMultiplierOrOne();
             player.Flashlight.Init(CharacterFactory.AddFlashlight(player.Parts, lightRange), lightRange, true, true);
+            player.leanBox = LeanHitbox.Create(go.transform, controller);
 
             Shapes.SetLayer(go, Layers.Characters);
             return player;
@@ -132,15 +149,22 @@ namespace Swat
             {
                 // Aim holds still while the weapon wheel is open (the mouse is picking an entry).
                 if (!Weapons.WheelOpen) Aim(dt);
+                // Crouch while sprinting slides; otherwise it toggles crouching.
+                if (GameInput.Down(InputAction.Crouch) && !Weapons.WheelOpen && !IsSliding)
+                {
+                    if (IsSprinting && IsMoving && Time.time >= slideReadyAt && Stamina >= 12f) StartSlide();
+                    else SetCrouch(!IsCrouched);
+                }
                 Move(dt);
-                if (GameInput.Down(InputAction.Crouch) && !Weapons.WheelOpen) SetCrouch(!IsCrouched);
                 if (GameInput.Down(InputAction.Flashlight)) Flashlight.Toggle();
                 if (GameInput.Down(InputAction.Ability)) UseAbility();
             }
             else
             {
                 IsMoving = IsSprinting = IsSteadyAiming = false;
+                if (IsSliding) EndSlide();
             }
+            UpdateLean(dt, active);
             Weapons.Tick(dt, active);
             Interaction.Tick(active);
 
@@ -154,6 +178,8 @@ namespace Swat
         // Stairs between floors move the player instantly.
         public void TeleportTo(Vector3 position, float yaw)
         {
+            if (IsSliding) EndSlide();
+            leanMeters = 0f;
             controller.enabled = false;
             transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             controller.enabled = true;
@@ -165,7 +191,12 @@ namespace Swat
         // Game modes: stand up again after a respawn.
         public void ResetStance()
         {
+            if (IsSliding) EndSlide();
             if (IsCrouched) SetCrouch(false);
+            leanMeters = 0f;
+            leanSide = 0;
+            Animator.SetLean(0f);
+            LeanHitbox.Place(leanBox, 0f, false);
             treatUntil = 0f;
         }
 
@@ -260,7 +291,13 @@ namespace Swat
 
         void Move(float dt)
         {
-            Vector2 input = GameInput.Move;
+            if (IsSliding)
+            {
+                Slide(dt);
+                return;
+            }
+            // While peeking you stay planted; the movement keys pick the side to lean to instead.
+            Vector2 input = Peeking ? Vector2.zero : GameInput.Move;
             IsMoving = input.sqrMagnitude > 0.01f;
             IsSteadyAiming = GameInput.Held(InputAction.AltAim) && !Health.Bracing;
 
@@ -268,6 +305,8 @@ namespace Swat
             if (GameInput.UsingGamepad && GameInput.PadDown(GameInput.PadBinding(InputAction.Sprint))) sprintLatch = !sprintLatch;
             if (!IsMoving || !GameInput.UsingGamepad) sprintLatch = false;
             bool sprintInput = sprintLatch || GameInput.KeyHeld(GameInput.Binding(InputAction.Sprint));
+            // Sprinting from a crouch (or after a slide) stands you up.
+            if (sprintInput && IsMoving && IsCrouched && !IsSteadyAiming && !Health.Bracing && Stamina > maxStamina * 0.25f) SetCrouch(false);
             bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing;
             if (Stamina <= 0f) exhausted = true;
             if (exhausted && Stamina > maxStamina * 0.25f) exhausted = false;
@@ -301,6 +340,142 @@ namespace Swat
             if (Physics.Raycast(transform.position + Vector3.up * 0.3f, Vector3.down, out hit, 1f, Layers.WorldMask, QueryTriggerInteraction.Ignore))
                 return SurfaceTag.Of(hit.collider);
             return Surface.Concrete;
+        }
+
+        // ---- Slide ----
+
+        // A burst along the way you're running, low and fast, ending in a crouch.
+        void StartSlide()
+        {
+            Vector2 input = GameInput.Move;
+            Vector3 direction = new Vector3(input.x, 0f, input.y);
+            if (direction.sqrMagnitude < 0.01f) direction = AimDirection;
+            direction.y = 0f;
+            var armor = Health.Armor;
+            float speed = slideSpeed * Officer.moveSpeed * (armor != null ? Mathf.Lerp(1f, armor.speedMultiplier, 0.5f) : 1f);
+            slideVelocity = direction.normalized * speed;
+            slideStart = Time.time;
+            nextSlideDust = 0f;
+            IsSliding = true;
+            IsSprinting = false;
+            Stamina = Mathf.Max(0f, Stamina - 12f);
+            SetCrouch(true);
+            Animator.SetSlide(true);
+            AudioManager.Play(Sound.SlideScrape, transform.position, 0.55f, Random.Range(0.92f, 1.08f));
+            Noise.Emit(transform.position, 5f, NoiseKind.Footstep);
+            GameManager.Instance.CameraRig.Kick(direction, 0.06f);
+        }
+
+        void Slide(float dt)
+        {
+            float t = (Time.time - slideStart) / slideTime;
+            // Bump into something solid (or run out of slide) and it's over.
+            Vector3 flat = controller.velocity;
+            flat.y = 0f;
+            if (t >= 1f || (t > 0.2f && flat.sqrMagnitude < 2f))
+            {
+                EndSlide();
+                return;
+            }
+            // A little steering toward the keys you hold.
+            Vector2 input = GameInput.Move;
+            if (input.sqrMagnitude > 0.01f)
+            {
+                Vector3 wanted = new Vector3(input.x, 0f, input.y).normalized * slideVelocity.magnitude;
+                slideVelocity = Vector3.RotateTowards(slideVelocity, wanted, 1.4f * dt, 0f);
+            }
+            float speedScale = Mathf.Lerp(1f, 0.3f, t * t);
+            IsMoving = true;
+            IsSteadyAiming = false;
+            Stamina = Mathf.Min(maxStamina, Stamina + staminaRegen * 0.3f * dt);
+            if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
+            verticalVelocity += Physics.gravity.y * dt;
+            controller.Move((slideVelocity * speedScale + Vector3.up * verticalVelocity) * dt);
+            if (Time.time >= nextSlideDust)
+            {
+                nextSlideDust = Time.time + 0.07f;
+                EffectsManager.Instance.Burst(transform.position + Vector3.up * 0.05f - slideVelocity.normalized * 0.2f, Vector3.up, new Color(0.62f, 0.6f, 0.56f), 2, 1.2f, 0.06f);
+            }
+        }
+
+        void EndSlide()
+        {
+            IsSliding = false;
+            slideReadyAt = Time.time + 0.5f;
+            Animator.SetSlide(false);
+        }
+
+        // ---- Peek / lean ----
+
+        // Hold Peek to lean your upper body out past a corner or door frame. On its own it leans
+        // toward the open side of whatever you're aiming past; with a movement key it leans that
+        // way on screen. Never into a wall: the lean stops short of anything solid.
+        void UpdateLean(float dt, bool active)
+        {
+            bool hold = active && !IsSliding && !Health.Bracing && !Weapons.WheelOpen && GameInput.Held(InputAction.Peek);
+            Peeking = hold;
+            float target = 0f;
+            if (hold)
+            {
+                Vector2 input = GameInput.Move;
+                Vector3 right = transform.right;
+                float push = input.x * right.x + input.y * right.z;
+                if (Mathf.Abs(push) > 0.3f) leanSide = push > 0f ? 1 : -1;
+                else if (leanSide == 0) leanSide = AutoLeanSide();
+                if (leanSide != 0) target = leanSide * Clearance(leanSide);
+            }
+            else leanSide = 0;
+            leanMeters = Mathf.MoveTowards(leanMeters, target, dt * 3.6f);
+            if (Mathf.Abs(leanMeters) > 0.001f)
+            {
+                // Turning while leaned can bring a wall closer: stay clear of it.
+                float room = Clearance(leanMeters > 0f ? 1 : -1);
+                if (Mathf.Abs(leanMeters) > room) leanMeters = Mathf.Sign(leanMeters) * room;
+            }
+            Animator.SetLean(Lean);
+            LeanHitbox.Place(leanBox, leanMeters, IsCrouched);
+        }
+
+        // How far the upper body can move to one side before touching a wall.
+        float Clearance(int side)
+        {
+            Vector3 origin = transform.position + Vector3.up * (IsCrouched ? 0.85f : 1.2f);
+            RaycastHit hit;
+            if (Physics.SphereCast(origin, 0.16f, transform.right * side, out hit, leanDistance + 0.2f, Layers.WorldMask, QueryTriggerInteraction.Ignore))
+                return Mathf.Clamp(hit.distance - 0.2f, 0f, leanDistance);
+            return leanDistance;
+        }
+
+        // The side that shows more of what's ahead: compare how far you could see along your aim
+        // (and a little toward that side) from each leaned position.
+        int AutoLeanSide()
+        {
+            Vector3 chest = transform.position + Vector3.up * (IsCrouched ? 1.05f : 1.6f);
+            Vector3 forward = AimDirection;
+            int best = 0;
+            float bestScore = 0.25f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float reach = Clearance(side);
+                if (reach < 0.2f) continue;
+                Vector3 sideways = transform.right * side;
+                Vector3 from = chest + sideways * reach;
+                Vector3 diagonal = (forward + sideways * 0.5f).normalized;
+                float gain = (ViewDistance(from, forward) - ViewDistance(chest, forward)) + 0.5f * (ViewDistance(from, diagonal) - ViewDistance(chest, diagonal));
+                float score = gain + reach;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = side;
+                }
+            }
+            return best;
+        }
+
+        static float ViewDistance(Vector3 from, Vector3 direction)
+        {
+            RaycastHit hit;
+            return Physics.Raycast(from, direction, out hit, 14f, Layers.WorldMask, QueryTriggerInteraction.Ignore) ? hit.distance : 14f;
         }
 
         void SetCrouch(bool crouch)

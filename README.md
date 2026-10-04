@@ -17,12 +17,49 @@ icons: pixel-art guns from a free-to-use sprite pack (see [CREDITS.md](CREDITS.m
 > polish pass. The code compiles (checked outside the Unity editor, see
 > [REPORT.md](REPORT.md#testing-performed)), the custom shaders pass a syntax
 > check, and the level creator's layout logic and the online transport pass
-> tests run outside Unity, but the game has **not yet been play-tested inside
-> Unity** (online play included), no performance has been measured, and no
-> gameplay screenshots exist yet. [Screenshots/README.md](Screenshots/README.md)
-> explains how to capture them (the screenshot tour does most of it).
+> tests run outside Unity. The owner has played built copies, LAN games with
+> friends included; that is the only play-testing so far. The newest update
+> (peek, slide, balance and feel) has been compiled but **not played yet**. No
+> performance has been measured, and no gameplay screenshots are in the
+> repository yet. [Screenshots/README.md](Screenshots/README.md) explains how
+> to capture them (the screenshot tour does most of it).
 
-## What's new: online multiplayer and a screenshot tour
+## What's new: peek, slide, balance and more punch
+
+- **Peek / lean (hold Left Ctrl).** Your officer leans their upper body out
+  past a corner or door frame without stepping out. On its own it leans
+  toward the open side of whatever you're aiming past. Hold a movement key
+  to lean that way on screen instead. You stay
+  planted while peeking, and the lean stops short of walls. What you see, where
+  your shots come from and where you can be hit all move with the lean.
+  Enemies and bots spot a peeking officer a little later (only a shoulder
+  shows), and your aim is a little steadier braced on the frame. The camera
+  slides a little toward the lean.
+- **Slide (C while sprinting).** A fast, low slide in the direction you're
+  running (about 4 m), steerable a little, ending in a crouch. It costs some
+  stamina, has a half-second cooldown, makes noise, and you can shoot during
+  it (wildly). Sprinting from a crouch now stands you up.
+- **Falls.** Tagged-out or downed characters topple over away from the shot
+  that dropped them and land with a thud and a puff of dust (no gore).
+- **More punch.** Your hits land with a meaty thud and a bigger spark (bigger
+  for heavier rounds). Hit markers pop. Takedowns get a bigger red marker with a ring,
+  a camera punch-in and jolt, and a slightly longer freeze. Heavy guns punch
+  the camera when fired. Getting hit throws aim off for a moment, for
+  suspects, bots and you alike. The last suspect in a mission goes down in a
+  beat of slow motion (offline; it follows the Hit stop setting). Camera
+  effects follow the Camera Shake setting.
+- **Balance pass**, based on a time-to-kill table for every gun (in
+  [REPORT.md](REPORT.md#balance-time-to-kill-table)). The TS8 pump
+  shotgun can now drop a bot or suspect in one shot point blank (15 per
+  pellet, 1.4 shots/s). The R6 revolver became a two-shot gun against bots (60). The BK6
+  went to 24 and the H50 fires a little faster (2.5/s). The LM8 is toned down
+  (21, was the fastest killer with the biggest magazine), and so is the KV
+  vector (16). The RG6 rotary hits a little harder (15) and spins up faster
+  (0.5 s).
+- Online: lean and slide are sent to the other players. Both copies of the
+  game must be this version; an older copy is told it's a different version.
+
+## Earlier: online multiplayer and a screenshot tour
 
 - **Play the game modes with friends over LAN or the internet (peer to
   peer).** One player hosts from the Game Modes screen. On the same Wi-Fi or
@@ -277,8 +314,9 @@ All keys can be remapped in **Settings -> Controls**.
 | **Left mouse** | Fire |
 | **Right mouse** | Steady aim (tighter spread, slower movement) |
 | **R** | Reload |
-| **Left Shift** | Sprint (uses stamina; loud) |
-| **C** | Crouch |
+| **Left Shift** | Sprint (uses stamina; loud). From a crouch it stands you up |
+| **C** | Crouch. While sprinting: slide |
+| **Left Ctrl (hold)** | Peek / lean past a corner or door frame (picks the open side; hold a movement key to lean that way on screen) |
 | **E** | Interact: doors, civilians, surrendered suspects, consoles, evidence, stairs, van resupply (prompts marked HOLD need the key held) |
 | **Q** | Tap: switch between primary and sidearm. Hold: weapon wheel (all weapons and equipment) |
 | **F** | Toggle flashlight |
@@ -319,14 +357,19 @@ keyboard and mouse only. Layout (Xbox names):
 | Start / View | Pause / tactical map |
 
 In menus the left stick moves the cursor and **A** clicks; the d-pad adjusts
-sliders and **B** closes the settings window. Planning mode, fire mode, zoom
-presets and selecting individual officers remain keyboard-only.
+sliders and **B** closes the settings window. **B** while sprinting slides.
+Planning mode, fire mode, zoom presets, peeking and selecting individual
+officers remain keyboard-only.
 
 ## How to play
 
 - **Rules of engagement.** Shout first. Unarmed or surrendering suspects must
   be restrained (walk up and hold **E**), not shot. Shooting them, or hitting
   civilians, costs a lot of points. Arrests are worth more than force.
+- **Corners and doorways.** Hold **Left Ctrl** to peek past a door frame or
+  corner before you commit: you see (and can shoot) what's there while most
+  of you stays behind cover. Sprint and press **C** to slide across an open
+  doorway or into cover.
 - **Doors.** Closed doors open with **E**. Locked doors: breaching charge (doors
   with yellow stripes), lock picking (some), a Breacher's kick (**T**), or a
   security console (electronic locks). Wedges (**G**) jam a door shut. The

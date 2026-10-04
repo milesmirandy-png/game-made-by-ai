@@ -9,6 +9,7 @@ namespace Swat
     {
         // Where the last Shoot or Trace ended (online play shows the same tracer on other screens).
         public static Vector3 LastEnd { get; private set; }
+        static int lastThudFrame = -1;
 
         // Returns the damageable that was hit (or null).
         public static IDamageable Shoot(Vector3 origin, Vector3 direction, float range, DamageInfo damage, Vector3 muzzle, Color tracer)
@@ -27,7 +28,13 @@ namespace Swat
                     victim.TakeDamage(damage);
                     // A neutral "impact" puff and a white spark rather than anything graphic.
                     EffectsManager.Instance.Burst(hit.point, -direction, new Color(0.85f, 0.85f, 0.85f), 2, 1.5f, 0.05f);
-                    EffectsManager.Instance.HitSpark(hit.point - direction * 0.15f, damage.byPlayer ? 0.5f : 0.35f);
+                    // Your hits land with a bigger spark (heavier rounds, bigger still) and a thud.
+                    EffectsManager.Instance.HitSpark(hit.point - direction * 0.15f, damage.byPlayer ? Mathf.Clamp(0.4f + damage.amount * 0.008f, 0.45f, 0.95f) : 0.35f);
+                    if (damage.byPlayer && Time.frameCount != lastThudFrame)
+                    {
+                        lastThudFrame = Time.frameCount; // one per shot, however many pellets land
+                        AudioManager.Play(Sound.HitThud, hit.point, 0.45f, Random.Range(0.9f, 1.12f), SoundCategory.Weapons);
+                    }
                     // Hits shove the target a little (more for heavy weapons).
                     var mover = hit.collider.GetComponentInParent<AgentMover>();
                     if (mover != null && damage.amount > 1f) mover.Nudge(direction * Mathf.Clamp(damage.amount * 0.004f, 0.03f, 0.22f));

@@ -217,7 +217,16 @@ namespace Swat
             }
             if (wasRestrained) Stats.suspectsArrested = Mathf.Max(0, Stats.suspectsArrested - 1);
             Stats.suspectsKilled++;
-            UIManager.Notify("Suspect neutralized");
+            bool last = true;
+            foreach (var other in AIManager.Instance.Enemies)
+                if (other != null && other != enemy && !other.IsNeutralized && other.Data.archetype != EnemyArchetype.TrainingDummy) { last = false; break; }
+            if (last)
+            {
+                // The last one: a beat of slow motion as they fall.
+                GameManager.Instance.SlowMotion(1.1f);
+                UIManager.Notify("Last suspect neutralized");
+            }
+            else UIManager.Notify("Suspect neutralized");
         }
 
         public void OnLeaderEscaped(EnemyAI enemy)

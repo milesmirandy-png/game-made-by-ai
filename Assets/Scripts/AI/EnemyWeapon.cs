@@ -10,7 +10,7 @@ namespace Swat
         WeaponData model;   // the gun in the suspect's hands: its sound, flash and tracer
         Transform muzzle;
         EnemyController body;
-        float nextShot, accuracyMultiplier = 1f;
+        float nextShot, accuracyMultiplier = 1f, staggerUntil;
         int burstLeft;
 
         public void Init(EnemyData profile, Transform muzzlePoint, float difficultyAccuracy, WeaponData gun = null)
@@ -20,6 +20,13 @@ namespace Swat
             body = GetComponent<EnemyController>();
             muzzle = muzzlePoint;
             accuracyMultiplier = difficultyAccuracy;
+        }
+
+        // Hit: the shot about to go off is late and the next few go wide.
+        public void Stagger(float seconds)
+        {
+            staggerUntil = Mathf.Max(staggerUntil, Time.time + seconds);
+            nextShot = Mathf.Max(nextShot, Time.time + seconds * 0.4f);
         }
 
         public void ResetBurst()
@@ -48,6 +55,7 @@ namespace Swat
             if (target.IsCrouched) chance -= 0.08f;
             if (!AIVisibility.IsLit(target.Position) && !target.FlashlightOn) chance *= 0.6f;
             if (SmokeCloud.Contains(target.Position)) chance *= 0.3f;
+            if (Time.time < staggerUntil) chance *= 0.55f;
             bool onTarget = Random.value < Mathf.Clamp(chance, 0.05f, 0.9f);
 
             Vector3 direction = (aim - origin).normalized;

@@ -344,13 +344,16 @@ namespace Swat
             return weapon != null && !loadout.useShield ? weapon.id : loadout.sidearmId;
         }
 
-        // Both copies of the game must have the same weapons, officers and maps.
+        // Raised whenever a message gains or changes a field (2: lean and slide in movement updates).
+        const int MessageVersion = 2;
+
+        // Both copies of the game must have the same weapons, officers, maps and messages.
         static int ContentHash()
         {
             unchecked
             {
                 uint hash = 2166136261u;
-                var text = new System.Text.StringBuilder("swat-net-" + NetPeer.Protocol);
+                var text = new System.Text.StringBuilder("swat-net-" + NetPeer.Protocol + "." + MessageVersion);
                 foreach (var weapon in GameData.AllWeapons) text.Append('|').Append(weapon.id);
                 foreach (var officer in GameData.AllOfficers) text.Append('|').Append(officer.id);
                 foreach (var map in VersusMatch.MapIds) text.Append('|').Append(map);
@@ -621,7 +624,7 @@ namespace Swat
             writer.Byte(count);
             if (me != null)
                 ActorState(writer, match.MyId, me.Position, me.transform.eulerAngles.y, me.IsAlive, me.IsMoving, me.IsSprinting, me.IsCrouched, me.FlashlightOn, me.Weapons.Current.Data,
-                    me.Health.Fraction * 100f, match.PlayerKills, match.PlayerDeaths, match.PlayerCaptures);
+                    me.Health.Fraction * 100f, match.PlayerKills, match.PlayerDeaths, match.PlayerCaptures, me.IsSliding, me.Peeking, me.Lean);
             foreach (var other in match.Others)
             {
                 var bot = other as ArenaBot;
@@ -631,17 +634,18 @@ namespace Swat
                 // A player still loading counts as not alive here, but shouldn't look tagged out to the others.
                 bool alive = remote != null ? !remote.Down : other.IsAlive;
                 ActorState(writer, other.NetId, other.Position, other.Transform.eulerAngles.y, alive, other.IsMoving, running, other.IsCrouched, other.FlashlightOn, weapon,
-                    other.Health, other.Kills, other.Deaths, other.Captures);
+                    other.Health, other.Kills, other.Deaths, other.Captures, remote != null && remote.IsSliding, remote != null && remote.Peeking, remote != null ? remote.Lean : 0f);
             }
             var data = writer.ToArray();
             foreach (var player in Players)
                 if (player.connection != null && player.actorId >= 0) peer.Send(player.connection, data, false);
         }
 
-        static void ActorState(NetWriter w, int id, Vector3 position, float yaw, bool alive, bool moving, bool running, bool crouched, bool light, WeaponData weapon, float health, int kills, int deaths, int captures)
+        static void ActorState(NetWriter w, int id, Vector3 position, float yaw, bool alive, bool moving, bool running, bool crouched, bool light, WeaponData weapon, float health, int kills, int deaths, int captures,
+            bool sliding, bool peeking, float lean)
         {
             w.Byte(id);
-            w.Byte((alive ? 1 : 0) | (moving ? 2 : 0) | (running ? 4 : 0) | (crouched ? 8 : 0) | (light ? 16 : 0));
+            w.Byte((alive ? 1 : 0) | (moving ? 2 : 0) | (running ? 4 : 0) | (crouched ? 8 : 0) | (light ? 16 : 0) | (sliding ? 32 : 0) | (peeking ? 64 : 0));
             Pos(w, position);
             w.Byte(Mathf.RoundToInt(Mathf.Repeat(yaw, 360f) / 360f * 256f) & 255);
             int index = VersusMatch.WeaponIndex(weapon);
@@ -650,6 +654,18 @@ namespace Swat
             w.Byte(Mathf.Clamp(kills, 0, 255));
             w.Byte(Mathf.Clamp(deaths, 0, 255));
             w.Byte(Mathf.Clamp(captures, 0, 255));
+            w.Byte(LeanByte(lean));
+        }
+
+        // Lean (-1 left .. +1 right) in one byte.
+        static int LeanByte(float lean)
+        {
+            return Mathf.Clamp(Mathf.RoundToInt(lean * 100f) + 128, 28, 228);
+        }
+
+        static float LeanOf(int value)
+        {
+            return Mathf.Clamp((value - 128) / 100f, -1f, 1f);
         }
 
         public void SendEvent(MatchEvent e)
@@ -782,10 +798,12 @@ namespace Swat
             writer.Float(Time.time);
             Vec(writer, me.Position);
             writer.UShort(Mathf.RoundToInt(Mathf.Repeat(me.transform.eulerAngles.y, 360f) / 360f * 65535f));
-            writer.Byte((me.IsAlive ? 1 : 0) | (me.IsMoving ? 2 : 0) | (me.IsSprinting ? 4 : 0) | (me.IsCrouched ? 8 : 0) | (me.FlashlightOn ? 16 : 0));
+            writer.Byte((me.IsAlive ? 1 : 0) | (me.IsMoving ? 2 : 0) | (me.IsSprinting ? 4 : 0) | (me.IsCrouched ? 8 : 0) | (me.FlashlightOn ? 16 : 0)
+                | (me.IsSliding ? 32 : 0) | (me.Peeking ? 64 : 0));
             int weapon = VersusMatch.WeaponIndex(me.Weapons.Current.Data);
             writer.Byte(weapon < 0 ? NoId : weapon);
             writer.Byte(Mathf.Clamp(Mathf.RoundToInt(me.Health.Fraction * 100f), 0, 100));
+            writer.Byte(LeanByte(me.Lean));
             peer.Send(peer.Connections[0], writer.ToArray(), false);
         }
 
@@ -994,9 +1012,11 @@ namespace Swat
                     int flags = r.Byte();
                     int weapon = r.Byte();
                     int health = r.Byte();
+                    float lean = LeanOf(r.Byte());
                     if (r.Failed || actor == null || !Sane(position)) break;
                     actor.Ready = true;
                     actor.Push(time, position, yaw, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0);
+                    actor.SetMoves((flags & 32) != 0, (flags & 64) != 0, lean);
                     if (weapon != NoId) actor.SetWeapon(VersusMatch.WeaponAt(weapon));
                     if (!actor.Down) actor.Health = health;
                     break;
@@ -1279,11 +1299,13 @@ namespace Swat
                 float yaw = r.Byte() / 256f * 360f;
                 int weapon = r.Byte();
                 int health = r.Byte(), kills = r.Byte(), deaths = r.Byte(), captures = r.Byte();
+                float lean = LeanOf(r.Byte());
                 if (r.Failed) return;
                 if (id == match.MyId) continue; // you move yourself
                 var actor = FindRemote(match, id);
                 if (actor == null) continue;
                 actor.Push(hostTime, position, yaw, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0);
+                actor.SetMoves((flags & 32) != 0, (flags & 64) != 0, lean);
                 bool alive = (flags & 1) != 0;
                 if (alive == actor.Down) actor.SetDown(!alive);
                 if (weapon != NoId) actor.SetWeapon(VersusMatch.WeaponAt(weapon));

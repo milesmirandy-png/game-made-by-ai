@@ -95,11 +95,15 @@ namespace Swat
             if (gunRoot != null && gunRoot.gameObject.activeSelf != show) gunRoot.gameObject.SetActive(show);
         }
 
-        public void Fall()
+        // Down: lying flat (snap), or left standing for Topple to tip over (animated).
+        public void Fall(bool snap = true)
         {
             ClearFlash();
-            model.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-            model.localPosition = new Vector3(0f, 0.2f, 0f);
+            if (snap)
+            {
+                model.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+                model.localPosition = new Vector3(0f, 0.2f, 0f);
+            }
             if (ring != null) ring.enabled = false;
             if (alertMarker != null) alertMarker.SetActive(false);
             ShowWeapon(false);
@@ -109,6 +113,7 @@ namespace Swat
         // Back on their feet (respawning in the game modes).
         public void Rise()
         {
+            Topple.Stop(model);
             model.localRotation = Quaternion.identity;
             model.localPosition = Vector3.zero;
             if (ring != null) ring.enabled = true;

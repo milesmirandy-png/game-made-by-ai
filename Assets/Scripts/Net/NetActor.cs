@@ -48,12 +48,15 @@ namespace Swat
         // ICombatTarget / IDamageable
         public Transform Transform { get { return transform; } }
         public Vector3 Position { get { return transform.position; } }
-        public Vector3 ChestPosition { get { return transform.position + Vector3.up * (IsCrouched ? 0.85f : 1.2f); } }
+        public Vector3 ChestPosition { get { return transform.position + transform.right * leanShown + Vector3.up * (IsCrouched ? 0.85f : 1.2f); } }
         public bool IsAlive { get { return !Down && (!IsProxy || Ready); } }
         public bool IsMoving { get; private set; }
         public bool IsCrouched { get; private set; }
         public bool FlashlightOn { get; private set; }
         public bool IsRunning { get; private set; }
+        public bool IsSliding { get; private set; }
+        public bool Peeking { get; private set; }
+        public float Lean { get; private set; }         // -1 left .. +1 right, as last reported
         public IDamageable Damageable { get { return this; } }
         public Team Team { get { return Side == 0 ? Team.Police : Team.Suspect; } }
 
@@ -73,6 +76,8 @@ namespace Swat
         Vector3 lastDrawn;
         float speed;
         bool visible = true;
+        float leanShown;             // meters the upper body is out to the side right now (eases toward Lean)
+        CapsuleCollider leanBox;
 
         public static NetActor CreateProxy(Transform parent, int id, NetPlayer owner, Vector3 position, float yaw)
         {
@@ -111,6 +116,7 @@ namespace Swat
             actor.body.center = new Vector3(0f, 0.9f, 0f);
             actor.body.height = 1.8f;
             actor.body.radius = 0.35f;
+            actor.leanBox = LeanHitbox.Create(go.transform, actor.body);
             actor.Parts = CharacterFactory.Build(go.transform, look);
             actor.Weapon = weapon;
             CharacterFactory.SetWeapon(actor.Parts, weapon, null);
@@ -161,6 +167,20 @@ namespace Swat
             FlashlightOn = flashlight;
         }
 
+        // Sliding and peeking, from the same updates.
+        public void SetMoves(bool sliding, bool peeking, float lean)
+        {
+            if (Down) sliding = peeking = false;
+            if (sliding != IsSliding)
+            {
+                IsSliding = sliding;
+                animator.SetSlide(sliding);
+                if (sliding && visible) AudioManager.Play(Sound.SlideScrape, transform.position, 0.45f, Random.Range(0.92f, 1.08f));
+            }
+            Peeking = peeking;
+            Lean = peeking ? Mathf.Clamp(lean, -1f, 1f) : 0f;
+        }
+
         // Jumps straight to a place (respawns): no blending from where it was.
         public void Place(Vector3 position, float yaw)
         {
@@ -184,6 +204,9 @@ namespace Swat
             float moved = (transform.position - lastDrawn).magnitude / dt;
             lastDrawn = transform.position;
             speed = Mathf.Lerp(speed, moved > 12f ? 0f : moved, 1f - Mathf.Exp(-12f * dt));
+            leanShown = Mathf.MoveTowards(leanShown, Down ? 0f : Lean * PlayerController.LeanReach, 3.6f * dt);
+            animator.SetLean(leanShown / PlayerController.LeanReach);
+            LeanHitbox.Place(leanBox, Down ? 0f : leanShown, IsCrouched);
             animator.Tick(dt, Down ? 0f : speed, IsRunning);
         }
 
@@ -237,6 +260,7 @@ namespace Swat
             if (down == Down) return;
             Down = down;
             body.enabled = !down;
+            if (down) SetMoves(false, false, 0f);
             animator.SetDown(down);
             if (down) Health = 0f;
             else Health = MaxHealth;

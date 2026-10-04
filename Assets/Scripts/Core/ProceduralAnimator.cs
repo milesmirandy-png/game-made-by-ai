@@ -7,14 +7,16 @@ namespace Swat
     // Lightweight procedural animation for the blocky characters: walking and
     // running with leg swing, idle breathing, crouching, aim and idle poses,
     // firing recoil, reloading, weapon switching, weapon sway, flinching when
-    // hit, interacting and surrendering. Everything blends smoothly instead of
+    // hit, peeking (leaning sideways), sliding, toppling over when tagged out,
+    // interacting and surrendering. Everything blends smoothly instead of
     // snapping. No Animator or rig needed; ticked by whoever owns the character.
     public class ProceduralAnimator
     {
         readonly CharacterParts parts;
         Pose pose = Pose.Relaxed;
         float crouch, crouchTarget, recoil, reload, switching, bobPhase, moveBlend, runBlend, lean, breath, flinch;
-        Vector3 flinchAxis = Vector3.right;
+        float sideLean, sideLeanTarget, slide, slideTarget, lastHitTime = -10f;
+        Vector3 flinchAxis = Vector3.right, lastHitDirection;
         bool down;
 
         public Pose CurrentPose { get { return pose; } }
@@ -30,11 +32,15 @@ namespace Swat
         public void Fire(float kick = 1f) { recoil = Mathf.Min(1.5f, recoil + kick); }
         public void SetReload(float progress) { reload = progress; }    // 0 = not reloading, 0..1 progress
         public void SetSwitch(float progress) { switching = progress; } // 0 = not switching, 0..1 progress
+        public void SetLean(float amount) { sideLeanTarget = Mathf.Clamp(amount, -1f, 1f); } // -1 left .. +1 right
+        public void SetSlide(bool sliding) { slideTarget = sliding ? 1f : 0f; }
 
         // A short flinch away from the hit direction (no gore, just a jolt).
         public void Hit(Vector3 direction)
         {
             flinch = 1f;
+            lastHitDirection = direction;
+            lastHitTime = Time.time;
             Vector3 local = parts.root != null ? parts.root.InverseTransformDirection(direction) : direction;
             flinchAxis = new Vector3(local.z, 0f, -local.x).normalized;
             if (flinchAxis.sqrMagnitude < 0.01f) flinchAxis = Vector3.right;
@@ -43,12 +49,27 @@ namespace Swat
 
         public void SetDown(bool isDown)
         {
+            SetDown(isDown, Vector3.zero);
+        }
+
+        // Down: topple away from the shot (the given direction, or the last hit if recent;
+        // straight back if neither). Up again: stand straight.
+        public void SetDown(bool isDown, Vector3 direction)
+        {
+            bool was = down;
             down = isDown;
-            if (down) parts.Fall();
+            if (down)
+            {
+                if (was) return;
+                if (direction.sqrMagnitude < 0.01f && Time.time - lastHitTime < 0.6f) direction = lastHitDirection;
+                Vector3 local = direction.sqrMagnitude > 0.01f && parts.root != null ? parts.root.InverseTransformDirection(direction) : Vector3.back;
+                parts.Fall(false);
+                Topple.Begin(parts.model, local);
+            }
             else
             {
                 parts.Rise();
-                crouch = crouchTarget = recoil = flinch = 0f;
+                crouch = crouchTarget = recoil = flinch = sideLean = sideLeanTarget = slide = slideTarget = 0f;
             }
         }
 
@@ -57,6 +78,8 @@ namespace Swat
             parts.UpdateFlash();
             if (down || dt <= 0f) return;
             crouch = Mathf.MoveTowards(crouch, crouchTarget, dt * 5f);
+            sideLean = Mathf.Lerp(sideLean, sideLeanTarget, 1f - Mathf.Exp(-14f * dt));
+            slide = Mathf.MoveTowards(slide, slideTarget, dt * 8f);
             recoil = Mathf.MoveTowards(recoil, 0f, dt * 7f);
             flinch = Mathf.MoveTowards(flinch, 0f, dt * 5f);
             breath += dt * 1.6f;
@@ -70,19 +93,21 @@ namespace Swat
             float bob = Mathf.Abs(Mathf.Sin(bobPhase)) * Mathf.Lerp(0.04f, 0.07f, runBlend) * moveBlend;
             float idleBreath = Mathf.Sin(breath) * 0.008f * (1f - moveBlend);
             lean = Mathf.Lerp(lean, runBlend * 8f * moveBlend + crouch * 6f, 1f - Mathf.Exp(-8f * dt));
-            parts.model.localPosition = new Vector3(0f, bob + idleBreath - crouch * 0.38f, 0f);
+            // Peeking: the body shifts and tilts to the side (about 0.55 m at the chest at full lean).
+            // Sliding: leaning back, low, legs out in front.
+            parts.model.localPosition = new Vector3(sideLean * 0.25f, (bob + idleBreath) * (1f - slide) - crouch * 0.38f - slide * 0.12f, 0f);
             var flinchRotation = Quaternion.AngleAxis(-flinch * 14f, flinchAxis);
             // Firing rocks the body back a touch (heavier guns more).
-            parts.model.localRotation = flinchRotation * Quaternion.Euler(lean - recoil * 4f, 0f, 0f);
+            parts.model.localRotation = flinchRotation * Quaternion.Euler(lean - recoil * 4f - slide * 26f, 0f, -sideLean * 15f);
 
             // Legs: swing when walking, stride further when running, bend when crouched.
             if (parts.leftLeg != null)
             {
-                float stride = Mathf.Sin(bobPhase) * Mathf.Lerp(26f, 40f, runBlend) * moveBlend;
-                float bend = crouch * -35f;
+                float stride = Mathf.Sin(bobPhase) * Mathf.Lerp(26f, 40f, runBlend) * moveBlend * (1f - slide);
+                float bend = crouch * -35f * (1f - slide);
                 float legBlend = 1f - Mathf.Exp(-16f * dt);
-                parts.leftLeg.localRotation = Quaternion.Slerp(parts.leftLeg.localRotation, Quaternion.Euler(stride + bend, 0f, 0f), legBlend);
-                parts.rightLeg.localRotation = Quaternion.Slerp(parts.rightLeg.localRotation, Quaternion.Euler(-stride + bend, 0f, 0f), legBlend);
+                parts.leftLeg.localRotation = Quaternion.Slerp(parts.leftLeg.localRotation, Quaternion.Euler(stride + bend - slide * 70f, 0f, 0f), legBlend);
+                parts.rightLeg.localRotation = Quaternion.Slerp(parts.rightLeg.localRotation, Quaternion.Euler(-stride + bend - slide * 25f, 0f, 0f), legBlend);
             }
 
             Vector3 left, right;

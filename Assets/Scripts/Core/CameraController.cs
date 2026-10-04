@@ -28,7 +28,7 @@ namespace Swat
 
         PlayerController player;
         Vector3 focus, focusVelocity;
-        float distance, targetDistance, shake;
+        float distance, targetDistance, shake, punch;
         Vector3 kick;
         Bounds bounds;
         bool hasBounds;
@@ -128,6 +128,15 @@ namespace Swat
             kick = Vector3.ClampMagnitude(kick - direction.normalized * amount * scale, 0.5f);
         }
 
+        // Impact: the view darts in a little and eases back (takedowns, heavy shots).
+        // Scaled by the Camera Shake setting too.
+        public void Punch(float amount)
+        {
+            int level = SaveManager.Settings.cameraShake;
+            float scale = level <= 0 ? 0f : level == 1 ? 0.7f : 1f;
+            punch = Mathf.Min(1f, punch + amount * scale);
+        }
+
         // Automatic indoor/outdoor zoom: the chosen preset indoors, one step wider outside.
         public void SetEnvironment(bool indoor)
         {
@@ -195,6 +204,8 @@ namespace Swat
                 float reach = player.IsSteadyAiming && player.Weapons != null ? player.Weapons.Current.Data.steadyLookAhead : 0f;
                 float factor = Mathf.Clamp(settings.lookAhead, 0f, 0.5f) + (reach > 0f ? 0.3f : 0f);
                 desired += Vector3.ClampMagnitude(ahead * factor, maxLookAhead + reach);
+                // Peeking slides the view the way you lean, to show what's round the corner.
+                desired += player.LeanOffset * 1.5f;
             }
             UpdateEdgeScroll(live && settings.edgeScrolling && !GameInput.UsingGamepad, dt);
             desired += edgeOffset;
@@ -206,6 +217,12 @@ namespace Swat
             float smoothing = Mathf.Clamp(settings.cameraSmoothing, 0f, 0.4f);
             if (smoothing <= 0.005f) { focus = desired; focusVelocity = Vector3.zero; }
             else focus = Vector3.SmoothDamp(focus, desired, ref focusVelocity, smoothing, Mathf.Infinity, Mathf.Max(dt, 0.0001f));
+            float held = distance;
+            if (punch > 0f)
+            {
+                distance *= 1f - punch * 0.07f;
+                punch = Mathf.MoveTowards(punch, 0f, dt * 4f);
+            }
             Place();
 
             if (shake > 0f)
@@ -219,6 +236,7 @@ namespace Swat
                 kick = Vector3.Lerp(kick, Vector3.zero, 1f - Mathf.Exp(-16f * dt));
             }
             ApplyProjection(distance);
+            distance = held;
             SnapToPixels();
         }
 

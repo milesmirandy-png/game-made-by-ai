@@ -57,7 +57,7 @@ namespace Swat
         float nextAutoLight;
         VehicleArrival arrival;
         Transform van;
-        float stateChangedAt, failAt = -1f, deployStarted, hitStopUntil;
+        float stateChangedAt, failAt = -1f, deployStarted, hitStopUntil, slowUntil;
         bool indoorAmbience;
         // Online: which team you play on, and (joining) whether the host's match setup is still on its way.
         int onlineSide;
@@ -169,6 +169,7 @@ namespace Swat
                 if (PlanningMode) scale = SaveManager.Settings.planningPauses ? 0f : 0.2f;
                 else if (SquadCommandManager.Instance != null && SquadCommandManager.Instance.WheelOpen) scale = 0.3f;
                 else if (Time.unscaledTime < hitStopUntil) scale = 0.06f;
+                else if (Time.unscaledTime < slowUntil) scale = Mathf.Lerp(1f, 0.3f, Mathf.Clamp01((slowUntil - Time.unscaledTime) / 0.4f));
             }
             if (!Mathf.Approximately(Time.timeScale, scale)) Time.timeScale = scale;
             // World audio stops with the game (menus and music keep playing) and resumes where it left off.
@@ -700,6 +701,13 @@ namespace Swat
         {
             if (!SaveManager.Settings.hitStop || State != GameState.Playing) return;
             hitStopUntil = Mathf.Max(hitStopUntil, Time.unscaledTime + seconds);
+        }
+
+        // The last suspect goes down: a moment of slow motion (offline; same setting as hit stop).
+        public void SlowMotion(float seconds)
+        {
+            if (!SaveManager.Settings.hitStop || State != GameState.Playing || NetSession.Online) return;
+            slowUntil = Mathf.Max(slowUntil, Time.unscaledTime + seconds);
         }
 
         public void Pause()

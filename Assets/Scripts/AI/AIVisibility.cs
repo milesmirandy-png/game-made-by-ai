@@ -16,6 +16,18 @@ namespace Swat
             return FlashlightController.Illuminates(point) || PortableLight.Illuminates(point);
         }
 
+        // The same for a police officer or player, who shows only a shoulder and an eye
+        // while peeking past a corner and so is a little harder to spot.
+        public static float VisibilityOf(ICombatTarget target)
+        {
+            float multiplier = VisibilityOf(target.Position, target.IsCrouched, target.FlashlightOn);
+            var player = target as PlayerController;
+            if (player != null && player.Peeking) multiplier *= 0.8f;
+            var actor = target as NetActor;
+            if (actor != null && actor.Peeking) multiplier *= 0.8f;
+            return multiplier;
+        }
+
         // How far away (as a multiplier of normal sight range) someone standing here can be seen.
         public static float VisibilityOf(Vector3 point, bool crouched, bool flashlightOn)
         {

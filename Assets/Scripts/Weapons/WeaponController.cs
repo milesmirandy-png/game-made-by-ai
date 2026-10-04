@@ -241,10 +241,11 @@ namespace Swat
         {
             var weapon = Current;
             var data = weapon.Data;
-            float stance = (player.IsCrouched ? data.crouchSpread : 1f) * (player.IsSteadyAiming ? 0.6f : 1f);
+            // Peeking braces you against the corner or frame; shooting mid-slide is wild.
+            float stance = (player.IsCrouched ? data.crouchSpread : 1f) * (player.IsSteadyAiming ? 0.6f : 1f) * (player.Peeking ? 0.85f : 1f);
             // The first shot after a pause is the most accurate.
             float rested = Time.time - lastShotTime > 0.4f && bloom < 0.01f ? 0.65f : 1f;
-            Spread = (weapon.Spread * rested + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f);
+            Spread = (weapon.Spread * rested + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f) + (player.IsSliding ? 2.5f : 0f);
 
             if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
             bool blocked = IsReloading || IsSwitching || player.IsSprinting;
@@ -303,6 +304,22 @@ namespace Swat
         {
             LastKillTime = Time.time;
             AudioManager.Play2D(Sound.Kill, 0.5f, 1f, SoundCategory.Interface);
+            TakedownPunch();
+        }
+
+        // A takedown lands: the view darts in and jolts.
+        void TakedownPunch()
+        {
+            var rig = GameManager.Instance.CameraRig;
+            rig.Punch(0.6f);
+            rig.Shake(0.12f);
+        }
+
+        // Taking a hit knocks your aim about a little (more for heavier hits).
+        public void Flinch(float damage)
+        {
+            if (Current == null) return;
+            bloom = Mathf.Min(bloom + Mathf.Clamp(damage * 0.06f, 0.5f, 2f), Current.Recoil * 6f + 4f);
         }
 
         // Game modes: full ammunition again after a respawn.
@@ -363,7 +380,11 @@ namespace Swat
             if (data.pumpAction && weapon.Magazine > 0) pumpAt = Time.time + Mathf.Min(0.32f, 0.6f / Mathf.Max(0.5f, data.fireRate));
             var rig = GameManager.Instance.CameraRig;
             rig.Kick(player.AimDirection, 0.05f + data.kick * 0.05f);
-            if (data.kick >= 1.5f) rig.Shake(data.kick * 0.05f);
+            if (data.kick >= 1.5f)
+            {
+                rig.Shake(data.kick * 0.05f);
+                rig.Punch(data.kick * 0.07f);
+            }
             AmmoFeedback(weapon);
             if (!hitSomeone) return;
             ShotsHit++;
@@ -372,7 +393,8 @@ namespace Swat
             {
                 LastKillTime = Time.time;
                 AudioManager.Play2D(Sound.Kill, 0.5f, 1f, SoundCategory.Interface);
-                GameManager.Instance.HitStop(0.045f);
+                GameManager.Instance.HitStop(0.06f);
+                TakedownPunch();
             }
             else if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f, 1f, SoundCategory.Interface);
         }

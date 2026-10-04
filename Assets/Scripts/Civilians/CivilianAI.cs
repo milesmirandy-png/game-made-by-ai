@@ -322,7 +322,7 @@ namespace Swat
             SetState(CivilianState.Dead);
             mover.Disable();
             bodyCollider.enabled = false;
-            animator.SetDown(true);
+            animator.SetDown(true, info.direction);
             helpMarker.SetActive(false);
             MissionManager.Instance.OnCivilianKilled(this);
         }

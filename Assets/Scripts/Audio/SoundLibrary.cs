@@ -17,6 +17,8 @@ namespace Swat
         Pdw, BurstRifle, Marksman, Lmg, AutoShotgun, Pepperball, MachinePistol, Revolver, Zap,
         Pump, MagOut, MagIn, Charge, Kill, Whiz,
         Rotary, Launcher, SpinUp, Burst,
+        // Added with the movement update.
+        SlideScrape, BodyFall, HitThud,
     }
 
     // Placeholder sound effects synthesized from simple waveforms at startup,
@@ -63,6 +65,19 @@ namespace Swat
             clips[(int)Sound.Launcher] = Make("Launcher", 0.4f, t => Mathf.Sin(Tau * (180f - 260f * t) * t) * Mathf.Exp(-t * 9f) + Click(t, 0f) * 0.6f + Noise() * 0.25f * Mathf.Exp(-t * 30f));
             clips[(int)Sound.SpinUp] = Make("Spin Up", 0.45f, t => (Mathf.Sin(Tau * (120f + 900f * t) * t) * 0.4f + Noise() * 0.12f) * Mathf.Clamp01(t * 8f) * Mathf.Clamp01((0.45f - t) * 10f));
             clips[(int)Sound.Burst] = Bang("Paint Burst", 0.7f, 6f, 0.3f, 60f);
+            // Movement and impacts: a gritty slide, a body hitting the floor, and the dull thud of a hit landing.
+            float scrape = 0f, dust = 0f;
+            clips[(int)Sound.SlideScrape] = Make("Slide", 0.5f, t =>
+            {
+                scrape += (Noise() - scrape) * 0.18f;
+                return scrape * 1.6f * Mathf.Clamp01(t * 40f) * Mathf.Exp(-t * 4.5f) + Thump(t, 0f, 90f) * 0.3f;
+            });
+            clips[(int)Sound.BodyFall] = Make("Body Fall", 0.4f, t =>
+            {
+                dust += (Noise() - dust) * 0.1f;
+                return Thump(t, 0f, 70f) * 0.9f + dust * 1.2f * Mathf.Exp(-t * 16f) + Thump(t, 0.09f, 55f) * 0.4f;
+            });
+            clips[(int)Sound.HitThud] = Make("Hit Thud", 0.16f, t => Mathf.Sin(Tau * (160f - 320f * t) * t) * Mathf.Exp(-t * 28f) * 0.8f + Noise() * Mathf.Exp(-t * 60f) * 0.35f);
             clips[(int)Sound.Empty] = Make("Empty", 0.08f, t => Click(t, 0f));
             clips[(int)Sound.Footstep] = Thud("Footstep", 0.12f, 45f, 80f);
             clips[(int)Sound.DoorOpen] = Make("Door", 0.45f, t => Mathf.Sin(Tau * (260f + 90f * Mathf.Sin(t * 30f)) * t) * Mathf.Sin(Mathf.PI * t / 0.45f) * 0.5f + Noise() * 0.1f * Mathf.Exp(-t * 8f));

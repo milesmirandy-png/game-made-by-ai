@@ -165,7 +165,7 @@ namespace Swat
             changed |= Check(ref y, lx, colW, "Automatic reload when empty", ref s.autoReload);
             changed |= Check(ref y, lx, colW, "Switch to sidearm when out of ammo", ref s.autoSwitchWhenEmpty);
             changed |= Check(ref y, lx, colW, "Automatic flashlight in the dark", ref s.autoFlashlight);
-            changed |= Check(ref y, lx, colW, "Hit stop (tiny freeze on takedowns)", ref s.hitStop);
+            changed |= Check(ref y, lx, colW, "Hit stop and last-takedown slow-mo", ref s.hitStop);
             y += 6f;
             Section(ref y, lx, colW, "Minimap");
             changed |= Check(ref y, lx, colW, "Show minimap", ref s.minimap);

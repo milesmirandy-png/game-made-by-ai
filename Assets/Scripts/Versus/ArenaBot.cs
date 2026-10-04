@@ -57,7 +57,7 @@ namespace Swat
         ProceduralAnimator animator;
         ICombatTarget target;
         Vector3 lastKnown;
-        float lastKnownTime = -100f, targetReadyAt, nextShot, reloadEnd, strafeUntil, stunUntil;
+        float lastKnownTime = -100f, targetReadyAt, nextShot, reloadEnd, strafeUntil, stunUntil, staggerUntil;
         int skill, autoLeft, burstLeft;
 
         public static ArenaBot Spawn(Transform parent, int side, string callsign, Appearance look, WeaponData weapon, OfficerLoadout attachments, Vector3 position, float yaw, int skill)
@@ -168,7 +168,7 @@ namespace Swat
                 if (candidate == null || !candidate.IsAlive) continue;
                 float distance = Vector3.Distance(candidate.Position, Position);
                 if (distance > SightRange * 1.3f) continue;
-                float visibility = AIVisibility.VisibilityOf(candidate.Position, candidate.IsCrouched, candidate.FlashlightOn);
+                float visibility = AIVisibility.VisibilityOf(candidate);
                 if (!AIVisibility.CanSee(eye, transform.forward, 260f, SightRange, candidate.ChestPosition, visibility)) continue;
                 // Stick with the current target unless someone is much closer.
                 float score = distance - (candidate == target ? 4f : 0f);
@@ -235,7 +235,7 @@ namespace Swat
 
             var data = Gun.Data;
             float distance = Vector3.Distance(origin, aim);
-            float error = AimError[skill] * (1f + distance / 18f) * (target.IsMoving ? 1.3f : 1f) * (IsMoving ? 1.2f : 1f) + data.spread * 0.6f;
+            float error = AimError[skill] * (1f + distance / 18f) * (target.IsMoving ? 1.3f : 1f) * (IsMoving ? 1.2f : 1f) * (Time.time < staggerUntil ? 1.6f : 1f) + data.spread * 0.6f;
             Vector3 direction = (aim - origin).normalized;
             var damage = new DamageInfo { amount = data.damage, attacker = Team, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, shooter = this };
             Vector3 muzzle = Parts.muzzle.position;
@@ -324,13 +324,17 @@ namespace Swat
             if (IsAlive)
             {
                 animator.Hit(info.direction);
+                // Getting hit throws their aim off for a moment.
+                staggerUntil = Time.time + 0.3f;
+                nextShot = Mathf.Max(nextShot, Time.time + 0.1f);
                 return;
             }
             Deaths++;
             target = null;
             mover.Disable();
             body.enabled = false;
-            animator.SetDown(true);
+            animator.Hit(info.direction);
+            animator.SetDown(true, info.direction);
             if (VersusMatch.Instance != null) VersusMatch.Instance.OnBotDown(this, info);
         }
 
@@ -344,7 +348,7 @@ namespace Swat
             animator.SetDown(false);
             Gun.Refill();
             reloadEnd = 0f;
-            stunUntil = 0f;
+            stunUntil = staggerUntil = 0f;
             target = null;
             lastKnownTime = -100f;
             RoamUntil = 0f;

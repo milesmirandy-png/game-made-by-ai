@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has seven parts: **online multiplayer and
-the screenshot tour** (newest, first), the **gun pack, NPC and arsenal
+and what is still unverified. It has eight parts: **peek, slide, balance and
+punch** (newest, first), **online multiplayer and
+the screenshot tour**, the **gun pack, NPC and arsenal
 update**, the **game modes, arsenal and sprite update**, the **pixel-art
 style**, the **ten levels,
 main menu and Level Creator**, the **quality-of-life, graphics, lighting and
@@ -10,10 +11,153 @@ polish update**, and the original build (updated where later work changed
 something).
 
 The short version: everything is implemented in C# (plus five small shaders),
-compiles in three configurations and the shaders pass a syntax check, but
-**the game has not been run inside the Unity editor yet**. No play-testing, no
-profiling or performance measurements, and no screenshots exist. Treat
-everything below as "implemented in code" unless it says otherwise.
+compiles in three configurations and the shaders pass a syntax check. The
+owner has built the game and played it, including LAN matches with friends;
+that is the only play-testing, and it happened before the newest part, which
+has only been compiled. No profiling or performance measurements have been
+made, and no screenshots are in the repository. Treat everything below as
+"implemented in code" unless it says otherwise.
+
+# Part 0e: Peek, slide, balance and more punch
+
+## What was added
+
+- **Peek / lean** (`Player/PlayerController.cs`, hold **Left Ctrl**, a new
+  remappable action `Peek`). The upper body moves up to 0.55 m to one side.
+  The side is the one that shows more along your aim: from each leaned
+  position the game checks how far you could see straight ahead and a little
+  diagonally (raycasts) and picks the bigger gain. A movement key overrides
+  this, leaning that way on screen. A sphere cast stops the lean
+  0.2 m short of any wall, also while turning. Movement is held still while
+  peeking. `ChestPosition` and the new `EyePosition` include the lean, so
+  shots, the tactical map's line of sight (`TacticalIntel`), team visibility
+  in game modes (`VersusMatch.UpdateVisibility`), and where suspects, bots
+  and cameras aim and look all use the leaned position.
+  **Lean hitbox** (`Core/LeanHitbox.cs`): a small capsule follows the lean
+  (the body capsule stays behind the corner), so a peeking officer can be hit
+  where they can be seen. It is switched off while standing straight and
+  ignores your own movement capsule. A peeking officer is spotted at 80% of the
+  usual range (`AIVisibility.VisibilityOf(ICombatTarget)`). Spread is ×0.85
+  while peeking. The camera shifts 1.5× the lean toward that side.
+  The animation (`Core/ProceduralAnimator.cs`) shifts the model sideways and
+  tilts it 15°.
+- **Slide** (crouch while sprinting and moving; 12 stamina; 0.5 s cooldown):
+  9.5 m/s (scaled by the officer's speed and half the armour's speed penalty)
+  for 0.6 s, easing to 30% speed, about 4 m in all. It steers at up to
+  80°/s toward the movement keys and ends early when it runs into something.
+  It ends crouched. Dust puffs, a scrape sound (new `Sound.SlideScrape`),
+  noise radius 5 for the AI, a small camera kick, and +2.5° spread while
+  sliding. The animation leans back with the legs out. Sprinting from a
+  crouch now stands you up (when stamina is above 25%).
+- **Falls** (`Core/Topple.cs`): instead of snapping flat, a downed character
+  tips over away from the hit (the shot's direction, or the last hit in the
+  past 0.6 s, else backwards) over 0.34 s, accelerating and shifting 0.45 m
+  along the fall, then lands with a thud (new `Sound.BodyFall`) and dust. It runs as
+  its own component because some owners stop animating a downed character,
+  and getting up cancels it immediately. Used by suspects, civilians, officers, bots, online players
+  and you.
+- **Punch:**
+  - Your hits play a new thud (`Sound.HitThud`), once per shot even with
+    pellets, and get a spark sized by damage.
+  - Hit markers pop. Takedowns get a bigger popping X with an expanding ring,
+    a camera punch-in (new `CameraController.Punch`, a quick 7% zoom), a
+    jolt and a 0.06 s freeze (was 0.045 s, offline only, as before).
+  - Guns with heavy kick also punch the camera.
+  - Being hit: suspects fire late and with 55% of their hit chance for
+    0.35 s (`EnemyWeapon.Stagger`). Bots fire 0.1 s late with 1.6× aim error
+    for 0.3 s. Your own aim blooms by 0.5-2° depending on the damage
+    (`WeaponController.Flinch`).
+  - The last suspect in a mission goes down in 1.1 s of slow motion (30%
+    speed, easing back), offline only and only with the Hit stop setting
+    on. All camera effects follow the Camera Shake setting.
+- **Online:** movement updates (`State` and the snapshot's actor entries)
+  carry two more flags (sliding, peeking) and a lean byte. `NetActor`
+  shows the slide (with its sound), eases into the lean, and moves its own
+  lean hitbox and chest position with it. Because the messages changed, the
+  version check now includes a message version (`NetSession.MessageVersion
+  = 2`), so a copy from before this update gets "Different game version"
+  instead of misreading the messages. The transport itself (`NetPeer.Protocol`)
+  is unchanged, so old and new copies still see each other's LAN games and the
+  version message gets through.
+- **HUD:** the status line shows *Sliding* and *Peeking left / right*.
+  The Hit stop setting is relabelled "Hit stop and last-takedown slow-mo".
+
+## Balance: time-to-kill table
+
+Computed from the weapon data with a script (not measured in play), after
+this part's changes. "Hits / time" is the number of hits needed and the time
+from the first to the last of them at the gun's fire rate, assuming every
+shot hits. Semi-automatic guns are capped at 7 trigger pulls a second. The
+burst rifle includes its 0.28 s pause between bursts. Shotguns assume 6 of 8
+pellets hit (close range). The rotary includes its spin-up. Targets: bots
+in the game modes take 85% damage on 100 health. Armed suspects have 100
+health and no armour. Armored suspects have 150 health and take 60%. A
+player wears the standard plate carrier in good condition (65% damage
+taken). Real fights take longer: misses, spread, movement and range all add
+time.
+
+| Weapon | Damage | Shots/s | Mag | Bot: hits / time | Armed suspect | Armored suspect | Player (standard armor) | Change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| K7 Compact SMG | 16 | 14.0 | 30 | 8 / 0.50 s | 7 / 0.43 s | 16 / 1.07 s | 10 / 0.64 s |  |
+| V10 Submachine Gun | 19 | 11.0 | 30 | 7 / 0.55 s | 6 / 0.45 s | 14 / 1.18 s | 9 / 0.73 s |  |
+| CR5 Compact Rifle | 26 | 9.5 | 30 | 5 / 0.42 s | 4 / 0.32 s | 10 / 0.95 s | 6 / 0.53 s |  |
+| SR3 Service Rifle | 30 | 8.5 | 30 | 4 / 0.35 s | 4 / 0.35 s | 9 / 0.94 s | 6 / 0.59 s |  |
+| TS8 Tactical Shotgun | 15 | 1.4 | 7 | 2 / 0.71 s | 2 / 0.71 s | 3 / 1.43 s | 2 / 0.71 s | 13 -> 15 per pellet, 1.3 -> 1.4/s |
+| PC9 Precision Carbine | 45 | 3.0 | 15 | 3 / 0.67 s | 3 / 0.67 s | 6 / 1.67 s | 4 / 1.00 s |  |
+| P17 Service Pistol | 28 | 5.0 | 15 | 5 / 0.80 s | 4 / 0.60 s | 9 / 1.60 s | 6 / 1.00 s |  |
+| BK6 Backup Pistol | 24 | 6.0 | 8 | 5 / 0.67 s | 5 / 0.67 s | 11 / 1.67 s | 7 / 1.00 s | 22 -> 24 |
+| H50 Heavy Sidearm | 48 | 2.5 | 7 | 3 / 0.80 s | 3 / 0.80 s | 6 / 2.00 s | 4 / 1.20 s | 2.2 -> 2.5/s |
+| X4 Defense Weapon | 18 | 13.0 | 40 | 7 / 0.46 s | 6 / 0.38 s | 14 / 1.00 s | 9 / 0.62 s |  |
+| B4 Burst Rifle | 28 | 14.0 | 30 | 5 / 0.49 s | 4 / 0.42 s | 9 / 0.99 s | 6 / 0.57 s |  |
+| CX Bullpup Rifle | 27 | 10.0 | 30 | 5 / 0.40 s | 4 / 0.30 s | 10 / 0.90 s | 6 / 0.50 s |  |
+| DM2 Marksman Rifle | 62 | 2.2 | 10 | 2 / 0.45 s | 2 / 0.45 s | 5 / 1.82 s | 3 / 0.91 s |  |
+| LM8 Light MG | 21 | 12.0 | 75 | 6 / 0.42 s | 5 / 0.33 s | 12 / 0.92 s | 8 / 0.58 s | 24 -> 21 |
+| AS12 Auto Shotgun | 11 | 3.2 | 8 | 2 / 0.31 s | 2 / 0.31 s | 4 / 0.94 s | 3 / 0.62 s |  |
+| M9 Machine Pistol | 15 | 15.0 | 20 | 8 / 0.47 s | 7 / 0.40 s | 17 / 1.07 s | 11 / 0.67 s |  |
+| R6 Revolver | 60 | 1.8 | 6 | 2 / 0.56 s | 2 / 0.56 s | 5 / 2.22 s | 3 / 1.11 s | 55 -> 60 |
+| RG6 Rotary Gun | 15 | 20.0 | 150 | 8 / 0.85 s | 7 / 0.80 s | 17 / 1.30 s | 11 / 1.00 s | 14 -> 15, spin-up 0.6 -> 0.5 s |
+| D20 Drum Shotgun | 9 | 4.0 | 20 | 3 / 0.50 s | 2 / 0.25 s | 5 / 1.00 s | 3 / 0.50 s |  |
+| KV Vector SMG | 16 | 18.0 | 25 | 8 / 0.39 s | 7 / 0.33 s | 16 / 0.83 s | 10 / 0.50 s | 17 -> 16 |
+| GL6 Marker Launcher | 70 | 1.2 | 6 | 2 / 0.83 s | 2 / 0.83 s | 4 / 2.50 s | 3 / 1.67 s |  |
+
+What changed and why: the LM8 had the fastest kill time of any automatic and
+the biggest magazine, so its damage went down. The KV vector was the fastest
+killer outright, so it lost a point of damage. The TS8 pump shotgun needed two
+shots at any range, which made it feel weak for a pump gun. Now all 8 pellets
+point blank drop a bot or suspect in one shot. The revolver needed three hits
+on a bot (46.75 per hit, just short of 50). At 60 it takes two, which suits a
+six-shot gun with a slow reload. The H50 and BK6 sat at the bottom of the
+sidearms. The rotary gun was the slowest to kill despite its size: slightly
+more damage and a shorter spin-up. Everything else was left alone. The
+script is not part of the game; the table above is its output.
+
+## Limitations
+
+- Peeking is keyboard and mouse only (no gamepad button is free); sliding
+  works on a gamepad (B while sprinting).
+- The lean is a straight sideways shift of the upper body. Peeking round a
+  low obstacle (leaning over it) isn't a thing.
+- Online, lean and slide changes are applied as soon as they arrive, not
+  delayed with the position blending (0.1 s), so a remote player's lean can
+  start a moment before the matching movement shows.
+- A downed body tips over in a straight line and doesn't check for walls. In
+  a tight spot part of it can end up in a wall (it is already lying down and
+  not hittable).
+- Slow motion only happens in missions. A game-mode match ends straight away
+  on the winning takedown, so there is no slow-motion finish there.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors).
+- The transport tests still pass (23 + 8 checks); the transport wasn't
+  changed, only the messages on top of it.
+- The time-to-kill table above comes from a script that reads the weapon
+  numbers straight out of `DefaultContent.cs`.
+- **Not done:** any play-testing of this part (how peeking, sliding, the
+  falls or the new effects look and feel), a check that old and new copies
+  refuse each other in practice, and a test of the new message fields between
+  two running copies. Peeking, sliding and online sync depend on Unity
+  physics and can only be checked inside Unity.
 
 # Part 0d: Online multiplayer (peer to peer) and the screenshot tour
 
@@ -746,6 +890,12 @@ checking the Unity Console, verifying NavMesh generation, testing any
 gameplay, testing a gamepad, listening to the audio mix, scene/prefab
 reference checks (there are none to check), building a player, profiling or
 measuring performance, or capturing screenshots.
+
+(Later, the owner built the game and played it, LAN matches with friends
+included. The first build drew the world pink because Unity left the lit
+shader out of the build; `Editor/BuildShaders.cs` now adds the needed shaders
+to Always Included Shaders, and `Shapes` falls back to a shader that is
+present.)
 
 ## Known issues and risks
 

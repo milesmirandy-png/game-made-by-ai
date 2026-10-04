@@ -165,7 +165,7 @@ namespace Swat
             var player = game.Player;
             if (player.IsAlive)
             {
-                eyes.Add(player.Position + Vector3.up * 1.6f);
+                eyes.Add(player.EyePosition);
                 facings.Add(player.AimDirection);
                 fovs.Add(200f);
             }
