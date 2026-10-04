@@ -86,9 +86,32 @@ namespace Swat
                     var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     template = probe.GetComponent<Renderer>().sharedMaterial;
                     Object.DestroyImmediate(probe);
+                    if (!Usable(template)) template = FallbackTemplate();
                 }
                 return template;
             }
+        }
+
+        static bool Usable(Material material)
+        {
+            return material != null && material.shader != null && material.shader.isSupported && material.shader.name != "Hidden/InternalErrorShader";
+        }
+
+        // A build can lack the default lit shader (nothing saved in the project points at it; the
+        // editor's SWAT build step normally adds it). Rather than draw everything pink, use another
+        // lit shader that made it in, or the game's own toon or unlit shader.
+        static Material FallbackTemplate()
+        {
+            LoadShaders();
+            var options = new[] { Shader.Find("Standard"), Shader.Find("Universal Render Pipeline/Lit"), toonShader, Shader.Find("Legacy Shaders/Diffuse"), unlitShader };
+            foreach (var shader in options)
+            {
+                if (shader == null || !shader.isSupported) continue;
+                Debug.LogWarning("SWAT: the default lit shader isn't in this build; using '" + shader.name + "' instead. In the editor, use SWAT -> Include Shaders In Builds and build again.");
+                return new Material(shader) { name = "SWAT Fallback Material", color = Color.white };
+            }
+            Debug.LogError("SWAT: no usable shader for the game's materials in this build. In the editor, use SWAT -> Include Shaders In Builds and build again.");
+            return new Material(Shader.Find("Hidden/InternalErrorShader"));
         }
 
         // Lit material of one color. Glowing ones (lamps, screens, signs) use the

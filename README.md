@@ -222,6 +222,18 @@ To build a standalone game: make sure `Boot.unity` is in **File -> Build Profile
 6. Run `<Product Name>.exe` in that folder. To share the game, zip the **whole
    folder** (the .exe needs the `_Data` folder and the other files next to it).
 
+**If the built game is bright pink** (but fine in the editor): the build is
+missing the lit shader the game's materials use. The project adds the needed
+shaders to **Project Settings -> Graphics -> Always Included Shaders** by
+itself when it opens and before each build (`Editor/BuildShaders.cs`); you can
+also run **SWAT -> Include Shaders In Builds**, then build again. The first
+build after that takes longer while Unity compiles the shader. If a build still
+lacks it, the game falls back to its own shaders instead of pink.
+
+**If the .exe says "Data folder not found":** the `.exe` and its `_Data`
+folder must have the same name (`Game.exe` needs `Game_Data`). Don't rename
+either; change **Player Settings -> Product Name** and build again instead.
+
 For online and LAN play, everyone needs a build of the **same version** of the
 project (the lobby refuses a different one), and Windows asks once to let the
 game through the firewall: allow it on **Private networks**. The game keeps
