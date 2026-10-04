@@ -129,6 +129,7 @@ namespace Swat
         {
             Instance = null;
             ShotEnds.Clear();
+            backgroundSetting = null;
         }
 
         void Awake()
@@ -178,6 +179,7 @@ namespace Swat
             catch (SocketException) { responder = null; } // another game on this computer answers the local network
             Role = NetRole.Host;
             Phase = NetPhase.Lobby;
+            KeepRunningInBackground(true);
             HostName = LocalName;
             MyPeerId = 0;
             LocalSide = 0;
@@ -215,6 +217,7 @@ namespace Swat
             peer = NetPeer.Client(socket, endPoint, writer.ToArray(), Now);
             Role = NetRole.Client;
             Phase = NetPhase.Connecting;
+            KeepRunningInBackground(true);
             Players.Clear();
             SetStatus("Connecting to " + endPoint + "...", false);
             return true;
@@ -231,6 +234,7 @@ namespace Swat
             Phase = NetPhase.Idle;
             Players.Clear();
             PendingSetup = null;
+            KeepRunningInBackground(false);
             if (status != null) SetStatus(status, false);
         }
 
@@ -290,6 +294,25 @@ namespace Swat
                 }
                 tokens.Add(token);
                 LanGames.Add(game);
+            }
+        }
+
+        // A game whose window isn't focused normally stops. Online it has to keep going (the host's
+        // game runs everyone's match, and two copies on one PC must both run), so while you are in an
+        // online game it keeps running in the background; offline it goes back to the project setting.
+        static bool? backgroundSetting;
+
+        static void KeepRunningInBackground(bool keep)
+        {
+            if (keep)
+            {
+                if (backgroundSetting == null) backgroundSetting = Application.runInBackground;
+                Application.runInBackground = true;
+            }
+            else if (backgroundSetting != null)
+            {
+                Application.runInBackground = backgroundSetting.Value;
+                backgroundSetting = null;
             }
         }
 

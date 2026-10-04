@@ -203,6 +203,32 @@ If nothing happens on Play, open **Window -> General -> Console** and look for r
 
 To build a standalone game: make sure `Boot.unity` is in **File -> Build Profiles / Build Settings**, then build.
 
+### Building the game (step by step)
+
+1. Open the project in Unity 6 and press **Play** once to check it runs (this
+   also makes sure `Assets/Scenes/Boot.unity` exists).
+2. **File -> Build Profiles** (Unity 6; older versions call it Build Settings).
+   Pick **Windows** (or **macOS** / **Linux**). If it says the platform module
+   isn't installed, add it in Unity Hub -> Installs -> the gear icon -> Add
+   modules (Windows Build Support (Mono) is usually there already).
+3. Under **Scene List**, make sure **Scenes/Boot** is listed and ticked. If the
+   list is empty, use **SWAT -> Create Boot Scene**, or open `Boot.unity` and
+   click **Add Open Scenes**.
+4. Optional: **Player Settings** (button in the same window) -> Product Name
+   (the name of the .exe and the window), Company Name, and under
+   **Resolution and Presentation** the window mode.
+5. Click **Build**, make a new empty folder (for example `Builds/Windows`) and
+   choose it. The first build takes a few minutes.
+6. Run `<Product Name>.exe` in that folder. To share the game, zip the **whole
+   folder** (the .exe needs the `_Data` folder and the other files next to it).
+
+For online and LAN play, everyone needs a build of the **same version** of the
+project (the lobby refuses a different one), and Windows asks once to let the
+game through the firewall: allow it on **Private networks**. The game keeps
+running while its window is in the background during an online game, so you
+can test LAN play with two copies on one PC (the build plus the editor, or the
+build twice).
+
 ## Game flow
 
 **Main Menu -> Level Select -> Mission Briefing -> Officer Selection ->
