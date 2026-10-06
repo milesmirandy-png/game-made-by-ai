@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has eleven parts: **gear, better-looking
-officers, Ready or Not-style procedure and realism** (newest, first), **the
+and what is still unverified. It has twelve parts: **the view switch (V)
+and map rework** (newest, first), **gear, better-looking officers, Ready or
+Not-style procedure and realism**, **the
 tactical overhaul, new models and first person**, **Gun Game, Elimination,
 spectating and pings**, **peek, slide, balance and
 punch**, **online multiplayer and
@@ -16,13 +17,125 @@ something).
 The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check. The
 owner has built the game and played it, including LAN matches with friends;
-that is the only play-testing, and it happened before the three newest
+that is the only play-testing, and it happened before the four newest
 parts, which have only been compiled. The two newest parts also add models
 that were converted and checked outside Unity, and their first-person view
 and character looks were checked with offline software renders of the same
 model files (not game screenshots). No profiling or performance measurements have been
 made, and no screenshots are in the repository. Treat everything below as
 "implemented in code" unless it says otherwise.
+
+# Part 0i: View switch (V) and map rework
+
+## What was added
+
+- **Live view switch** (`Core/ViewMode.cs`, `Environment/ViewParts.cs`,
+  `GameManager`, `CameraController`, `GameInput`, `PlayerController`,
+  `UIManager`, `SettingsUI`).
+  - New input action Switch view (V). In a mission (Deploying, Playing,
+    Paused, Debrief) it changes `ViewMode.FirstPerson` at once. Elsewhere
+    it changes the saved setting, and the menu screens show the current
+    view in the top corner. It is ignored while a text field has the
+    keyboard, while rebinding keys, while loading and in the level creator.
+  - Levels are now always built for the top-down view. Everything that
+    differs in first person registers in `LevelLayout.view`:
+    - walls, door leaves and frame posts stretch to their first-person
+      height, with collider and texture tiling recomputed;
+    - ceilings, door headers and frame tops are switched on;
+    - lamps, signs, beacons, security cameras and hung decor move up.
+  - Colliders keep full height in both views, so the navmesh, AI sight and
+    hit detection don't change.
+  - `CameraController` applies the level's view to match the camera every
+    frame it changes. Walls are therefore low whenever the camera is
+    overhead (dead, spectating, deploying, debrief), even with first person
+    chosen; before, the van ride and debrief looked down on full-height
+    walls and ceilings.
+  - `PlayerController` re-syncs the look yaw and pitch from the current
+    facing when the view changes, so you keep facing the same way.
+  - The zoom preset default moved from V to Y. `GameInput.Load` moves a
+    saved zoom preset on V to Y. If a save has another action on V,
+    Switch view is left unbound rather than doubled up.
+- **First-person dressing fixes** (`MapDresser`, `SecurityCamera`,
+  `AlarmSystem`).
+  - Ceiling lamp panels were placed at 1.43 m, which is chest height in
+    first person. They now move to 2.72 m there, and lamps that would sit
+    on a wall or over a nested room are skipped.
+  - Exit signs move from 1.3 m to over the door frame, emergency lights to
+    2.2 m, alarm beacons to 2.48 m and security cameras up 0.75 m.
+  - Posters, clocks, whiteboards and electrical panels go up 0.55 m.
+- **Map rework** (seven map files, plus `LevelBuilder.Pillar`,
+  `LevelBuilder.Partition` and nested-room support).
+  - Corridors are broken up by closets, cores and alcoves jutting in from
+    alternate sides, plus fire doors, smoke doors and a mantrap.
+  - Large rooms get columns, head-high partitions, island bars, pallet
+    stacks and racks.
+  - Doors that lined up across a corridor are staggered.
+  - Apartments get bedroom and bathroom walls and doors.
+  - Room ids, door ids, consoles, evidence and objective targets are
+    kept. Spawn points and props were moved where the new walls needed it.
+  - A room inside another room's rectangle (the closets and the
+    checkpoint):
+    - gets its floor 6 mm higher;
+    - has no ceiling of its own;
+    - wins `LevelLayout.RoomAt`, which now returns the smallest containing
+      room;
+    - is the only room it counts toward when investigating
+      (`TacticalIntel`).
+
+### Longest straight indoor sightline
+
+Measured by the offline map check (below) along every 1 m line in x and z.
+Walls and props 1.4 m or taller block a line. "Doors open" is the worst
+case; "doors closed" is how the doors start.
+
+| Map | Before (doors open) | After (doors open) | After (doors closed) |
+| --- | --- | --- | --- |
+| Offices | 35.8 m | 16.6 m | 16.6 m |
+| Bank | 33.8 m | 23.8 m | 16.6 m |
+| Clinic | 35.8 m | 20.0 m | 17.6 m |
+| Nightclub | 35.2 m | 21.8 m | 21.6 m |
+| Apartments | 29.8 m | 18.4 m | 18.4 m |
+| Warehouse | 38.6 m | 22.0 m | 22.0 m |
+| Factory | 39.6 m | 21.6 m | 21.6 m |
+| Store (unchanged) | 19.8 m | 19.8 m | 19.6 m |
+| Motel (unchanged) | 10.2 m | 10.2 m | 9.8 m |
+| Training (unchanged) | 39.6 m | 39.6 m | 39.6 m (the firing range) |
+
+## Limitations
+
+- Nested rooms count toward their container for "suspects inside" and
+  "anything left to do" checks. So a corridor isn't secured until its
+  closets are; that's deliberate, but a closet's room light also lights a
+  little of the corridor.
+- The view switch moves visuals only. A prop that's taller than the
+  top-down walls is drawn at its full height in both views, as before.
+- The sightline numbers come from the map layouts, not from the game. They
+  ignore diagonals, glass and lighting, and a 1 m sampling grid can miss a
+  gap narrower than that.
+- The new layouts and the moved spawns haven't been played. Whether the
+  zig-zag corridors, partitions and new closets play well (pathing,
+  squad stacking on the new doors, AI cover use) is unverified.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings at
+  warning level 4).
+- **Offline map check.** The map files are compiled against a recording
+  stub of `LevelBuilder` and the result is checked in Python. On all ten
+  maps:
+  - no prop within 1.1 m of a doorway or on a spawn or evidence point;
+  - no spawn inside a wall;
+  - every suspect and civilian spawn reachable from the van, on a 0.2 m
+    grid with a 0.36 m character radius;
+  - plus the sightline measurement above.
+  - All ten pass. The baseline run found one problem, an office plant on a
+    civilian spawn, which is fixed.
+- Top-down plans of every map were rendered from the same data and
+  looked over after each change.
+- **Not done:** any play-testing. Not run in Unity:
+  - switching views (in a mission, paused or in the menus);
+  - the stretched walls and doors and the moved lamps and decor;
+  - the new layouts, and the AI and squad on them.
 
 # Part 0h: Gear, better-looking officers, Ready or Not-style procedure and realism
 
@@ -238,7 +351,8 @@ made, and no screenshots are in the repository. Treat everything below as
   `CameraController`, `GameInput`, `PlayerController`, `HUDController`,
   `PostEffects` + `SwatPostFX.shader`, `SettingsUI`).
   - The view is chosen in Settings -> Camera and applied when a mission or
-    match level is built. In first person, walls are built 2.75 m high,
+    match level is built (since Part 0i, V switches it at any time and the
+    level's walls switch with it). In first person, walls are built 2.75 m high,
     with headers over openings and door frames at 2.08 m. Indoor rooms get
     ceilings with no collider and no shadow, so the navmesh, AI sight and
     lighting are as before.
@@ -1202,7 +1316,7 @@ These exist in code and compile. None has been exercised in Play Mode.
 
 - **Identity and flow:** title "SWAT: TACTICAL RESPONSE", dark navy/black/muted-blue IMGUI theme with red/blue emergency accents; full flow from main menu to debriefing and back to HQ; restart, retry with same or new seed, return to HQ/menu, quit.
 - **Player:** walk, sprint with stamina, crouch, steady aim, mouse-facing movement, footsteps, noise, flashlight, role ability, health, armor condition, movement state, interaction with hold progress.
-- **Camera:** 55 degree angled follow camera, wheel zoom with min/max, three zoom presets (V), adjustable zoom sensitivity and look-ahead, map bounds, screen shake; showcase camera for menus.
+- **Camera:** 55 degree angled follow camera, wheel zoom with min/max, three zoom presets (V; Y since Part 0i), adjustable zoom sensitivity and look-ahead, map bounds, screen shake; showcase camera for menus.
 - **Officers:** six fictional officers with name, callsign, role, portrait (drawn), 3D preview in HQ, stats (health, armor, speed, accuracy, reaction, perception, command responsiveness, capacity), personality, role ability, preferred kit, unlock rules, uniform colors.
 - **Squad:** up to three AI officers; command wheel (hold Z, mouse or number keys) with 10 general orders and door orders (Stack up, Open/Breach/Flash & clear); individual (F1-F3) or group (F4) selection; follow formation, hold, regroup, move with waypoint queue, cover, stack and coordinated entry, stay behind (hold fire), return, assist civilians (treat, free, escort including down stairs), wait; stuck recovery; shout-then-shoot rules of engagement; reload and sidearm fallback; medic revives; restrain surrendered suspects; radio subtitles; labels and waypoint lines in the world; status on HUD.
 - **Weapons:** seven primaries (compact SMG, SMG, compact rifle, service rifle with auto/semi, shotgun with pellet spread, precision carbine, less-lethal launcher) and three sidearms; hitscan, magazines and reserves, reload, switching, semi/auto, spread and recoil bloom, muzzle flash, impacts, tracer, dry fire, role restrictions; block models with a `modelPrefab` override slot.

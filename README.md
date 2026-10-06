@@ -24,12 +24,55 @@ low-poly models (a soldier, a police riot shield and a weapon pack). See
 > friends included; that is the only play-testing so far. The peek / slide
 > update was played; everything since (Gun Game, Elimination, spectating and
 > pings; then the tactical overhaul, the new models, first person, gear
-> customization, the Ready or Not-style procedure and the realism changes) has
-> been compiled but **not played yet**. No performance has been measured, and no
+> customization, the Ready or Not-style procedure, the realism changes, the
+> view switch and the map rework) has been compiled but **not played yet**. No performance has been measured, and no
 > gameplay screenshots are in the repository yet. [Screenshots/README.md](Screenshots/README.md) explains how
 > to capture them (the screenshot tour does most of it).
 
-## What's new: gear, better-looking officers, Ready or Not-style procedure and realism
+## What's new: switch views with V, and reworked maps
+
+- **V switches between top-down and first person at any time.** In a
+  mission (paused or not) it changes straight away. Before one (main menu,
+  level select, briefing, roster, loadout) it sets the view you'll deploy
+  in; the top corner shows which. Walls and doors go full height with
+  ceilings in first person and drop low again from above. That also happens
+  by itself whenever the camera goes overhead (going down, spectating, the
+  van ride, the debrief). Colliders don't change, so movement, sight and
+  shooting work the same in both views. The camera zoom preset moved from
+  V to **Y**; older saves move it for you.
+- **First-person fixes:** ceiling lamps used to hang at chest height in
+  first person; they now sit under the ceiling. Exit signs go above the
+  door, and alarm beacons and security cameras hang near the ceiling.
+  Posters, clocks, whiteboards and panels go up to eye level.
+- **Reworked maps** (offices, bank, clinic, nightclub, apartments,
+  warehouse, factory). Corridors used to run straight for 30-40 m; now they
+  zig-zag round closets, cores and alcoves and are split by fire doors.
+  Big halls have columns, partitions, island bars, pallet stacks and racks.
+  There are more small rooms to clear, and doors that used to line up are
+  staggered. The longest straight view down an indoor space went from
+  30-40 m to about 16-24 m (measured on the map layouts, see
+  [REPORT.md](REPORT.md)). Room names, objectives and consoles are unchanged.
+  - **Halvorsen Logistics offices:** an elevator core, copy room and
+    janitor's closet in the hallway, a fire door, a cubicle farm with
+    head-high partitions, a lobby counter and columns.
+  - **Sterling Mutual Bank:** a security checkpoint (mantrap with two
+    offset doors) across the staff corridor, columns in the banking hall,
+    partitioned loan offices.
+  - **Harbor Street Clinic:** a linen closet, medication room and utility
+    closet off a zig-zag corridor, smoke doors, privacy curtains between
+    the ward beds.
+  - **Club Halcyon:** a screen inside the entrance, an island bar with a
+    bottle tower, booth partitions, columns at the bar, a real backstage
+    door.
+  - **Marlow Court apartments:** every apartment has a bedroom and a
+    bathroom with their own doors; a trash room and mail alcove break up
+    the corridors.
+  - **Kestrel Freight warehouse:** staggered shelving and pallet stacks, so
+    the aisles zig-zag; more cover in the loading bays.
+  - **Riverside Steelworks:** pallet stacks, hoppers, parts racks screening
+    the assembly floor openings, steel frames, partitioned offices.
+
+## Earlier: gear, better-looking officers, Ready or Not-style procedure and realism
 
 - **Gear customization** (loadout screen, now three pages: Weapons, Armor &
   gear, Look).
@@ -103,7 +146,7 @@ low-poly models (a soldier, a police riot shield and a weapon pack). See
 Slower, heavier and deadlier: closer to Ready or Not and SWAT 4 than to a
 run-and-gun shooter.
 
-- **First person, body cam style** (Settings -> Camera -> Camera). The view
+- **First person, body cam style** (**V**, or Settings -> Camera -> Camera). The view
   is at your officer's eyes, with the drift and bob of a camera worn on a
   moving body, a wide lens with grain and a REC overlay (Body cam look, can be
   turned off). The gun is a view model held by gloved hands in your kit's
@@ -113,10 +156,10 @@ run-and-gun shooter.
   magazine. Every shot kicks it. Recoil climbs the view and about half
   settles back by itself. Scoped rifles zoom in and show the scope. Shield
   officers carry the shield on the left and look over it when braced. **Left
-  Ctrl + A / D** peeks and tilts the view. Missions are built with ceilings,
-  full-height walls and door frames in this view. Field of view 70-110.
-  Top-down is still the default; the choice applies from the next mission,
-  and online each player picks their own.
+  Ctrl + A / D** peeks and tilts the view. Walls go full height with
+  ceilings and door frames in this view. Field of view 70-110. Top-down is
+  still the default; online each player picks their own. (When this was
+  added the view applied from the next mission; V now switches it any time.)
 - **Heavier movement and handling.** You take a moment to get going and to
   stop. Walking and sprinting are slower and stamina runs out sooner. Guns
   swing round at a speed set by their weight (setting: Heavy weapon
@@ -480,7 +523,8 @@ All keys can be remapped in **Settings -> Controls**.
 | **G** | Use the selected tactical equipment (a breaching charge goes on the door you face) |
 | **Tab** | Tactical map overlay (game keeps running) |
 | **Space** | Planning mode (game pauses or slows; place waypoints and markers) |
-| **V** | Cycle camera zoom preset (close / standard / wide; top-down) |
+| **V** | Switch view: top-down or first person (in a mission at once; in the menus for the next mission) |
+| **Y** | Cycle camera zoom preset (close / standard / wide; top-down) |
 | **1 / 2** | Primary / sidearm |
 | **3 / 4** | Previous / next equipment |
 | **M** | Show all objectives (including optional) |
@@ -517,8 +561,8 @@ keyboard and mouse only. Layout (Xbox names):
 
 In menus the left stick moves the cursor and **A** clicks; the d-pad adjusts
 sliders and **B** closes the settings window. **B** while sprinting slides.
-Planning mode, fire mode, zoom presets, peeking, reporting to TOC, night
-vision and selecting individual officers remain keyboard-only.
+Planning mode, fire mode, zoom presets, switching view, peeking, reporting
+to TOC, night vision and selecting individual officers remain keyboard-only.
 
 ## How to play
 
