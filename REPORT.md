@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has nine parts: **Gun Game, Elimination,
-spectating and pings** (newest, first), **peek, slide, balance and
+and what is still unverified. It has ten parts: **the tactical overhaul,
+new models and first person** (newest, first), **Gun Game, Elimination,
+spectating and pings**, **peek, slide, balance and
 punch**, **online multiplayer and
 the screenshot tour**, the **gun pack, NPC and arsenal
 update**, the **game modes, arsenal and sprite update**, the **pixel-art
@@ -15,9 +16,171 @@ The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check. The
 owner has built the game and played it, including LAN matches with friends;
 that is the only play-testing, and it happened before the two newest parts,
-which have only been compiled. No profiling or performance measurements have been
+which have only been compiled. The newest part also adds models that were
+converted and checked outside Unity, and its first-person view-model layout
+was checked with an offline software render of the same model files (not a
+game screenshot). No profiling or performance measurements have been
 made, and no screenshots are in the repository. Treat everything below as
 "implemented in code" unless it says otherwise.
+
+# Part 0g: Tactical overhaul, new models and first person (body cam)
+
+## What was added
+
+- **Heavier handling** (`PlayerController`, `WeaponController`). Walk 3.3
+  m/s, sprint 5.3 m/s, with momentum: 9 m/s² to speed up, 13 m/s² to slow
+  down. Stamina drains at 22/s and regenerates at 10/s. With Heavy weapon
+  handling on (default), the aim turns towards the cursor at 260-560°/s,
+  set by the weapon's weight. Steady aim scales that by 0.7, sprinting by
+  0.6 and a shield by 0.65. After a sprint the gun takes 0.9x its switch
+  time to come up, with extra bloom. Moving adds spread (less while crouched
+  or steady aiming). A slide costs 22 stamina, has a 1.2 s cooldown and
+  blocks firing.
+- **Lethality** (`Core/Lethality.cs`, missions only): police damage to
+  suspects x1.6 (`EnemyHealth`), suspects' damage to officers x2
+  (`EnemyWeapon`).
+- **Doors** (`DoorController`, `MissionRandomizer`, `ReconCamera`,
+  `SquadAI`, `SquadCommandManager`).
+  - Locked, non-electronic, unpickable doors are kicked with **E** (0.6 s
+    wind-up): a Breacher always succeeds, anyone else 40% of the time. Kicks
+    are loud.
+  - A shotgun shot at a door within 3 m breaches it (offline).
+  - Traps: up to 1 + difficulty interior doors next to an armed suspect's
+    room, 40% each, get a flash device on the far side. Opening the door
+    sets it off: a flashbang and an alarm noise. The recon camera or the
+    new Mirror order reveals it, and a revealed trap is disarmed by holding
+    **E**. The squad disarms a known trap before carrying out a door order.
+  - New wheel orders: Mirror under door, and Shotgun & clear (needs a
+    shotgun carrier). Charges go on with **G**.
+- **Shield and melee** (`OperatorHealth`, `PlayerController.Melee`).
+  - A braced shield blocks every round within 70° of the front (spark and
+    metal ricochet). A carried shield passes 20% of the damage within 60°.
+  - Melee (**Left Alt**): reach 1.05 m, daze 2 s, 1.1 s cooldown; a shield
+    bash has 1.4 m reach, a 3 s daze and a 0.8 s cooldown. It calls
+    `EnemyAI.Shoved`. Civilians are stunned and told to get down. In the
+    game modes it does 15 damage (25 with a shield).
+- **Suspect AI** (`EnemyAI`, `EnemyController`, `EnemyWeapon`,
+  `AIManager`).
+  - A new Holding state: an alerted suspect may hold an ambush angle on a
+    door instead of charging.
+  - Chasers spread out instead of all following the same path.
+  - Police shots that pass near a suspect suppress them (`AIManager.Suppress`).
+  - Suspects kneel behind cover.
+  - Some surrender, then pull a gun again once no officer is covering them
+    (`TryFakeOut`).
+- **Models** (`Core/ModelLibrary.cs`, `CharacterFactory`, `WeaponModels`,
+  `ProceduralAnimator`, `Tools/ModelConverter/`).
+  - The supplied FBX and GLB files are converted offline by small Python
+    readers into a compact "SWM1" mesh format (19 files, about 0.9 MB in
+    total). Textures become flat colours per triangle.
+  - The soldier is split into torso, head, upper arms, forearms and legs,
+    with hand points. The animator gives the arms a two-bone reach so both
+    hands stay on the gun.
+  - 15 weapons map to pack guns; suspects also get the double-barrel and
+    the snub revolver. Guns not in the pack (LMG, rotary, launchers, auto
+    and drum shotguns, pepperball, stun pistol) keep their box models.
+- **Uniform kits** (`Progression.Kit`): ten kits with their own shirt,
+  trousers, vest, pouches, helmet and gear colours, unlocked at 0-4
+  completed missions.
+- **First person** (`Core/ViewMode.cs`, `Player/FirstPersonRig.cs`,
+  `CameraController`, `GameInput`, `PlayerController`, `HUDController`,
+  `PostEffects` + `SwatPostFX.shader`, `SettingsUI`).
+  - The view is chosen in Settings -> Camera and applied when a mission or
+    match level is built. In first person, walls are built 2.75 m high,
+    with headers over openings and door frames at 2.08 m. Indoor rooms get
+    ceilings with no collider and no shadow, so the navmesh, AI sight and
+    lighting are as before.
+  - The cursor is locked. Mouse delta (x0.07 x sensitivity) or the right
+    stick turns the officer and tilts the view (±80°). Shots start at the
+    camera and spread in a cone around the view direction. The aim point is
+    whatever the view centre hits within 40 m, so throws, squad orders and
+    pings use it. The map and radial menus free the cursor.
+  - Camera: eye height 1.6 m (1.05 m crouched, 0.8 m sliding), smoothed. It
+    moves out with the lean and rolls 10° at full lean. Step bob and a slow
+    Perlin drift follow the Camera Shake setting and are reduced while
+    aiming. Explosion shake and takedown punch carry over. The setting's
+    field of view is horizontal and converted to vertical for the screen's
+    aspect. Aiming down the sights zooms x0.8; scoped rifles (DM2, PC9) zoom
+    x0.39 and x0.6 and show a drawn scope with the gun hidden.
+  - View model: the weapon's own model, plus the soldier's forearms in the
+    officer's kit (sleeves and gloves), parented to the gun. The trigger hand
+    is on the grip and the other hand on the handguard (both on the grip for
+    a pistol). Hip, sight, sprint low-ready, wall pull (sphere cast along
+    the view), reload tilt with the support hand going for a magazine, draw
+    from below, melee shove, turn sway (heavier guns lag more and settle
+    slower) and step bob are all blended in code.
+  - Each shot kicks the gun back and up, punches the view, and calls
+    `PlayerController.AddLookKick`. The view climbs 0.35-1.85° per shot by
+    weapon kick, and half of it settles back once you stop.
+  - A shield is held low on the left when carried, and with its top edge
+    just under the eye line when braced; the pistol rests on its right edge.
+  - Your own body's renderers are set to shadows-only (or not drawn if they
+    cast no shadow), so you keep your shadow. The flashlight moves to the
+    view-model gun and points along the view. Muzzle flames turn to face the
+    camera and are smaller.
+  - HUD: a dot instead of the spread cross, fading as the sights come up
+    (hit and takedown markers stay). The hit-direction chevron is relative to
+    where you face. Optional overlay: REC light, date and time, unit and
+    callsign. Post effect (Body cam look): barrel distortion (centre fixed,
+    corners fixed), edge colour fringing, grain and a stronger vignette. It
+    straightens while aiming and is off through a scope.
+  - Line of sight no longer hides people in first person, because walls
+    already do. In the game modes the "seen" state still decides name tags
+    and the map, so they don't show through walls.
+- **Settings** gets a Camera tab: camera view, field of view, body cam look
+  and the top-down camera options. This also fixes the Gameplay tab, where
+  the two settings added in the previous part had pushed the minimap sliders
+  into the reset button.
+
+## Limitations
+
+- First person reuses the top-down levels. Rooms are sized for a view from
+  above, so some feel large at eye level. Props and lighting were not
+  re-dressed for it.
+- The view model is posed procedurally. There are no hand-made animations,
+  the fingers don't wrap the grip, and the forearms are rigid. Reloads don't
+  show the magazine leaving the gun, and pump or bolt cycling isn't shown.
+- Aiming down the sights looks over the top of the gun's model. For guns
+  whose top isn't the sight (a tall rear sight, a carry handle), the line
+  can sit a little high.
+- The view model is drawn by the main camera, so it can still clip into
+  geometry that the 0.65 m-ish wall check misses (a thin pole, another
+  character).
+- Other players see your third-person body as before. Online, the pitch you
+  look at isn't sent, so others see you aim level.
+- The models' textures are flattened to one colour per triangle, so fine
+  texture detail (camo patterns, labels) is lost.
+- The tactical overhaul's numbers (speeds, lethality, trap rates) are first
+  guesses that haven't been played.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings at
+  warning level 4).
+- The online transport tests still pass (`Tests/`, both ALL PASSED).
+- Model pipeline:
+  - Re-running the converter reproduces the committed files byte for byte.
+  - A Mono test with a copy of `ModelLibrary`'s reader parsed all 19 files.
+  - Every converted mesh has positive signed volume, so its faces point
+    outward.
+  - Replaying the arm reach in Python with the model's joint positions puts
+    the hands on their targets (the rifle support hand within 5 cm).
+- The first-person view-model layout (hip, sights, sprint, pistol, shield
+  carried and braced) was rendered offline with the converter's software
+  rasteriser, using the same model files and transforms as
+  `FirstPersonRig`. That's how the hands were checked on the grip and
+  handguard, the sight line at the screen centre, and the poses moved into
+  view. It is not a game screenshot.
+- The shaders, including the new body cam code in the post effect, pass
+  the same syntax check as before (glslangValidator on the extracted HLSL
+  with a stub of Unity's include files). That checks syntax, not looks.
+- **Not done:** any play-testing. Not run in Unity:
+  - the first-person camera, view model, recoil and sway;
+  - the body cam lens effect;
+  - the tactical changes, door traps and new orders, shield blocking and
+    melee;
+  - the AI changes and the new models in the game;
+  - the Settings Camera tab at different resolutions.
 
 # Part 0f: Gun Game, Elimination, spectating and pings
 

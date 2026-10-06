@@ -329,10 +329,11 @@ namespace Swat
 
         // ---- Fog of war ----
 
+        // In first person the walls hide other players already: always drawn (Seen still decides name tags).
         public void SetSeen(bool seen)
         {
             Seen = seen;
-            ApplyVisible(seen || Down);
+            ApplyVisible(seen || Down || ViewMode.FirstPerson);
         }
 
         public void SetVisible(bool show)

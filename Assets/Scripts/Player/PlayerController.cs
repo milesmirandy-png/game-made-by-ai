@@ -46,7 +46,16 @@ namespace Swat
         public bool Peeking { get; private set; }
         public bool IsSliding { get; private set; }
         public Vector3 AimPoint { get; private set; }
-        public Vector3 AimDirection { get; private set; }
+        public Vector3 AimDirection { get; private set; }       // flat: where you face
+        // First person: where you look (with pitch), and where shots start and go.
+        public Vector3 LookDirection { get; private set; }
+        public float LookPitch { get { return lookPitch; } }
+        public bool FirstPerson { get { return ViewMode.FirstPerson && FirstPersonRig.Active; } }
+        public Vector3 ShotOrigin { get { return FirstPerson ? FirstPersonRig.CameraPosition : ChestPosition; } }
+        public Vector3 ShotDirection { get { return FirstPerson ? LookDirection : AimDirection; } }
+        // The gun the shot, flash and shells come from: the view model's in first person.
+        public Transform Muzzle { get { return FirstPerson && FirstPersonRig.Muzzle != null ? FirstPersonRig.Muzzle : Parts.muzzle; } }
+        public Transform GunRoot { get { return FirstPerson && FirstPersonRig.Gun != null ? FirstPersonRig.Gun : Parts.gunRoot; } }
         public bool IsMoving { get; private set; }
         public bool IsSprinting { get; private set; }
         public bool IsCrouched { get; private set; }
@@ -54,6 +63,8 @@ namespace Swat
         public float Stamina { get; private set; }
         public float StaminaFraction { get { return Stamina / maxStamina; } }
         public float AbilityReadyIn { get { return Mathf.Max(0f, abilityReadyAt - Time.time); } }
+        public float LastMeleeTime { get; private set; } = -10f;
+        public int VersusSide { get; private set; }       // the game modes: 0 blue, 1 red
 
         // ICombatTarget
         public Transform Transform { get { return transform; } }
@@ -69,6 +80,7 @@ namespace Swat
         int leanSide;               // the side chosen while the peek key is held (-1 left, +1 right)
         float slideStart, slideReadyAt, nextSlideDust;
         Vector3 slideVelocity, moveVelocity;
+        float lookYaw, lookPitch, recoilDebt, lastKickTime;
         CapsuleCollider leanBox;
         float meleeReadyAt;
         static readonly Collider[] meleeHits = new Collider[16];
@@ -97,8 +109,10 @@ namespace Swat
             player.controller = controller;
             player.Officer = officer;
             player.Loadout = loadout;
+            player.VersusSide = versusSide;
             player.Stamina = player.maxStamina;
-            player.AimDirection = go.transform.forward;
+            player.AimDirection = player.LookDirection = go.transform.forward;
+            player.lookYaw = yaw;
             player.AimPoint = player.aimTarget = position + go.transform.forward * 3f;
 
             var armor = GameData.Armor(loadout.armorId);
@@ -196,7 +210,10 @@ namespace Swat
             transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             controller.enabled = true;
             verticalVelocity = 0f;
-            AimDirection = transform.forward;
+            AimDirection = LookDirection = transform.forward;
+            lookYaw = yaw;
+            lookPitch = 0f;
+            recoilDebt = 0f;
             AimPoint = aimTarget = position + transform.forward * 3f;
         }
 
@@ -220,6 +237,11 @@ namespace Swat
 
         void Aim(float dt)
         {
+            if (ViewMode.FirstPerson)
+            {
+                AimFirstPerson();
+                return;
+            }
             var cam = GameManager.Instance.CameraRig.Cam;
             var settings = SaveManager.Settings;
             if (GameInput.UsingGamepad) AimWithStick(dt, settings);
@@ -254,6 +276,44 @@ namespace Swat
                 Vector3 viewportAim = cam.WorldToViewportPoint(AimPoint);
                 GameInput.SetGamepadPointer(QualityManager.ViewportToScreen(new Vector2(viewportAim.x, viewportAim.y)));
             }
+        }
+
+        // First person: the mouse turns you and tilts the view; the weight of the gun shows as
+        // view-model sway instead of a turn limit. The aim point is whatever the view centre is on.
+        void AimFirstPerson()
+        {
+            Vector2 look = GameInput.LookDelta;
+            lookYaw = Mathf.Repeat(lookYaw + look.x, 360f);
+            lookPitch = Mathf.Clamp(lookPitch - look.y, -80f, 80f);
+            // Recoil settles: once you stop firing, about half the climb comes back down by itself.
+            if (recoilDebt > 0f && Time.time - lastKickTime > 0.12f)
+            {
+                float back = Mathf.Min(recoilDebt, Mathf.Max(4f, recoilDebt * 6f) * Time.deltaTime);
+                recoilDebt -= back;
+                lookPitch = Mathf.Clamp(lookPitch + back, -80f, 80f);
+            }
+            transform.rotation = Quaternion.Euler(0f, lookYaw, 0f);
+            AimDirection = transform.forward;
+            LookDirection = Quaternion.Euler(lookPitch, lookYaw, 0f) * Vector3.forward;
+            Vector3 eye = FirstPersonRig.Active ? FirstPersonRig.CameraPosition : EyePosition;
+            RaycastHit hit;
+            AimPoint = aimTarget = Physics.Raycast(eye, LookDirection, out hit, 40f, Layers.ShootableMask, QueryTriggerInteraction.Ignore) ? hit.point : eye + LookDirection * 20f;
+        }
+
+        // First person recoil: the view climbs by up degrees (and wanders sideways a little).
+        public void AddLookKick(float up, float side)
+        {
+            lookPitch = Mathf.Clamp(lookPitch - up, -80f, 80f);
+            lookYaw = Mathf.Repeat(lookYaw + side, 360f);
+            recoilDebt = Mathf.Min(recoilDebt + up * 0.5f, 12f);
+            lastKickTime = Time.time;
+        }
+
+        // Movement keys: screen directions from above, or forward / back / strafe in first person.
+        Vector3 MoveDirection(Vector2 input)
+        {
+            if (ViewMode.FirstPerson) return transform.right * input.x + transform.forward * input.y;
+            return new Vector3(input.x, 0f, input.y);
         }
 
         // How fast you can swing the gun around (degrees a second): light guns quick, heavy ones slow,
@@ -353,7 +413,7 @@ namespace Swat
             if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
             verticalVelocity += Physics.gravity.y * dt;
             // Momentum: it takes a moment to get going and to stop (instant with heavy handling off).
-            Vector3 desired = new Vector3(input.x, 0f, input.y) * speed;
+            Vector3 desired = MoveDirection(input) * speed;
             float rate = !SaveManager.Settings.heavyHandling ? 60f : desired.sqrMagnitude > moveVelocity.sqrMagnitude ? acceleration : deceleration;
             moveVelocity = Vector3.MoveTowards(moveVelocity, desired, rate * dt);
             controller.Move((moveVelocity + Vector3.up * verticalVelocity) * dt);
@@ -387,7 +447,7 @@ namespace Swat
         void StartSlide()
         {
             Vector2 input = GameInput.Move;
-            Vector3 direction = new Vector3(input.x, 0f, input.y);
+            Vector3 direction = MoveDirection(input);
             if (direction.sqrMagnitude < 0.01f) direction = AimDirection;
             direction.y = 0f;
             var armor = Health.Armor;
@@ -420,7 +480,7 @@ namespace Swat
             Vector2 input = GameInput.Move;
             if (input.sqrMagnitude > 0.01f)
             {
-                Vector3 wanted = new Vector3(input.x, 0f, input.y).normalized * slideVelocity.magnitude;
+                Vector3 wanted = MoveDirection(input).normalized * slideVelocity.magnitude;
                 slideVelocity = Vector3.RotateTowards(slideVelocity, wanted, 1.4f * dt, 0f);
             }
             float speedScale = Mathf.Lerp(1f, 0.3f, t * t);
@@ -452,6 +512,7 @@ namespace Swat
         void Melee()
         {
             if (Time.time < meleeReadyAt) return;
+            LastMeleeTime = Time.time;
             bool shield = Health.HasShield;
             meleeReadyAt = Time.time + (shield ? 0.8f : 1.1f);
             float reach = shield ? 1.4f : 1.05f;
@@ -523,7 +584,8 @@ namespace Swat
             {
                 Vector2 input = GameInput.Move;
                 Vector3 right = transform.right;
-                float push = input.x * right.x + input.y * right.z;
+                // First person: A and D lean left and right; from above, the key pointing that way on screen.
+                float push = ViewMode.FirstPerson ? input.x : input.x * right.x + input.y * right.z;
                 if (Mathf.Abs(push) > 0.3f) leanSide = push > 0f ? 1 : -1;
                 else if (leanSide == 0) leanSide = AutoLeanSide();
                 if (leanSide != 0) target = leanSide * Clearance(leanSide);

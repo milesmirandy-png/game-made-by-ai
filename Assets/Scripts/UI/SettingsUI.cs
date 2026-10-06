@@ -9,7 +9,9 @@ namespace Swat
     // soon as it changes and saved to the JSON settings file.
     public class SettingsUI
     {
-        static readonly string[] Tabs = { "Gameplay", "Graphics", "Audio", "Accessibility", "Controls" };
+        static readonly string[] Tabs = { "Gameplay", "Camera", "Graphics", "Audio", "Accessibility", "Controls" };
+        public const int ControlsTab = 5;
+        static readonly string[] ViewNames = { "Top-down (tactical)", "First person (body cam)" };
         static readonly string[] ShakeNames = { "Off", "Low", "Medium" };
         static readonly string[] TextureNames = { "Low", "Medium", "High" };
         static readonly float[] UiScales = { 0.75f, 0.9f, 1f, 1.1f, 1.25f, 1.5f };
@@ -68,16 +70,17 @@ namespace Swat
             UITheme.Panel(rect);
             UITheme.Header(new Rect(rect.x + 30f, rect.y + 22f, 600f, 50f), "Settings");
             for (int i = 0; i < Tabs.Length; i++)
-                if (UITheme.Button(new Rect(rect.x + 30f + i * 166f, rect.y + 86f, 158f, 40f), Tabs[i], true, tab == i, 17)) { tab = i; rebindIndex = -1; message = null; }
+                if (UITheme.Button(new Rect(rect.x + 30f + i * 156f, rect.y + 86f, 150f, 40f), Tabs[i], true, tab == i, 17)) { tab = i; rebindIndex = -1; message = null; }
 
             var body = new Rect(rect.x + 30f, rect.y + 146f, rect.width - 60f, rect.height - 236f);
             bool changed = false;
             switch (tab)
             {
                 case 0: changed = DrawGameplay(body, game); break;
-                case 1: changed = DrawGraphics(body, game); break;
-                case 2: changed = DrawAudio(body); break;
-                case 3: changed = DrawAccessibility(body); break;
+                case 1: changed = DrawCamera(body, game); break;
+                case 2: changed = DrawGraphics(body, game); break;
+                case 3: changed = DrawAudio(body); break;
+                case 4: changed = DrawAccessibility(body); break;
                 default: DrawControls(body); break;
             }
             if (changed)
@@ -141,7 +144,7 @@ namespace Swat
 
         static string Percent(float value) { return Mathf.RoundToInt(value * 100f) + "%"; }
 
-        // ---- Gameplay: rules, assists, minimap, camera and aiming ----
+        // ---- Gameplay: rules, assists, minimap and aiming ----
 
         bool DrawGameplay(Rect body, GameManager game)
         {
@@ -168,26 +171,12 @@ namespace Swat
             changed |= Check(ref y, lx, colW, "Hit stop and last-takedown slow-mo", ref s.hitStop);
             changed |= Check(ref y, lx, colW, "Heavy weapon handling (guns turn by weight)", ref s.heavyHandling);
             changed |= Check(ref y, lx, colW, "Classic blocky characters (next mission)", ref s.classicCharacters);
-            y += 6f;
-            Section(ref y, lx, colW, "Minimap");
-            changed |= Check(ref y, lx, colW, "Show minimap", ref s.minimap);
-            changed |= Range(ref y, lx, colW, "Size", ref s.minimapScale, 0.75f, 1.5f, Percent(s.minimapScale));
-            changed |= Range(ref y, lx, colW, "Opacity", ref s.minimapOpacity, 0.3f, 1f, Percent(s.minimapOpacity));
 
             y = body.y;
-            Section(ref y, rx, colW, "Camera");
-            changed |= Range(ref y, rx, colW, "Zoom speed", ref s.zoomSpeed, 0.3f, 2f, s.zoomSpeed.ToString("0.0") + "x");
-            int preset = s.zoomPreset;
-            if (Choice(ref y, rx, colW, "Default zoom", ref preset, CameraController.PresetNames))
-            {
-                s.zoomPreset = preset;
-                if (game.CameraRig != null) game.CameraRig.SetPreset(preset, false);
-                changed = true;
-            }
-            changed |= Check(ref y, rx, colW, "Zoom out automatically outdoors", ref s.autoIndoorZoom);
-            changed |= Range(ref y, rx, colW, "Look-ahead", ref s.lookAhead, 0f, 0.5f, Percent(s.lookAhead * 2f));
-            changed |= Range(ref y, rx, colW, "Camera smoothing", ref s.cameraSmoothing, 0f, 0.4f, s.cameraSmoothing <= 0.005f ? "Off" : Percent(s.cameraSmoothing / 0.4f));
-            changed |= Check(ref y, rx, colW, "Edge scrolling", ref s.edgeScrolling);
+            Section(ref y, rx, colW, "Minimap");
+            changed |= Check(ref y, rx, colW, "Show minimap", ref s.minimap);
+            changed |= Range(ref y, rx, colW, "Size", ref s.minimapScale, 0.75f, 1.5f, Percent(s.minimapScale));
+            changed |= Range(ref y, rx, colW, "Opacity", ref s.minimapOpacity, 0.3f, 1f, Percent(s.minimapOpacity));
             y += 6f;
             Section(ref y, rx, colW, "Aiming");
             changed |= Range(ref y, rx, colW, "Mouse sensitivity", ref s.mouseSensitivity, 0.4f, 2f, s.mouseSensitivity.ToString("0.00") + "x");
@@ -209,6 +198,47 @@ namespace Swat
                 else confirmReset = true;
             }
             if (!inMenu) UITheme.Text(new Rect(lx + 356f, by, 300f, 40f), "Available from the main menu.", 14, UITheme.Faint, TextAnchor.MiddleLeft);
+            return changed;
+        }
+
+        // ---- Camera: top-down or first person, and how each behaves ----
+
+        bool DrawCamera(Rect body, GameManager game)
+        {
+            var s = SaveManager.Settings;
+            float colW = (body.width - 40f) * 0.5f;
+            float lx = body.x, rx = body.x + colW + 40f;
+            bool changed = false;
+
+            float y = body.y;
+            Section(ref y, lx, colW, "View");
+            int view = s.cameraView;
+            if (Choice(ref y, lx, colW, "Camera", ref view, ViewNames))
+            {
+                s.cameraView = view;
+                changed = true;
+                // Levels are built for one view or the other (first person has ceilings and full walls).
+                if (game.State == GameState.Paused) message = "The camera view changes from the next deployment.";
+            }
+            changed |= Range(ref y, lx, colW, "Field of view", ref s.fieldOfView, 70f, 110f, Mathf.RoundToInt(s.fieldOfView) + " degrees");
+            changed |= Check(ref y, lx, colW, "Body cam look (wide lens, grain, REC)", ref s.bodyCamLook);
+            y += 8f;
+            UITheme.Text(new Rect(lx, y, colW, 120f), "First person: the mouse looks around, right mouse aims down the sights, Ctrl + A / D peeks. Missions are built with ceilings and full-height walls for it. Field of view and the body cam look apply in first person only; screen shake (Accessibility) also sets how much the body cam moves.", 13, UITheme.Faint);
+
+            y = body.y;
+            Section(ref y, rx, colW, "Top-down camera");
+            changed |= Range(ref y, rx, colW, "Zoom speed", ref s.zoomSpeed, 0.3f, 2f, s.zoomSpeed.ToString("0.0") + "x");
+            int preset = s.zoomPreset;
+            if (Choice(ref y, rx, colW, "Default zoom", ref preset, CameraController.PresetNames))
+            {
+                s.zoomPreset = preset;
+                if (game.CameraRig != null) game.CameraRig.SetPreset(preset, false);
+                changed = true;
+            }
+            changed |= Check(ref y, rx, colW, "Zoom out automatically outdoors", ref s.autoIndoorZoom);
+            changed |= Range(ref y, rx, colW, "Look-ahead", ref s.lookAhead, 0f, 0.5f, Percent(s.lookAhead * 2f));
+            changed |= Range(ref y, rx, colW, "Camera smoothing", ref s.cameraSmoothing, 0f, 0.4f, s.cameraSmoothing <= 0.005f ? "Off" : Percent(s.cameraSmoothing / 0.4f));
+            changed |= Check(ref y, rx, colW, "Edge scrolling", ref s.edgeScrolling);
             return changed;
         }
 
@@ -442,7 +472,7 @@ namespace Swat
             changed |= Choice(ref y, lx, colW, "Screen shake", ref s.cameraShake, ShakeNames);
             changed |= Check(ref y, lx, colW, "Reduce flashes (flashbangs, alarms, bloom)", ref s.reduceFlashes);
             y += 8f;
-            UITheme.Text(new Rect(lx, y, colW, 60f), "Colorblind mode swaps red/green status colors for orange/blue and brightens warnings. Camera and controller sensitivity are under Gameplay.", 13, UITheme.Faint);
+            UITheme.Text(new Rect(lx, y, colW, 60f), "Colorblind mode swaps red/green status colors for orange/blue and brightens warnings. Mouse and controller sensitivity are under Gameplay; camera options have their own tab.", 13, UITheme.Faint);
 
             y = body.y;
             Section(ref y, rx, colW, "Crosshair");

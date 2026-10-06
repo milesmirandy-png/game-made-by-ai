@@ -354,12 +354,12 @@ namespace Swat
 
         }
 
-        // The imported soldier: torso on the model, head, arms and legs on their own pivots (where the
-        // animator turns them), recoloured from the look: uniform, vest, helmet, skin, gloves and boots.
-        static void BuildSoldier(CharacterParts parts, Appearance look, Transform m, ModelLibrary.Model model)
+        // The soldier model's colours for a look: uniform, vest, pouches, helmet, skin, gloves and boots
+        // (headset, goggles, watch and torch keep their own). Also used for the first-person arms.
+        public static System.Func<string, Color, Color> SoldierColors(Appearance look)
         {
             Color vest = look.vestOn ? look.vest : Shapes.Shade(look.shirt, 0.85f);
-            System.Func<string, Color, Color> recolor = (slot, original) =>
+            return (slot, original) =>
             {
                 switch (slot)
                 {
@@ -376,6 +376,14 @@ namespace Swat
                     default: return original; // headset, goggles, watch, torch: their own colours
                 }
             };
+        }
+
+        // The imported soldier: torso on the model, head, arms and legs on their own pivots (where the
+        // animator turns them), recoloured from the look: uniform, vest, helmet, skin, gloves and boots.
+        static void BuildSoldier(CharacterParts parts, Appearance look, Transform m, ModelLibrary.Model model)
+        {
+            Color vest = look.vestOn ? look.vest : Shapes.Shade(look.shirt, 0.85f);
+            var recolor = SoldierColors(look);
             ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor);
             parts.leftLeg = SoldierPart(model, "legL", m, recolor);
             parts.rightLeg = SoldierPart(model, "legR", m, recolor);

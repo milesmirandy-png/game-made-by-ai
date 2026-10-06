@@ -524,7 +524,9 @@ namespace Swat
         {
             Vector2 mouse = GameInput.MousePosition;
             Vector3 point;
-            if (!game.CameraRig.ScreenToGround(mouse, 0f, out point)) point = game.Player.Position;
+            // First person: whatever the crosshair is on (a door, a spot on the floor), at floor level.
+            if (ViewMode.FirstPerson) point = new Vector3(game.Player.AimPoint.x, 0f, game.Player.AimPoint.z);
+            else if (!game.CameraRig.ScreenToGround(mouse, 0f, out point)) point = game.Player.Position;
             WheelPoint = point;
             WheelDoor = AIManager.Instance.FindDoor(point, 2.5f, d => d.State != DoorState.Disabled);
             float margin = 235f * UITheme.Scale;

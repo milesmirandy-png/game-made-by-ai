@@ -119,7 +119,9 @@ namespace Swat
             var game = GameManager.Instance;
             if (game == null) return;
             bool aiming = game.State == GameState.Playing && !game.PlanningMode && !game.ConsoleOpen && game.Player != null && game.Player.IsAlive;
-            GameInput.Tick(aiming, Time.unscaledDeltaTime);
+            // In first person the cursor is freed for the radial menus and the map.
+            bool freeCursor = game.MapOpen || (SquadCommandManager.Instance != null && SquadCommandManager.Instance.WheelOpen) || (game.Player != null && game.Player.Weapons != null && game.Player.Weapons.WheelOpen);
+            GameInput.Tick(aiming, freeCursor, Time.unscaledDeltaTime);
             bool preview = game.State == GameState.OfficerSelection || game.State == GameState.Loadout;
             if (!preview) CharacterPreview.Hide();
             else CharacterPreview.Tick(Time.unscaledDeltaTime);

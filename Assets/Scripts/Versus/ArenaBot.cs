@@ -387,11 +387,12 @@ namespace Swat
             mover.SetSpeedMultiplier(1f);
         }
 
-        // Fog of war: opponents are only drawn while your team can see them.
+        // Fog of war: opponents are only drawn while your team can see them (in first person the
+        // walls hide them already, so they're always drawn; Seen still decides name tags and the map).
         public void SetSeen(bool seen)
         {
             Seen = seen;
-            visible = seen || !IsAlive;
+            visible = seen || !IsAlive || ViewMode.FirstPerson;
             Parts.SetVisible(visible);
         }
 

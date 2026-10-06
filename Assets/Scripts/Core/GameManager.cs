@@ -438,6 +438,7 @@ namespace Swat
 
         void ClearMission()
         {
+            ViewMode.Clear();
             Time.timeScale = 1f;
             failAt = -1f;
             FailReason = null;
@@ -475,6 +476,8 @@ namespace Swat
             missionRoot = new GameObject("Mission: " + mission.displayName).transform;
             // Online, every copy of the game builds the map from the same seed so the details match too.
             if (NetSession.Online) Random.InitState(plan.seed);
+            // Top-down or first person (first person builds full-height walls and ceilings).
+            ViewMode.ApplySetting();
             Level = BuildMap(mission.mapId, missionRoot);
             navMesh = NavMeshBaker.Bake(Level.root, Level.navBounds);
             AIManager.Instance.Begin(Level);

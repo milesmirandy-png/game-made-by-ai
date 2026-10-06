@@ -275,7 +275,7 @@ namespace Swat
             y += 26f;
             var uniforms = new string[Progression.UniformNames.Length];
             for (int i = 0; i < uniforms.Length; i++) uniforms[i] = Progression.UniformNames[i] + (Progression.UniformAvailable(i) ? "" : " (locked)");
-            int uniform = UITheme.Stepper(new Rect(x, y, cw, 34f), "Color", loadout.uniformIndex, uniforms);
+            int uniform = UITheme.Stepper(new Rect(x, y, cw, 34f), "Uniform", loadout.uniformIndex, uniforms);
             if (uniform != loadout.uniformIndex)
             {
                 int step = (uniform - loadout.uniformIndex + uniforms.Length) % uniforms.Length == 1 ? 1 : -1;

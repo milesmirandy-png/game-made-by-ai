@@ -78,7 +78,7 @@ namespace Swat
                 AudioManager.Play(Sound.Pump, player.Position, 0.55f, Random.Range(0.96f, 1.04f), SoundCategory.Weapons);
                 player.Animator.Fire(0.35f);
                 var cycled = Current.Data;
-                if (cycled.ejectsShells) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, cycled.category == WeaponCategory.Shotgun);
+                if (cycled.ejectsShells) WeaponEffects.EjectShell(player.GunRoot.position, player.transform.right, cycled.category == WeaponCategory.Shotgun);
             }
             bloom = Mathf.MoveTowards(bloom, 0f, Current.Data.recoilRecovery * dt);
             player.Animator.SetReload(ReloadProgress);
@@ -364,8 +364,9 @@ namespace Swat
             nextFireTime = Time.time + 1f / Mathf.Max(0.1f, data.fireRate);
             ShotsFired++;
 
-            Vector3 origin = player.ChestPosition;
-            Vector3 muzzle = player.Parts.muzzle.position;
+            Vector3 origin = player.ShotOrigin;
+            Vector3 muzzle = player.Muzzle.position;
+            bool firstPerson = player.FirstPerson;
             bool hitSomeone = false, tookDown = false;
             float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
             var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player };
@@ -376,7 +377,8 @@ namespace Swat
             if (data.blastRadius > 0f)
             {
                 // Marking grenade: flies to the first thing it meets and bursts there.
-                Vector3 landed = WeaponEffects.Trace(origin, WeaponEffects.Scatter(player.AimDirection, Spread), data.range, muzzle, data.tracerColor, data.tracerWidth);
+                Vector3 aim = firstPerson ? WeaponEffects.ScatterCone(player.ShotDirection, Spread) : WeaponEffects.Scatter(player.AimDirection, Spread);
+                Vector3 landed = WeaponEffects.Trace(origin, aim, data.range, muzzle, data.tracerColor, data.tracerWidth);
                 ends.Add(landed);
                 int tagged = WeaponEffects.Blast(landed, data.blastRadius, damage);
                 hitSomeone = tagged > 0;
@@ -385,7 +387,7 @@ namespace Swat
             }
             else for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
             {
-                Vector3 direction = WeaponEffects.Scatter(player.AimDirection, Spread);
+                Vector3 direction = firstPerson ? WeaponEffects.ScatterCone(player.ShotDirection, Spread) : WeaponEffects.Scatter(player.AimDirection, Spread);
                 var victim = WeaponEffects.Shoot(origin, direction, data.range, damage, muzzle, data.tracerColor);
                 ends.Add(WeaponEffects.LastEnd);
                 if (i == 0) LastShotEnd = origin + direction * data.range;
@@ -404,8 +406,8 @@ namespace Swat
             // Feel: the gun and body kick, the camera jolts back along the aim, flame and flash at the muzzle.
             bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
             player.Animator.Fire(Mathf.Clamp(0.45f + data.kick * 0.45f, 0.4f, 1.5f));
-            WeaponEffects.Fired(player.Parts.muzzle, data, 0.85f, weapon.NoiseRadius, NoiseKind.Gunshot);
-            if (data.ejectsShells && !data.pumpAction) WeaponEffects.EjectShell(player.Parts.gunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun);
+            WeaponEffects.Fired(player.Muzzle, data, 0.85f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            if (data.ejectsShells && !data.pumpAction) WeaponEffects.EjectShell(player.GunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun);
             if (data.pumpAction && weapon.Magazine > 0) pumpAt = Time.time + Mathf.Min(0.32f, 0.6f / Mathf.Max(0.5f, data.fireRate));
             var rig = GameManager.Instance.CameraRig;
             rig.Kick(player.AimDirection, 0.05f + data.kick * 0.05f);
@@ -481,7 +483,8 @@ namespace Swat
         // A thin laser from the gun to whatever it points at makes aiming from above easy.
         void UpdateLaser()
         {
-            if (player.IsSprinting || IsSwitching)
+            // No aim line in first person: you look down the gun.
+            if (player.IsSprinting || IsSwitching || player.FirstPerson)
             {
                 laser.gameObject.SetActive(false);
                 return;

@@ -53,7 +53,7 @@ namespace Swat
             ThreatsVisible = 0;
             nextUpdate = 0f;
             // Nobody has been seen yet (this also keeps the deployment cutscene from revealing anyone).
-            if (!SaveManager.Settings.lineOfSight) return;
+            if (!HidesUnseen) return;
             foreach (var enemy in AIManager.Instance.Enemies) enemy.SetSeen(false);
             foreach (var civilian in AIManager.Instance.Civilians) civilian.SetSeen(false);
         }
@@ -189,9 +189,13 @@ namespace Swat
             return false;
         }
 
+        // Line of sight hides people the team can't see, so walls can't be seen past from above. In
+        // first person the walls already hide them (hiding them too would only make them pop in late).
+        static bool HidesUnseen { get { return SaveManager.Settings.lineOfSight && !ViewMode.FirstPerson; } }
+
         void UpdateEnemies(GameManager game)
         {
-            bool fog = SaveManager.Settings.lineOfSight;
+            bool fog = HidesUnseen;
             int threats = 0;
             foreach (var enemy in AIManager.Instance.Enemies)
             {
@@ -214,7 +218,7 @@ namespace Swat
 
         void UpdateCivilians(GameManager game)
         {
-            bool fog = SaveManager.Settings.lineOfSight;
+            bool fog = HidesUnseen;
             foreach (var civilian in AIManager.Instance.Civilians)
             {
                 bool visible = civilian.IsAlive && !civilian.IsEvacuated && Observed(civilian.Position + Vector3.up * 1.2f);

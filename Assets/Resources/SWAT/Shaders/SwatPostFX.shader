@@ -1,11 +1,14 @@
 // Restrained post-processing for the Built-in render pipeline, applied by
 // Scripts/Core/PostEffects.cs through OnRenderImage: a cheap bloom (threshold,
 // quarter-resolution blur), color grading (exposure, contrast, saturation,
-// shadow/highlight tint) and a mild vignette. No motion blur, depth of
-// field, grain or chromatic aberration. In the pixel-art style it also draws
+// shadow/highlight tint) and a mild vignette. No motion blur or depth of
+// field. In the pixel-art style it also draws
 // one-pixel dark outlines where an object stands in front of something
 // farther away (from the depth texture) and reduces the palette with a
-// 2x2 ordered dither, so 3D models read like sprites.
+// 2x2 ordered dither, so 3D models read like sprites. In the first-person
+// body cam view it adds the look of a small wide-angle camera: barrel
+// distortion, a touch of colour fringing at the edges, grain and a heavier
+// vignette (Settings -> Camera -> Body cam look).
 Shader "Hidden/SWAT/PostFX"
 {
     Properties
@@ -34,6 +37,10 @@ Shader "Hidden/SWAT/PostFX"
     float _Levels;
     float _Outline;
     float _OutlineDepth;
+    float _BodyCam;
+    float _Barrel;
+    float _Aberration;
+    float _Grain;
 
     struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -86,8 +93,23 @@ Shader "Hidden/SWAT/PostFX"
 
     float4 fragComposite (v2f i) : SV_Target
     {
-        float4 src = tex2D(_MainTex, i.uv);
-        float2 bloomUV = i.uv;
+        float2 uv = i.uv;
+        float2 fromCentre = uv - 0.5;
+        if (_BodyCam > 0.5)
+        {
+            // Barrel distortion: the middle is magnified and the edges squeezed; the corners stay put.
+            float r2 = dot(fromCentre, fromCentre);
+            uv = 0.5 + fromCentre * (1.0 + _Barrel * r2) / (1.0 + _Barrel * 0.5);
+        }
+        float4 src = tex2D(_MainTex, uv);
+        if (_BodyCam > 0.5)
+        {
+            // Colour fringing, growing towards the edges.
+            float2 shift = fromCentre * _Aberration * dot(fromCentre, fromCentre) * 4.0;
+            src.r = tex2D(_MainTex, uv + shift).r;
+            src.b = tex2D(_MainTex, uv - shift).b;
+        }
+        float2 bloomUV = uv;
         #if UNITY_UV_STARTS_AT_TOP
         if (_MainTex_TexelSize.y < 0.0) bloomUV.y = 1.0 - bloomUV.y;
         #endif
@@ -115,6 +137,14 @@ Shader "Hidden/SWAT/PostFX"
         float2 centered = i.uv - 0.5;
         float vignette = 1.0 - _VignetteStrength * smoothstep(_VignetteSize, 1.0, length(centered) * 1.414);
         c *= vignette;
+
+        if (_BodyCam > 0.5)
+        {
+            // Sensor grain, changing every frame.
+            float2 cellUV = floor(i.uv * abs(_MainTex_TexelSize.zw)) + frac(_Time.y * 7.31) * 97.0;
+            float noise = frac(sin(dot(cellUV, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+            c += noise * _Grain;
+        }
 
         if (_PixelArt > 0.5)
         {

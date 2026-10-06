@@ -160,6 +160,15 @@ namespace Swat
             EffectsManager.Instance.Shell(gun + right * 0.08f + Vector3.up * 0.05f, right, shotgun);
         }
 
+        // First person: spread in a cone around the view direction (up and down as well as sideways).
+        public static Vector3 ScatterCone(Vector3 direction, float spreadDegrees)
+        {
+            float yaw = (Random.value + Random.value - 1f) * spreadDegrees;
+            float pitch = (Random.value + Random.value - 1f) * spreadDegrees * 0.6f;
+            var basis = Quaternion.LookRotation(direction);
+            return basis * Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
+        }
+
         // Rotates a direction by a random angle within the spread cone (flat, for top-down aiming).
         public static Vector3 Scatter(Vector3 direction, float spreadDegrees)
         {

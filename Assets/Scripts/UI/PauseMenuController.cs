@@ -43,7 +43,7 @@ namespace Swat
             y += bh + gap;
             if (UITheme.Button(new Rect(x, y, bw, bh), "Settings")) ui.Settings.Show(0);
             y += bh + gap;
-            if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(4);
+            if (UITheme.Button(new Rect(x, y, bw, bh), "Controls")) ui.Settings.Show(SettingsUI.ControlsTab);
             y += bh + gap;
             string leave = NetSession.IsHost ? "End match (everyone to the lobby)" : NetSession.IsClient ? "Leave the online game" : versus ? "Leave match" : "Quit mission";
             if (UITheme.Button(new Rect(x, y, bw, bh), confirm == "hq" ? (versus ? "Click again to leave the match" : "Click again to quit the mission") : leave, true, confirm == "hq"))

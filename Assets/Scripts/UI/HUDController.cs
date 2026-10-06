@@ -21,6 +21,10 @@ namespace Swat
             float w = UITheme.Width, h = UITheme.Height;
             var settings = SaveManager.Settings;
 
+            // First person: the scope picture when aiming a scoped rifle, and the body cam overlay.
+            if (FirstPersonRig.Scoped && player.IsAlive) DrawScope();
+            if (player.FirstPerson && settings.bodyCamLook) DrawBodyCam(game, player);
+
             // Screen effects (kept mild: no gore, just tints; "reduce flashes" softens them further).
             bool reduce = settings.reduceFlashes;
             if (player.Health.Blind > 0f) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(reduce ? 0.85f : 1f, reduce ? 0.87f : 1f, reduce ? 0.9f : 1f, player.Health.Blind * (reduce ? 0.6f : 0.92f)));
@@ -430,7 +434,8 @@ namespace Swat
             Vector3 from = player.Health.LastHitFrom - player.Position;
             from.y = 0f;
             if (from.sqrMagnitude < 0.01f) return;
-            // Screen up is world +z for this camera.
+            // Screen up is world +z from above; in first person it's the way you face.
+            if (player.FirstPerson) from = Quaternion.Inverse(player.transform.rotation) * from;
             Vector2 dir = new Vector2(from.x, -from.z).normalized;
             Vector2 side = new Vector2(-dir.y, dir.x);
             // A chevron around the screen centre pointing toward the shooter.
@@ -452,7 +457,9 @@ namespace Swat
             var weapons = player.Weapons;
             float hitAge = Time.time - weapons.LastHitTime;
             float killAge = Time.time - weapons.LastKillTime;
-            DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
+            if (player.FirstPerson && GameInput.LookMode)
+                DrawFirstPersonCrosshair(c, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
+            else DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
             if (weapons.IsReloading)
             {
                 float size = Mathf.Clamp(SaveManager.Settings.crosshairSize, 0.5f, 2f);
@@ -469,6 +476,108 @@ namespace Swat
         }
 
         const float HitMarkerTime = 0.18f, KillMarkerTime = 0.4f;
+
+        // First person: no spread cross (you look down the gun). A small dot from the hip that fades
+        // as the sights come up; hit and takedown markers as usual.
+        static void DrawFirstPersonCrosshair(Vector2 c, float hitAge, bool empty, float killAge)
+        {
+            var settings = SaveManager.Settings;
+            float size = Mathf.Clamp(settings.crosshairSize, 0.5f, 2f);
+            float opacity = Mathf.Clamp(settings.crosshairOpacity, 0.2f, 1f);
+            float hip = 1f - FirstPersonRig.AimBlend;
+            Color color = empty ? UITheme.Warn : UITheme.CrosshairColors[Mathf.Clamp(settings.crosshairColor, 0, UITheme.CrosshairColors.Length - 1)];
+            if (hip > 0.02f && !FirstPersonRig.Scoped)
+            {
+                UITheme.Dot(c + new Vector2(1f, 1f), 2f * size, new Color(0f, 0f, 0f, 0.5f * opacity * hip));
+                color.a = opacity * hip;
+                UITheme.Dot(c, 1.6f * size, color);
+            }
+            float t = Mathf.Max(1.5f, 2f * Mathf.Sqrt(size));
+            if (killAge >= 0f)
+            {
+                float k = killAge / KillMarkerTime;
+                var red = new Color(1f, 0.25f, 0.2f, (1f - k) * opacity);
+                float pop = 1f + (1f - k) * (1f - k) * 0.6f;
+                foreach (var d in Diagonals) UITheme.LineTo(c + d * 7f * size * pop, c + d * 16f * size * pop, red, t + 1f);
+                return;
+            }
+            if (hitAge < 0f || !settings.hitMarker) return;
+            float fresh = 1f - hitAge / HitMarkerTime;
+            var marker = new Color(1f, 1f, 1f, fresh * opacity);
+            foreach (var d in Diagonals) UITheme.LineTo(c + d * 5f * size, c + d * 11f * size, marker, t);
+        }
+
+        // ---- First person overlays ----
+
+        static Texture2D scopeMask;
+
+        // A round scope picture: black around a circle, fine cross hairs and a faint dark rim.
+        static void DrawScope()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (scopeMask == null) scopeMask = MakeScopeMask(256);
+            float w = UITheme.Width, h = UITheme.Height;
+            float d = h * 0.92f;
+            var rect = new Rect((w - d) * 0.5f, (h - d) * 0.5f, d, d);
+            var black = new Color(0.01f, 0.01f, 0.012f, 1f);
+            UITheme.Fill(new Rect(0f, 0f, rect.x + 1f, h), black);
+            UITheme.Fill(new Rect(rect.xMax - 1f, 0f, w - rect.xMax + 1f, h), black);
+            UITheme.Fill(new Rect(rect.x, 0f, d, rect.y + 1f), black);
+            UITheme.Fill(new Rect(rect.x, rect.yMax - 1f, d, h - rect.yMax + 1f), black);
+            var previous = GUI.color;
+            GUI.color = black;
+            GUI.DrawTexture(rect, scopeMask);
+            GUI.color = previous;
+            Vector2 c = new Vector2(w * 0.5f, h * 0.5f);
+            var line = new Color(0.02f, 0.02f, 0.02f, 0.9f);
+            float r = d * 0.5f;
+            UITheme.Fill(new Rect(c.x - r, c.y - 0.75f, r - 6f, 1.5f), line);
+            UITheme.Fill(new Rect(c.x + 6f, c.y - 0.75f, r - 6f, 1.5f), line);
+            UITheme.Fill(new Rect(c.x - 0.75f, c.y + 6f, 1.5f, r - 6f), line);
+            UITheme.Fill(new Rect(c.x - 0.75f, c.y - r, 1.5f, r - 6f), line);
+            // Thicker posts towards the edge, as on a duplex reticle.
+            UITheme.Fill(new Rect(c.x - r, c.y - 2.5f, r * 0.55f, 5f), line);
+            UITheme.Fill(new Rect(c.x + r * 0.45f, c.y - 2.5f, r * 0.55f, 5f), line);
+            UITheme.Fill(new Rect(c.x - 2.5f, c.y + r * 0.45f, 5f, r * 0.55f), line);
+            UITheme.Dot(c, 1.6f, new Color(0.9f, 0.15f, 0.1f, 0.9f));
+        }
+
+        static Texture2D MakeScopeMask(int size)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "Scope Mask" };
+            var pixels = new Color32[size * size];
+            float half = size * 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    // Clear in the middle, a soft dark rim, solid outside the circle.
+                    float a = Mathf.Clamp01((dist - 0.86f) / 0.12f);
+                    a = a * a * (3f - 2f * a);
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        // Body cam overlay: a blinking REC light, the date and time, and the unit and officer.
+        static void DrawBodyCam(GameManager game, PlayerController player)
+        {
+            float w = UITheme.Width;
+            float y = VersusMatch.Active ? 104f : 14f;
+            string stamp = System.DateTime.Now.ToString("yyyy-MM-dd  HH:mm:ss");
+            string unit = "PAPD TRU   " + player.Officer.callsign.ToUpperInvariant();
+            var rect = new Rect(w * 0.5f - 170f, y, 340f, 40f);
+            UITheme.Fill(rect, new Color(0f, 0f, 0f, 0.28f));
+            bool blink = Mathf.Repeat(Time.unscaledTime, 1.2f) < 0.8f;
+            if (blink) UITheme.Dot(new Vector2(rect.x + 16f, rect.y + 12f), 5f, new Color(0.95f, 0.12f, 0.1f, 0.95f));
+            UITheme.ShadowText(new Rect(rect.x + 26f, rect.y + 3f, 60f, 18f), "REC", 13, new Color(1f, 1f, 1f, 0.9f), TextAnchor.UpperLeft, true);
+            UITheme.ShadowText(new Rect(rect.x + 70f, rect.y + 3f, rect.width - 80f, 18f), stamp, 13, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperRight, true);
+            UITheme.ShadowText(new Rect(rect.x + 10f, rect.y + 21f, rect.width - 20f, 16f), unit, 11, new Color(1f, 1f, 1f, 0.7f), TextAnchor.UpperLeft);
+            UITheme.ShadowText(new Rect(rect.x + 10f, rect.y + 21f, rect.width - 20f, 16f), "BODY CAM", 11, new Color(1f, 1f, 1f, 0.55f), TextAnchor.UpperRight);
+        }
 
         // The crosshair itself, using the size, opacity and colour settings. hitAge < 0 means no
         // recent hit; the hit marker only shows when hit confirmation is enabled.

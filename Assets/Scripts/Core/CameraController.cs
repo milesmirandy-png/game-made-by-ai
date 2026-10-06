@@ -6,6 +6,8 @@ namespace Swat
     // team leader, leans towards the mouse cursor, zooms with the wheel
     // between configurable limits, cycles zoom presets with V and stays inside
     // the map bounds. In menus it glides between showcase shots of the HQ.
+    // With the first-person view chosen, FirstPersonRig places it at the
+    // leader's eyes while they're alive and playing.
     public class CameraController : MonoBehaviour
     {
         public static readonly string[] PresetNames = { "Close (indoor)", "Standard", "Wide (outdoor)" };
@@ -67,6 +69,7 @@ namespace Swat
 
         public void Follow(PlayerController newPlayer, Bounds limits)
         {
+            FirstPersonRig.Stop();
             showcase = false;
             player = newPlayer;
             bounds = limits;
@@ -85,6 +88,7 @@ namespace Swat
 
         public void ShowcaseShot(Vector3 position, Vector3 target, bool instant)
         {
+            FirstPersonRig.Stop();
             player = null;
             if (!showcase || instant)
             {
@@ -179,9 +183,31 @@ namespace Swat
                 SnapToPixels();
                 return;
             }
-            if (player == null) return;
+            if (player == null)
+            {
+                FirstPersonRig.Stop();
+                return;
+            }
 
             var game = GameManager.Instance;
+            // First person while you're alive and in the mission (dead, spectating or at the end: from above).
+            bool firstPerson = ViewMode.FirstPerson && player.IsAlive && SpectateTarget == null && game != null
+                && (game.State == GameState.Playing || game.State == GameState.Paused);
+            if (firstPerson)
+            {
+                FirstPersonRig.Tick(Cam, player, shake, punch);
+                shake = Mathf.MoveTowards(shake, 0f, dt * 3f);
+                punch = Mathf.MoveTowards(punch, 0f, dt * 4f);
+                // Shots and shoves kick the first-person view their own way.
+                kick = Vector3.zero;
+                PixelOffset = Vector2.zero;
+                return;
+            }
+            if (FirstPersonRig.Active)
+            {
+                FirstPersonRig.Stop();
+                Snap();
+            }
             bool live = game != null && game.AcceptsGameplayInput;
             var settings = SaveManager.Settings;
             if (live)

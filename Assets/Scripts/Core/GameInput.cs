@@ -159,6 +159,8 @@ namespace Swat
         {
             get
             {
+                // First person: the crosshair in the middle of the screen is the pointer.
+                if (LookMode) return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
                 if (UsingGamepad && padPointerValid) return padPointer;
                 if (softwareCursor) return softCursor;
                 return SystemMousePosition;
@@ -196,12 +198,42 @@ namespace Swat
             padPointerValid = true;
         }
 
-        // Called once per frame by the UI manager. "aiming" is true while the
-        // player is aiming in a mission (not in menus, planning or consoles).
+        // First person: mouse (or right stick) look, in degrees this frame, while the cursor is locked.
+        public static Vector2 LookDelta { get; private set; }
+        public static bool LookMode { get; private set; }
+
         public static void Tick(bool aiming, float dt)
+        {
+            Tick(aiming, false, dt);
+        }
+
+        // Called once per frame by the UI manager. "aiming" is true while the
+        // player is aiming in a mission (not in menus, planning or consoles);
+        // "freeCursor" while a radial menu or the map wants the pointer back.
+        public static void Tick(bool aiming, bool freeCursor, float dt)
         {
             UpdateDevice();
             if (!aiming) padPointerValid = false;
+
+            // First person: a locked, hidden cursor and mouse look.
+            bool look = aiming && !freeCursor && ViewMode.FirstPerson;
+            if (look != LookMode)
+            {
+                LookMode = look;
+                softwareCursor = false;
+                Cursor.lockState = look ? CursorLockMode.Locked : aiming ? CursorLockMode.Confined : CursorLockMode.None;
+            }
+            if (look)
+            {
+                if (Cursor.lockState != CursorLockMode.Locked) Cursor.lockState = CursorLockMode.Locked;
+                var settings = SaveManager.Settings;
+                Vector2 delta = MouseDelta * 0.07f * Mathf.Clamp(settings.mouseSensitivity, 0.1f, 5f);
+                Vector2 stick = RightStick;
+                if (stick.sqrMagnitude > 0.02f) delta += new Vector2(stick.x, stick.y) * 220f * Mathf.Clamp(settings.controllerSensitivity, 0.3f, 2f) * dt;
+                LookDelta = delta;
+                return;
+            }
+            LookDelta = Vector2.zero;
 
             // Mouse sensitivity other than 1.0 uses a locked, hidden cursor and a
             // software pointer moved by scaled mouse deltas (1.0 keeps the system cursor).

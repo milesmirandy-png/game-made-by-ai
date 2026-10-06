@@ -71,14 +71,24 @@ namespace Swat
         // ---- Muzzle flashes and hit sparks ----
 
         // A flat flame along the barrel (it reads from above) plus a bright star facing the camera.
+        // In first person the flame turns to face the camera and is smaller (it's right in front of you).
         public void MuzzleBurst(Vector3 muzzle, Vector3 forward, float size, Color color)
         {
-            forward.y = 0f;
+            var cam = GameManager.Instance != null ? GameManager.Instance.CameraRig.Cam : Camera.main;
+            bool close = FirstPersonRig.Active && cam != null;
+            if (!close) forward.y = 0f;
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
             forward.Normalize();
+            if (close) size *= 0.45f;
             float length = size * Random.Range(0.85f, 1.2f);
-            SpawnGlint(ProceduralTextures.Flame, muzzle + forward * length * 0.5f, Quaternion.LookRotation(Vector3.down, forward), new Vector3(size * 0.55f, length, 1f), color, 0.05f);
-            var cam = GameManager.Instance != null ? GameManager.Instance.CameraRig.Cam : Camera.main;
+            Vector3 middle = muzzle + forward * length * 0.5f;
+            var facing = Quaternion.LookRotation(Vector3.down, forward);
+            if (close)
+            {
+                Vector3 away = Vector3.ProjectOnPlane(middle - cam.transform.position, forward);
+                if (away.sqrMagnitude > 1e-6f) facing = Quaternion.LookRotation(away, forward);
+            }
+            SpawnGlint(ProceduralTextures.Flame, middle, facing, new Vector3(size * 0.55f, length, 1f), color, 0.05f);
             if (cam != null)
                 SpawnGlint(ProceduralTextures.Star, muzzle + forward * 0.05f, cam.transform.rotation * Quaternion.Euler(0f, 0f, Random.Range(0f, 90f)), Vector3.one * size * 0.75f, color, 0.04f);
         }

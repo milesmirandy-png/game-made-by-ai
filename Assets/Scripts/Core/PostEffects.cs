@@ -9,6 +9,8 @@ namespace Swat
     // off by the Post Processing setting, Performance Mode and low presets.
     // In the pixel-art style it always adds sprite outlines (optional) and a
     // reduced, dithered palette, even when the rest of post-processing is off.
+    // The first-person body cam lens (distortion, fringing, grain) is applied
+    // whenever that view and the Body cam look setting are on.
     // Under URP this component isn't used; UIManager draws a vignette overlay instead.
     [RequireComponent(typeof(Camera))]
     public class PostEffects : MonoBehaviour
@@ -90,7 +92,8 @@ namespace Swat
         {
             bool post = QualityManager.PostProcessingOn;
             bool pixel = QualityManager.PixelArt;
-            if (material == null || (!post && !pixel))
+            bool bodyCam = FirstPersonRig.Active && SaveManager.Settings.bodyCamLook;
+            if (material == null || (!post && !pixel && !bodyCam))
             {
                 Graphics.Blit(source, destination);
                 return;
@@ -119,6 +122,19 @@ namespace Swat
             }
             // Without post-processing the grade is neutral and only the pixel-art steps apply.
             var g = post ? grade : new Grade { exposure = 1f, contrast = 1f, saturation = 1f, vignette = 0f, vignetteSize = 1f, lift = Color.white, gain = Color.white };
+            if (bodyCam)
+            {
+                // A small wide-angle camera: darker corners, slightly flatter colour.
+                g.vignette = Mathf.Max(g.vignette, 0.45f);
+                g.vignetteSize = Mathf.Min(g.vignetteSize, 0.38f);
+                g.saturation *= 0.92f;
+            }
+            // Through a scope (or on the way to the sights) the lens straightens out.
+            float lens = bodyCam && !FirstPersonRig.Scoped ? 1f - 0.6f * FirstPersonRig.AimBlend : 0f;
+            material.SetFloat("_BodyCam", bodyCam ? 1f : 0f);
+            material.SetFloat("_Barrel", 0.24f * lens);
+            material.SetFloat("_Aberration", 0.012f * lens);
+            material.SetFloat("_Grain", bodyCam ? (pixel ? 0.025f : 0.045f) : 0f);
             material.SetFloat("_Exposure", g.exposure);
             material.SetFloat("_Contrast", g.contrast);
             material.SetFloat("_Saturation", g.saturation * (pixel ? 1.12f : 1f));
