@@ -114,7 +114,7 @@ namespace Swat
             if (game != null && game.Player != null && (game.Player.Position - point).sqrMagnitude < 15f * 15f) game.CameraRig.Shake(0.35f);
         }
 
-        // Shots that pass close to the player without hitting make a sharp whiz.
+        // Shots that pass close to the player without hitting make a sharp whiz and suppress them.
         static void NearMiss(Vector3 from, Vector3 to, IDamageable victim)
         {
             var game = GameManager.Instance;
@@ -127,7 +127,10 @@ namespace Swat
             float along = Mathf.Clamp(Vector3.Dot(player.ChestPosition - from, dir), 0f, length);
             if (along < 2f) return;
             float miss = Vector3.Distance(from + dir * along, player.ChestPosition);
-            if (miss < 1.3f) AudioManager.Play2D(Sound.Whiz, Mathf.Lerp(0.5f, 0.2f, miss / 1.3f), Random.Range(0.9f, 1.15f), SoundCategory.Weapons);
+            if (miss >= 1.3f) return;
+            AudioManager.Play2D(Sound.Whiz, Mathf.Lerp(0.5f, 0.2f, miss / 1.3f), Random.Range(0.9f, 1.15f), SoundCategory.Weapons);
+            // Being shot at rattles you: closer cracks count for more.
+            player.Suppress(Mathf.Lerp(0.35f, 0.12f, miss / 1.3f));
         }
 
         // Everything that happens at the gun when it fires: flame and star, light flash,

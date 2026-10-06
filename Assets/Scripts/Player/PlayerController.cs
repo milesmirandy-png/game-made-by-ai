@@ -73,7 +73,16 @@ namespace Swat
         public bool HasNightVision { get { return Loadout != null && Loadout.headgearIndex == (int)GearCatalog.Headgear.HelmetFull; } }
         public bool NightVision { get; private set; }
         public float GasExposure { get; private set; }   // 0..1: choking on CS gas (lingers a few seconds)
+        // 0..1: rounds cracking past close by. Your aim gets shakier and the view closes in for a
+        // couple of seconds (missions only, so firefights reward cover over trading shots in the open).
+        public float Suppression { get; private set; }
         float nextCough;
+
+        public void Suppress(float amount)
+        {
+            if (!IsAlive || VersusMatch.Active) return;
+            Suppression = Mathf.Clamp01(Suppression + amount);
+        }
 
         public void Gassed()
         {
@@ -246,6 +255,7 @@ namespace Swat
                 if (IsSliding) EndSlide();
             }
             GasExposure = Mathf.MoveTowards(GasExposure, 0f, dt * 0.35f);
+            Suppression = Mathf.MoveTowards(Suppression, 0f, dt * (IsAlive ? 0.45f : 5f));
             if (!IsAlive) NightVision = false;
             UpdateLean(dt, active);
             Weapons.Tick(dt, active);

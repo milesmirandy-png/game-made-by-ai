@@ -27,6 +27,8 @@ namespace Swat
             if (player.FirstPerson && player.HasGasMask && player.IsAlive && !FirstPersonRig.Scoped) DrawMaskRim();
             // Choking on CS gas: watery, yellowed edges.
             if (player.GasExposure > 0.01f) DrawGas(player.GasExposure);
+            // Under fire: the edges of the view darken (tunnel vision).
+            if (player.Suppression > 0.01f) DrawSuppression(player.Suppression);
 
             // First person: the scope picture when aiming a scoped rifle, and the body cam overlay.
             if (FirstPersonRig.Scoped && player.IsAlive) DrawScope();
@@ -614,6 +616,16 @@ namespace Swat
             UITheme.Shade(new Rect(0f, h - edge, w, edge), tint, false);
             UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.85f, 0.82f, 0.6f, amount * 0.12f));
             if (amount > 0.5f) UITheme.ShadowText(new Rect(0f, h * 0.3f, w, 30f), "CS GAS - no mask", 18, new Color(1f, 0.9f, 0.4f, amount), TextAnchor.MiddleCenter, true);
+        }
+
+        static void DrawSuppression(float amount)
+        {
+            float w = UITheme.Width, h = UITheme.Height;
+            var tint = new Color(0f, 0f, 0f, Mathf.Clamp01(amount) * 0.55f);
+            float edge = Mathf.Min(w, h) * 0.28f;
+            UITheme.Shade(new Rect(0f, 0f, w, edge), tint, true);
+            UITheme.Shade(new Rect(0f, h - edge, w, edge), tint, false);
+            if (amount > 0.6f) UITheme.ShadowText(new Rect(0f, h * 0.72f, w, 24f), "SUPPRESSED", 15, new Color(0.9f, 0.9f, 0.9f, (amount - 0.6f) * 2f), TextAnchor.MiddleCenter, true);
         }
 
         static Texture2D MakeScopeMask(int size)
