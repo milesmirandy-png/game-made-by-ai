@@ -14,8 +14,8 @@ namespace Swat
             var armor = loadout != null ? GameData.Armor(loadout.armorId) : null;
             Color uniform = Progression.Uniform(loadout != null ? loadout.uniformIndex : 0);
             Color skin = CharacterFactory.Skin(officer.skinTone + officer.id.Length);
-            Color vest = armor != null ? armor.color : new Color(0.1f, 0.1f, 0.12f);
-            bool helmet = armor == null || armor.helmet;
+            Color vest = armor != null && armor.tier > 0 ? armor.color : uniform;
+            bool helmet = loadout == null || GearCatalog.HasHelmet(loadout.headgearIndex);
 
             float w = rect.width, h = rect.height;
             float cx = rect.x + w * 0.5f;

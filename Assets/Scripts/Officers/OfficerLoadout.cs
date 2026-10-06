@@ -30,7 +30,14 @@ namespace Swat
         public string opticId;
         public string muzzleId;
         public string stockId;
+        public string underbarrelId;
+        public string magazineId;
         public int uniformIndex;
+        // Looks only (see CharacterFactory.Gear): headgear, face, patch design and patch colour.
+        public int headgearIndex;
+        public int faceIndex;
+        public int patchIndex;
+        public int patchColorIndex;
         public List<EquipmentCount> equipment = new List<EquipmentCount>();
 
         public OfficerLoadout Clone()
@@ -111,6 +118,12 @@ namespace Swat
             loadout.opticId = ValidAttachment(loadout.opticId, AttachmentSlot.Optic);
             loadout.muzzleId = ValidAttachment(loadout.muzzleId, AttachmentSlot.Muzzle);
             loadout.stockId = ValidAttachment(loadout.stockId, AttachmentSlot.Stock);
+            loadout.underbarrelId = ValidAttachment(loadout.underbarrelId, AttachmentSlot.Underbarrel);
+            loadout.magazineId = ValidAttachment(loadout.magazineId, AttachmentSlot.Magazine);
+            loadout.headgearIndex = Math.Max(0, Math.Min(loadout.headgearIndex, GearCatalog.HeadgearNames.Length - 1));
+            loadout.faceIndex = Math.Max(0, Math.Min(loadout.faceIndex, GearCatalog.FaceNames.Length - 1));
+            loadout.patchIndex = Math.Max(0, Math.Min(loadout.patchIndex, GearCatalog.PatchNames.Length - 1));
+            loadout.patchColorIndex = Math.Max(0, Math.Min(loadout.patchColorIndex, GearCatalog.PatchColorNames.Length - 1));
             for (int i = loadout.equipment.Count - 1; i >= 0; i--)
             {
                 var item = GameData.Equipment(loadout.equipment[i].id);

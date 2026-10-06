@@ -41,6 +41,7 @@ namespace Swat
 
         static readonly Dictionary<string, Model> cache = new Dictionary<string, Model>();
         static readonly HashSet<string> missing = new HashSet<string>();
+        static readonly Dictionary<string, KeyValuePair<Mesh, int[]>> trimmed = new Dictionary<string, KeyValuePair<Mesh, int[]>>();
 
         // The model, or null if its file isn't there (callers fall back to the built-in shapes).
         public static Model Get(string id)
@@ -150,17 +151,28 @@ namespace Swat
         // by its name; return the colour you're given to keep it).
         public static GameObject Spawn(Model model, string partName, Transform parent, Vector3 localPosition, System.Func<string, Color, Color> recolor = null)
         {
+            return Spawn(model, partName, parent, localPosition, recolor, null);
+        }
+
+        // hidden: colour slots to leave out (the soldier's helmet, goggles, vest...), so one model
+        // covers many kits. The trimmed mesh is made once per combination.
+        public static GameObject Spawn(Model model, string partName, Transform parent, Vector3 localPosition, System.Func<string, Color, Color> recolor, ICollection<string> hidden)
+        {
             var part = model != null ? model.Find(partName) : null;
             if (part == null || part.mesh == null) return null;
+            Mesh mesh = part.mesh;
+            int[] slots = part.slots;
+            if (hidden != null && hidden.Count > 0) Trim(model, part, hidden, out mesh, out slots);
+            if (slots.Length == 0) return null;
             var go = new GameObject(model.id + " " + partName);
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
-            go.AddComponent<MeshFilter>().sharedMesh = part.mesh;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
-            var materials = new Material[part.slots.Length];
-            for (int i = 0; i < part.slots.Length; i++)
+            var materials = new Material[slots.Length];
+            for (int i = 0; i < slots.Length; i++)
             {
-                int slot = part.slots[i];
+                int slot = slots[i];
                 Color color = model.slotColors[slot];
                 if (recolor != null) color = recolor(model.slotNames[slot], color);
                 materials[i] = Shapes.Mat(color);
@@ -170,11 +182,48 @@ namespace Swat
             return go;
         }
 
+        static void Trim(Model model, Part part, ICollection<string> hidden, out Mesh mesh, out int[] slots)
+        {
+            var keep = new List<int>();
+            var key = new System.Text.StringBuilder(model.id).Append('/').Append(part.name);
+            for (int i = 0; i < part.slots.Length; i++)
+            {
+                if (hidden.Contains(model.slotNames[part.slots[i]])) key.Append('-').Append(i);
+                else keep.Add(i);
+            }
+            if (keep.Count == part.slots.Length)
+            {
+                mesh = part.mesh;
+                slots = part.slots;
+                return;
+            }
+            KeyValuePair<Mesh, int[]> made;
+            if (!trimmed.TryGetValue(key.ToString(), out made) || made.Key == null)
+            {
+                var copy = new Mesh { name = part.mesh.name + " (trimmed)" };
+                copy.vertices = part.mesh.vertices;
+                copy.normals = part.mesh.normals;
+                copy.subMeshCount = keep.Count;
+                var kept = new int[keep.Count];
+                for (int i = 0; i < keep.Count; i++)
+                {
+                    copy.SetTriangles(part.mesh.GetTriangles(keep[i]), i);
+                    kept[i] = part.slots[keep[i]];
+                }
+                copy.RecalculateBounds();
+                made = new KeyValuePair<Mesh, int[]>(copy, kept);
+                trimmed[key.ToString()] = made;
+            }
+            mesh = made.Key;
+            slots = made.Value;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             cache.Clear();
             missing.Clear();
+            trimmed.Clear();
         }
     }
 }

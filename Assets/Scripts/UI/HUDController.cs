@@ -215,7 +215,7 @@ namespace Swat
             UITheme.Text(new Rect(x + cw - 44f, rect.y + 50f, 44f, 20f), Mathf.CeilToInt(health.Current).ToString(), 15, UITheme.TextColor, TextAnchor.MiddleRight, true);
             UITheme.Text(new Rect(x, rect.y + 74f, 70f, 18f), "ARMOR", 12, UITheme.Dim, TextAnchor.MiddleLeft, true);
             UITheme.Bar(new Rect(x + 72f, rect.y + 78f, cw - 120f, 8f), health.ArmorCondition, UITheme.Accent);
-            UITheme.Text(new Rect(x + cw - 44f, rect.y + 72f, 44f, 20f), health.Armor != null ? Mathf.RoundToInt(health.ArmorCondition * 100f) + "%" : "-", 13, UITheme.Dim, TextAnchor.MiddleRight);
+            UITheme.Text(new Rect(x + cw - 44f, rect.y + 72f, 44f, 20f), health.Armor != null && health.Armor.durability > 0f ? Mathf.RoundToInt(health.ArmorCondition * 100f) + "%" : "-", 13, UITheme.Dim, TextAnchor.MiddleRight);
             UITheme.Text(new Rect(x, rect.y + 94f, 70f, 18f), "STAMINA", 12, UITheme.Dim, TextAnchor.MiddleLeft, true);
             UITheme.Bar(new Rect(x + 72f, rect.y + 99f, cw - 120f, 6f), player.StaminaFraction, new Color(0.75f, 0.8f, 0.9f));
             string ability = player.Officer.abilityName + " [" + UITheme.KeyFor(InputAction.Ability) + "]";
@@ -238,7 +238,7 @@ namespace Swat
             string mode = weapon.ModeName;
             if (weapon.Data.lessLethal) mode += "  LESS-LETHAL";
             UITheme.Text(new Rect(rect.x + 144f, rect.y + 32f, 250f, 18f), mode + (weapons.IsReloading ? "   RELOADING" : weapons.IsSwitching ? "   SWITCHING" : ""), 13, weapons.IsReloading ? UITheme.Warn : UITheme.Dim);
-            Color ammoColor = weapon.Magazine == 0 ? UITheme.Bad : weapon.Magazine <= weapon.Data.magazineSize / 4 ? UITheme.Warn : UITheme.TextColor;
+            Color ammoColor = weapon.Magazine == 0 ? UITheme.Bad : weapon.Magazine <= weapon.MagazineSize / 4 ? UITheme.Warn : UITheme.TextColor;
             UITheme.Text(new Rect(rect.x + 144f, rect.y + 46f, 120f, 40f), weapon.Magazine.ToString(), 34, ammoColor, TextAnchor.UpperLeft, true);
             UITheme.Text(new Rect(rect.x + 220f, rect.y + 60f, 160f, 24f), "/ " + weapon.Reserve, 20, UITheme.Dim);
             if (weapons.IsReloading) UITheme.Bar(new Rect(rect.x + 144f, rect.y + 88f, 240f, 4f), weapons.ReloadProgress, UITheme.Warn);

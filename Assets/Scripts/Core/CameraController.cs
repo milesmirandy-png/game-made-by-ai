@@ -229,7 +229,7 @@ namespace Swat
                 Vector3 ahead = player.AimPoint - player.Position;
                 ahead.y = 0f;
                 // Marksman weapons let the view reach further while steady aiming.
-                float reach = player.IsSteadyAiming && player.Weapons != null ? player.Weapons.Current.Data.steadyLookAhead : 0f;
+                float reach = player.IsSteadyAiming && player.Weapons != null ? player.Weapons.Current.LookAhead : 0f;
                 float factor = Mathf.Clamp(settings.lookAhead, 0f, 0.5f) + (reach > 0f ? 0.3f : 0f);
                 desired += Vector3.ClampMagnitude(ahead * factor, maxLookAhead + reach);
                 // Peeking slides the view the way you lean, to show what's round the corner.

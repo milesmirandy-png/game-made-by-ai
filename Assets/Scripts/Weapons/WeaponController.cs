@@ -139,7 +139,7 @@ namespace Swat
             spin = 0f;
             pumpAt = -1f;
             switchEnd = Time.time + Current.Data.switchTime;
-            lowAmmoWarned = Current.Magazine <= Current.Data.magazineSize / 4;
+            lowAmmoWarned = Current.Magazine <= Current.MagazineSize / 4;
             ApplyWeaponModel();
             AudioManager.Play(Sound.WeaponRaise, player.Position, 0.45f, 1f, SoundCategory.Weapons);
             AudioManager.Play(Sound.Equip, player.Position, 0.35f);
@@ -315,7 +315,7 @@ namespace Swat
         {
             // Reloading from empty takes a little longer (and ends with a charging handle).
             reloadFromEmpty = Current.Magazine == 0;
-            reloadDuration = Current.Data.reloadTime * (reloadFromEmpty ? 1.15f : 1f);
+            reloadDuration = Current.ReloadTime * (reloadFromEmpty ? 1.15f : 1f);
             reloadEnd = Time.time + reloadDuration;
             burstLeft = 0;
             pumpAt = -1f;
@@ -406,7 +406,7 @@ namespace Swat
             // Feel: the gun and body kick, the camera jolts back along the aim, flame and flash at the muzzle.
             bloom = Mathf.Min(bloom + weapon.Recoil, weapon.Recoil * 6f + 4f);
             player.Animator.Fire(Mathf.Clamp(0.45f + data.kick * 0.45f, 0.4f, 1.5f));
-            WeaponEffects.Fired(player.Muzzle, data, 0.85f, weapon.NoiseRadius, NoiseKind.Gunshot);
+            WeaponEffects.Fired(player.Muzzle, data, 0.85f, weapon.NoiseRadius, NoiseKind.Gunshot, 1f, weapon.FlashMultiplier);
             if (data.ejectsShells && !data.pumpAction) WeaponEffects.EjectShell(player.GunRoot.position, player.transform.right, data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun);
             if (data.pumpAction && weapon.Magazine > 0) pumpAt = Time.time + Mathf.Min(0.32f, 0.6f / Mathf.Max(0.5f, data.fireRate));
             var rig = GameManager.Instance.CameraRig;
@@ -439,7 +439,7 @@ namespace Swat
         void AmmoFeedback(Weapon weapon)
         {
             var settings = SaveManager.Settings;
-            if (!lowAmmoWarned && weapon.Magazine > 0 && weapon.Magazine <= weapon.Data.magazineSize / 4)
+            if (!lowAmmoWarned && weapon.Magazine > 0 && weapon.Magazine <= weapon.MagazineSize / 4)
             {
                 lowAmmoWarned = true;
                 AudioManager.Play2D(Sound.Empty, 0.25f, 1.4f, SoundCategory.Weapons);
@@ -504,7 +504,8 @@ namespace Swat
             }
             laser.gameObject.SetActive(true);
             laser.SetPositionAndRotation(start + delta * 0.5f, Quaternion.LookRotation(delta));
-            float width = player.IsSteadyAiming ? laserWidth * 1.6f : laserWidth;
+            // A laser module makes the line bolder.
+            float width = (player.IsSteadyAiming ? laserWidth * 1.6f : laserWidth) * (Current.HasLaser ? 1.8f : 1f);
             laser.localScale = new Vector3(width, width, delta.magnitude);
         }
     }

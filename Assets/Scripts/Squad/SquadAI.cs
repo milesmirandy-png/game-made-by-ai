@@ -211,7 +211,7 @@ namespace Swat
 
             Pose pose = taskTimer > 0f ? Pose.Treating : Health.Bracing ? Pose.Shielding : Pose.Aim;
             body.Animator.SetPose(pose);
-            body.Animator.SetReload(IsReloading ? 1f - (reloadEnd - Time.time) / Inventory.Current.Data.reloadTime : 0f);
+            body.Animator.SetReload(IsReloading ? 1f - (reloadEnd - Time.time) / Inventory.Current.ReloadTime : 0f);
             body.Animator.Tick(dt, mover.Speed, mover.IsRunning);
         }
 
@@ -415,7 +415,7 @@ namespace Swat
 
         void StartReload()
         {
-            reloadEnd = Time.time + Inventory.Current.Data.reloadTime;
+            reloadEnd = Time.time + Inventory.Current.ReloadTime;
             AudioManager.Play(Sound.Reload, transform.position, 0.6f, 1f, SoundCategory.Weapons);
         }
 

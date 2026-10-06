@@ -38,7 +38,8 @@ namespace Swat
         static WeaponData builtWeapon;
         static bool builtShield;
         static float front, sightHeight, scopeZoom = 1f;
-        static bool pistol, scoped;
+        static bool pistol, scoped, throughOptic;
+        static Transform laserDot;
         static Vector3 support;
 
         static float eyeHeight, bobPhase, bobAmount, lastYaw, lastPitch, sprintBlend, wallPull, braceBlend;
@@ -59,6 +60,7 @@ namespace Swat
             player = null;
             cam = null;
             viewRoot = gunPivot = leftFore = rightFore = shieldPivot = null;
+            laserDot = null;
             Muzzle = Gun = null;
             builtWeapon = null;
             hidden.Clear();
@@ -90,7 +92,8 @@ namespace Swat
             bool switching = Time.time - drawStart < drawTime;
             bool reloading = weapons != null && weapons.IsReloading;
             bool aimingNow = player.IsSteadyAiming && !player.IsSprinting && !reloading && !switching && wallPull < 0.5f;
-            AimBlend = Mathf.MoveTowards(AimBlend, aimingNow ? 1f : 0f, dt / Mathf.Lerp(0.32f, 0.16f, light));
+            float aimSpeed = weapons != null && weapons.Current != null ? weapons.Current.AimSpeed : 1f;
+            AimBlend = Mathf.MoveTowards(AimBlend, aimingNow ? 1f : 0f, dt * aimSpeed / Mathf.Lerp(0.32f, 0.16f, light));
             Scoped = scoped && AimBlend > 0.85f;
             sprintBlend = Mathf.MoveTowards(sprintBlend, player.IsSprinting ? 1f : 0f, dt * 5f);
             braceBlend = Mathf.MoveTowards(braceBlend, player.Health.Bracing ? 1f : 0f, dt * 4f);
@@ -181,6 +184,7 @@ namespace Swat
 
             PoseGun(weapons, dt, light, bobScale, t);
             PoseShield();
+            PlaceLaserDot(weapons, position);
             if (flashlight != null && Gun != null)
             {
                 flashlight.transform.position = Gun.TransformPoint(new Vector3(0.04f, -0.02f, front * 0.6f));
@@ -193,7 +197,8 @@ namespace Swat
             if (gunPivot == null) return;
             bool shield = builtShield;
             Vector3 hip = shield ? new Vector3(0.16f, -0.17f, 0.38f) : pistol ? new Vector3(0.1f, -0.12f, 0.33f) : new Vector3(0.14f, -0.15f, 0.31f);
-            Vector3 ads = new Vector3(0f, -(sightHeight + 0.012f), pistol ? 0.34f : 0.2f);
+            // Iron sights: just over the top of the gun. An optic: its reticle on the screen centre.
+            Vector3 ads = new Vector3(0f, -(sightHeight + (throughOptic ? 0f : 0.012f)), pistol ? 0.34f : 0.2f);
             Vector3 position = Vector3.Lerp(hip, ads, AimBlend);
             Vector3 angles = Vector3.zero;
             if (shield)
@@ -260,6 +265,26 @@ namespace Swat
                 }
                 PlaceForearm(leftFore, leftRest, target, pistol ? new Vector3(-0.45f, -0.4f, -1f) : new Vector3(-0.45f, -0.5f, -0.9f));
             }
+        }
+
+        // Laser module: a red dot where your shots go, on whatever the view centre is on.
+        static void PlaceLaserDot(WeaponController weapons, Vector3 eye)
+        {
+            bool show = weapons != null && weapons.Current != null && weapons.Current.HasLaser && !player.IsSprinting && !Scoped && wallPull < 0.5f
+                && Time.time - drawStart >= drawTime && gunPivot != null && gunPivot.gameObject.activeSelf;
+            if (show && laserDot == null)
+            {
+                laserDot = Shapes.Make(PrimitiveType.Sphere, "Laser Dot", viewRoot, Vector3.zero, Vector3.one * 0.02f, new Color(1f, 0.1f, 0.06f), false, 3f).transform;
+                laserDot.SetParent(null, true);
+            }
+            if (laserDot == null) return;
+            if (laserDot.gameObject.activeSelf != show) laserDot.gameObject.SetActive(show);
+            if (!show) return;
+            Vector3 point = player.AimPoint;
+            float distance = Vector3.Distance(eye, point);
+            // Sit just off the surface, a little bigger with distance so it stays visible.
+            laserDot.position = point - player.LookDirection * 0.02f;
+            laserDot.localScale = Vector3.one * Mathf.Clamp(0.012f + distance * 0.0035f, 0.012f, 0.06f);
         }
 
         static void PoseShield()
@@ -332,6 +357,8 @@ namespace Swat
             }
             flashlight = null;
             if (viewRoot != null) Object.Destroy(viewRoot.gameObject);
+            if (laserDot != null) Object.Destroy(laserDot.gameObject);
+            laserDot = null;
             viewRoot = gunPivot = leftFore = rightFore = shieldPivot = null;
             Muzzle = Gun = null;
             builtWeapon = null;
@@ -359,11 +386,14 @@ namespace Swat
             {
                 gunPivot = new GameObject("View Gun").transform;
                 gunPivot.SetParent(viewRoot, false);
-                front = WeaponModels.Build(data, gunPivot, player.Loadout);
+                WeaponModels.GunInfo info;
+                front = WeaponModels.Build(data, gunPivot, player.Loadout, null, out info);
                 pistol = data.isSidearm || front < 0.35f;
-                scoped = data.steadyLookAhead > 0f;
-                scopeZoom = 1f / (1f + data.steadyLookAhead * 0.22f);
-                sightHeight = TopOf(gunPivot);
+                // Marksman rifles have their own scope; a magnified optic does the same for any gun.
+                scoped = data.steadyLookAhead > 0f || info.zoom > 1f;
+                scopeZoom = info.zoom > 1f ? 1f / info.zoom : 1f / (1f + data.steadyLookAhead * 0.22f);
+                throughOptic = info.hasSight;
+                sightHeight = info.hasSight ? info.sightY : TopOf(gunPivot);
                 string imported = SaveManager.Settings.classicCharacters ? null : WeaponModels.ImportedModel(data.id);
                 var model = ModelLibrary.Get(imported);
                 var point = model != null ? model.Find("muzzle") : null;

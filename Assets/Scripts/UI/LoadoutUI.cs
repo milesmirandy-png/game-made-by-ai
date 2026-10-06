@@ -3,14 +3,14 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Loadout for each deploying officer: primary, sidearm, armor, shield,
-    // attachments, tactical equipment (limited by capacity) and uniform
-    // color. Changes are validated and saved immediately. The officer is
-    // previewed in 3D in the HQ armory.
+    // Loadout for each deploying officer: primary, sidearm, attachments, armor,
+    // shield, tactical equipment (limited by capacity) and looks (uniform,
+    // headgear, face, patch). Changes are validated and saved immediately.
+    // The officer is previewed in 3D in the HQ armory.
     public class LoadoutUI
     {
-        static readonly AttachmentSlot[] Slots = { AttachmentSlot.Light, AttachmentSlot.Optic, AttachmentSlot.Muzzle, AttachmentSlot.Stock };
-        int tab, page;   // page: 0 weapons, 1 armor and equipment
+        static readonly AttachmentSlot[] Slots = { AttachmentSlot.Optic, AttachmentSlot.Muzzle, AttachmentSlot.Underbarrel, AttachmentSlot.Light, AttachmentSlot.Magazine, AttachmentSlot.Stock };
+        int tab, page;   // page: 0 weapons, 1 armor and equipment, 2 looks
         WeaponData hovered;
 
         public void Draw(GameManager game)
@@ -99,11 +99,13 @@ namespace Swat
             bool changed = false;
             float x = rect.x + 20f, cw = rect.width - 40f, y = rect.y + 14f;
             UITheme.Text(new Rect(x, y, cw * 0.5f, 24f), officer.displayName + "  -  " + UITheme.RoleName(officer.role), 18, UITheme.TextColor, TextAnchor.UpperLeft, true);
-            // The arsenal no longer fits on one page with the gear, so weapons and gear have their own tabs.
-            float pw = 150f;
-            if (UITheme.Button(new Rect(rect.xMax - 20f - pw * 2f - 6f, y - 4f, pw, 32f), "Weapons", true, page == 0, 15)) page = 0;
-            if (UITheme.Button(new Rect(rect.xMax - 20f - pw, y - 4f, pw, 32f), "Armor & gear", true, page == 1, 15)) page = 1;
+            // The arsenal no longer fits on one page with the gear, so weapons, gear and looks have their own tabs.
+            float pw = 120f;
+            if (UITheme.Button(new Rect(rect.xMax - 20f - pw * 3f - 12f, y - 4f, pw, 32f), "Weapons", true, page == 0, 15)) page = 0;
+            if (UITheme.Button(new Rect(rect.xMax - 20f - pw * 2f - 6f, y - 4f, pw, 32f), "Armor & gear", true, page == 1, 15)) page = 1;
+            if (UITheme.Button(new Rect(rect.xMax - 20f - pw, y - 4f, pw, 32f), "Look", true, page == 2, 15)) page = 2;
             y += 36f;
+            if (page == 2) return DrawLooks(ref y, x, cw, rect, loadout);
             if (page == 0)
             {
                 Section(ref y, x, cw, loadout.useShield ? "PRIMARY WEAPON (not usable with the shield)" : "PRIMARY WEAPON");
@@ -138,7 +140,9 @@ namespace Swat
             var current = GameData.Armor(loadout.armorId);
             if (current != null)
                 UITheme.Text(new Rect(x, y, cw, 20f), "Protection " + Mathf.RoundToInt(current.damageReduction * 100f) + "%   Speed " + Mathf.RoundToInt(current.speedMultiplier * 100f) + "%   Capacity "
-                    + (current.capacityBonus >= 0 ? "+" : "") + current.capacityBonus + "   " + (current.helmet ? "Helmet" : "No helmet"), 14, UITheme.Dim);
+                    + (current.capacityBonus >= 0 ? "+" : "") + current.capacityBonus, 14, UITheme.Dim);
+            if (current != null) UITheme.Text(new Rect(x, y + 20f, cw, 20f), current.description, 13, UITheme.Faint);
+            y += 20f;
             y += 24f;
             if (officer.role == OfficerRole.Shield)
             {
@@ -232,8 +236,8 @@ namespace Swat
                 var preview = new Weapon(weapon, weapon == GameData.Weapon(loadout.primaryId) ? loadout : null);
                 Stat(ref y, x, cw, "Damage", weapon.damage * Mathf.Max(1, weapon.pellets) / 120f, weapon.pellets > 1 ? weapon.pellets + " x " + weapon.damage.ToString("0") : weapon.damage.ToString("0"));
                 Stat(ref y, x, cw, "Fire rate", weapon.fireRate / 15f, weapon.fireRate.ToString("0.0") + "/s");
-                Stat(ref y, x, cw, "Magazine", weapon.magazineSize / 40f, weapon.magazineSize + " + " + weapon.startingReserve);
-                Stat(ref y, x, cw, "Reload speed", Mathf.InverseLerp(3.5f, 1f, weapon.reloadTime), weapon.reloadTime.ToString("0.0") + "s");
+                Stat(ref y, x, cw, "Magazine", preview.MagazineSize / 40f, preview.MagazineSize + " + " + weapon.startingReserve);
+                Stat(ref y, x, cw, "Reload speed", Mathf.InverseLerp(3.5f, 1f, preview.ReloadTime), preview.ReloadTime.ToString("0.0") + "s");
                 Stat(ref y, x, cw, "Range", weapon.range / 50f, weapon.range.ToString("0") + "m");
                 Stat(ref y, x, cw, "Accuracy", Mathf.InverseLerp(8f, 0.5f, preview.Spread), (10f - preview.Spread).ToString("0.0"));
                 Stat(ref y, x, cw, "Recoil control", Mathf.InverseLerp(2f, 0.2f, preview.Recoil), (10f - preview.Recoil * 4f).ToString("0.0"));
@@ -246,6 +250,7 @@ namespace Swat
 
             UITheme.Text(new Rect(x, y, cw, 22f), "ATTACHMENTS (primary weapon)", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
             y += 26f;
+            string hint = null;
             foreach (var slot in Slots)
             {
                 var options = new List<AttachmentData> { null };
@@ -256,7 +261,9 @@ namespace Swat
                 var names = new string[options.Count];
                 for (int i = 0; i < options.Count; i++)
                     names[i] = options[i] == null ? "None" : options[i].displayName + (Progression.IsAvailable(options[i]) ? "" : " (locked)");
-                int next = UITheme.Stepper(new Rect(x, y, cw, 34f), slot.ToString(), index, names);
+                var row = new Rect(x, y, cw, 34f);
+                int next = UITheme.Stepper(row, SlotName(slot), index, names);
+                if (UITheme.Hover(row)) hint = options[index] != null ? options[index].description : "Nothing fitted.";
                 if (next != index)
                 {
                     // Skip locked options in the direction of travel.
@@ -268,11 +275,26 @@ namespace Swat
                 }
                 y += 38f;
             }
-            if (loadout.useShield) UITheme.Text(new Rect(x, y, cw, 20f), "Attachments apply to the primary weapon, which stays in the van while using the shield.", 13, UITheme.Faint);
-            y += 26f;
+            string note = hint ?? (loadout.useShield ? "Attachments apply to the primary weapon, which stays in the van while using the shield." : "Point at an attachment to see what it does.");
+            UITheme.Text(new Rect(x, y, cw, 36f), note, 13, hint != null ? UITheme.Dim : UITheme.Faint);
+            return changed;
+        }
 
-            UITheme.Text(new Rect(x, y, cw, 22f), "UNIFORM", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
-            y += 26f;
+        static string SlotName(AttachmentSlot slot)
+        {
+            switch (slot)
+            {
+                case AttachmentSlot.Underbarrel: return "Grip / laser";
+                default: return slot.ToString();
+            }
+        }
+
+        // ---- Looks: uniform, headgear, face and a patch ----
+
+        bool DrawLooks(ref float y, float x, float cw, Rect rect, OfficerLoadout loadout)
+        {
+            bool changed = false;
+            Section(ref y, x, cw, "UNIFORM");
             var uniforms = new string[Progression.UniformNames.Length];
             for (int i = 0; i < uniforms.Length; i++) uniforms[i] = Progression.UniformNames[i] + (Progression.UniformAvailable(i) ? "" : " (locked)");
             int uniform = UITheme.Stepper(new Rect(x, y, cw, 34f), "Uniform", loadout.uniformIndex, uniforms);
@@ -285,7 +307,42 @@ namespace Swat
                 changed = true;
             }
             UITheme.Fill(new Rect(x + cw * 0.38f + 40f, y + 36f, cw * 0.62f - 80f, 6f), Progression.Uniform(loadout.uniformIndex));
+            y += 50f;
+
+            Section(ref y, x, cw, "HEAD AND FACE");
+            changed |= Pick(ref y, x, cw, "Headgear", ref loadout.headgearIndex, GearCatalog.HeadgearNames);
+            changed |= Pick(ref y, x, cw, "Face", ref loadout.faceIndex, GearCatalog.FaceNames);
+            y += 8f;
+
+            Section(ref y, x, cw, "PATCH (left shoulder and chest)");
+            changed |= Pick(ref y, x, cw, "Design", ref loadout.patchIndex, GearCatalog.PatchNames);
+            changed |= Pick(ref y, x, cw, "Colour", ref loadout.patchColorIndex, GearCatalog.PatchColorNames);
+            UITheme.Fill(new Rect(x + cw * 0.38f + 40f, y - 2f, cw * 0.62f - 80f, 6f), GearCatalog.PatchColor(loadout.patchColorIndex));
+            y += 16f;
+
+            Section(ref y, x, cw, "VEST");
+            var armor = GameData.Armor(loadout.armorId);
+            string vest;
+            switch (GearCatalog.StyleFor(armor))
+            {
+                case ArmorStyle.None: vest = "No armor: barebones, just a belt and kneepads."; break;
+                case ArmorStyle.Light: vest = "Light vest: a slick plate carrier, no pouches."; break;
+                case ArmorStyle.Heavy: vest = "Heavy armor: plates, pouches, shoulder guards, collar and groin protector."; break;
+                default: vest = "Standard plate carrier with pouches and a pack."; break;
+            }
+            UITheme.Text(new Rect(x, y, cw, 40f), vest + " The vest follows the armor you pick under Armor & gear.", 14, UITheme.Dim);
+            y += 48f;
+            UITheme.Text(new Rect(x, y, cw, 60f), "Looks only: headgear, face and patches don't change protection, which comes from the armor. The right shoulder keeps the officer's role colour so the squad stays easy to tell apart.", 13, UITheme.Faint);
             return changed;
+        }
+
+        static bool Pick(ref float y, float x, float cw, string label, ref int value, string[] options)
+        {
+            int next = UITheme.Stepper(new Rect(x, y, cw, 34f), label, Mathf.Clamp(value, 0, options.Length - 1), options);
+            y += 38f;
+            if (next == value) return false;
+            value = next;
+            return true;
         }
 
         static void Stat(ref float y, float x, float w, string label, float fraction, string value)

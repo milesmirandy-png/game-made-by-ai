@@ -104,7 +104,7 @@ namespace Swat
             if (reloadEnd > 0f && Time.time >= reloadEnd)
             {
                 reloadEnd = 0f;
-                Gun.Magazine = Gun.Data.magazineSize;
+                Gun.Magazine = Gun.MagazineSize;
             }
             if (Time.time < stunUntil) return;
             if (target != null && target.IsAlive)
@@ -230,7 +230,7 @@ namespace Swat
             if (reloadEnd > 0f || Time.time < nextShot) return;
             if (Gun.Magazine <= 0)
             {
-                reloadEnd = Time.time + Gun.Data.reloadTime;
+                reloadEnd = Time.time + Gun.ReloadTime;
                 AudioManager.Play(Sound.MagOut, Position, 0.45f, 1f, SoundCategory.Weapons);
                 return;
             }

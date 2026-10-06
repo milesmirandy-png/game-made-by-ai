@@ -187,15 +187,52 @@ namespace Swat
             return a;
         }
 
+        // The extra effects and the look of an attachment.
+        static AttachmentData Tune(AttachmentData a, AttachmentLook look, float magazine = 1f, float reload = 1f, float aim = 1f, float zoom = 1f, float lookAhead = 0f, float flash = 1f, bool laser = false)
+        {
+            a.look = look;
+            a.magazineMultiplier = magazine;
+            a.reloadMultiplier = reload;
+            a.aimSpeedMultiplier = aim;
+            a.zoom = zoom;
+            a.lookAhead = lookAhead;
+            a.flashMultiplier = flash;
+            a.laser = laser;
+            return a;
+        }
+
+        // Attachments go on the primary weapon. Effects are small multipliers on the weapon's stats
+        // (spread, recoil, noise, movement, light range), plus magazine size, reload time, how fast the
+        // sights come up, optic zoom and muzzle flash.
         public static List<AttachmentData> Attachments()
         {
             return new List<AttachmentData>
             {
-                Attachment("light_weapon", "Weapon Light", AttachmentSlot.Light, 1f, 1f, 1f, 1f, 1.5f, 0, "A brighter, longer flashlight beam."),
-                Attachment("optic_reddot", "Red Dot Optic", AttachmentSlot.Optic, 0.85f, 1f, 1f, 1f, 1f, 1, "Slightly tighter spread."),
-                Attachment("muzzle_suppressor", "Suppressor", AttachmentSlot.Muzzle, 1f, 0.95f, 0.75f, 1f, 1f, 1, "Mostly cosmetic; shots carry a little less far."),
-                Attachment("stock_collapsible", "Collapsible Stock", AttachmentSlot.Stock, 1f, 1.05f, 1f, 1.03f, 1f, 0, "Cosmetic variant; marginally quicker handling."),
-                Attachment("stock_fixed", "Fixed Stock", AttachmentSlot.Stock, 1f, 0.9f, 1f, 0.98f, 1f, 2, "Cosmetic variant; marginally steadier."),
+                // Lights
+                Tune(Attachment("light_weapon", "Weapon Light", AttachmentSlot.Light, 1f, 1f, 1f, 1f, 1.5f, 0, "A brighter, longer flashlight beam."), AttachmentLook.Light),
+                Tune(Attachment("light_high", "High-Output Light", AttachmentSlot.Light, 1f, 1f, 1f, 0.99f, 1.9f, 3, "Floods a room with light; a little heavier on the rail."), AttachmentLook.Light),
+                // Optics
+                Tune(Attachment("optic_reflex", "Mini Reflex Sight", AttachmentSlot.Optic, 0.9f, 1f, 1f, 1f, 1f, 0, "A tiny open sight: slightly tighter spread and quick to the eye."), AttachmentLook.Reflex, aim: 1.1f),
+                Tune(Attachment("optic_reddot", "Red Dot Sight", AttachmentSlot.Optic, 0.85f, 1f, 1f, 1f, 1f, 1, "A tube sight with a red dot: tighter spread."), AttachmentLook.RedDot),
+                Tune(Attachment("optic_holo", "Holographic Sight", AttachmentSlot.Optic, 0.82f, 1f, 1f, 0.99f, 1f, 2, "A wide window and a ring reticle: tighter spread, quick to pick up."), AttachmentLook.Holo, aim: 1.05f),
+                Tune(Attachment("optic_scope", "2.5x Scope", AttachmentSlot.Optic, 0.72f, 1f, 1f, 0.97f, 1f, 4, "Magnified: much tighter spread and a longer view when steady aiming, but slower to the eye."), AttachmentLook.Scope, aim: 0.8f, zoom: 2.5f, lookAhead: 3f),
+                // Muzzle devices
+                Tune(Attachment("muzzle_flashhider", "Flash Hider", AttachmentSlot.Muzzle, 1f, 0.97f, 1f, 1f, 1f, 0, "Hides most of the muzzle flash."), AttachmentLook.FlashHider, flash: 0.5f),
+                Tune(Attachment("muzzle_suppressor", "Suppressor", AttachmentSlot.Muzzle, 1f, 0.95f, 0.75f, 1f, 1f, 1, "Quieter shots that carry less far, and only a faint flash."), AttachmentLook.Suppressor, flash: 0.35f),
+                Tune(Attachment("muzzle_comp", "Compensator", AttachmentSlot.Muzzle, 1f, 0.86f, 1.05f, 1f, 1f, 2, "Less muzzle climb; a bit louder."), AttachmentLook.Compensator, flash: 1.15f),
+                Tune(Attachment("muzzle_brake", "Muzzle Brake", AttachmentSlot.Muzzle, 1f, 0.78f, 1.12f, 1f, 1f, 3, "Much less recoil, but loud and bright."), AttachmentLook.Brake, flash: 1.35f),
+                // Stocks
+                Tune(Attachment("stock_collapsible", "Collapsible Stock", AttachmentSlot.Stock, 1f, 1.05f, 1f, 1.03f, 1f, 0, "Marginally quicker handling."), AttachmentLook.None),
+                Tune(Attachment("stock_skeleton", "Skeleton Stock", AttachmentSlot.Stock, 1f, 1.08f, 1f, 1.04f, 1f, 1, "A bare frame: lighter and quicker to the sights, kicks a little more."), AttachmentLook.SkeletonStock, aim: 1.08f),
+                Tune(Attachment("stock_fixed", "Fixed Stock", AttachmentSlot.Stock, 1f, 0.9f, 1f, 0.98f, 1f, 2, "Marginally steadier."), AttachmentLook.FixedStock),
+                // Grips and lasers
+                Tune(Attachment("grip_vertical", "Vertical Grip", AttachmentSlot.Underbarrel, 1f, 0.88f, 1f, 0.99f, 1f, 0, "Less recoil."), AttachmentLook.VerticalGrip),
+                Tune(Attachment("grip_angled", "Angled Grip", AttachmentSlot.Underbarrel, 1f, 0.94f, 1f, 1f, 1f, 1, "A little less recoil and quicker to the sights."), AttachmentLook.AngledGrip, aim: 1.12f),
+                Tune(Attachment("rail_laser", "Laser Module", AttachmentSlot.Underbarrel, 0.9f, 1f, 1f, 1f, 1f, 2, "A red aim laser (a dot where you aim in first person) and slightly tighter spread."), AttachmentLook.Laser, laser: true),
+                // Magazines
+                Tune(Attachment("mag_quick", "Quick-Pull Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 1f, 1f, 0, "A pull tab on the magazine: faster reloads."), AttachmentLook.QuickMag, reload: 0.82f),
+                Tune(Attachment("mag_extended", "Extended Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 0.98f, 1f, 1, "Half again as many rounds per magazine; slower reloads."), AttachmentLook.ExtendedMag, magazine: 1.5f, reload: 1.12f),
+                Tune(Attachment("mag_drum", "Drum Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 0.95f, 1f, 3, "Twice the rounds per magazine; heavy and slow to reload."), AttachmentLook.DrumMag, magazine: 2f, reload: 1.35f),
             };
         }
 
@@ -220,9 +257,11 @@ namespace Swat
         {
             return new List<ArmorData>
             {
-                Armor("armor_light", "Light Vest", 1, 0.2f, 1.05f, 1, 70f, false, new Color(0.22f, 0.24f, 0.26f), "Fast and roomy, but offers modest protection."),
-                Armor("armor_standard", "Standard Plate Carrier", 2, 0.35f, 1f, 0, 100f, true, new Color(0.08f, 0.09f, 0.11f), "Balanced protection with a helmet."),
-                Armor("armor_heavy", "Heavy Armor", 3, 0.5f, 0.88f, -1, 140f, true, new Color(0.04f, 0.04f, 0.05f), "Strong protection; slower and carries less."),
+                // Barebones: no plates at all. Quickest and carries the most, but every hit lands in full.
+                Armor("armor_none", "No Armor", 0, 0f, 1.08f, 2, 0f, false, new Color(0.2f, 0.2f, 0.2f), "Barebones: just a belt and kneepads. The quickest and carries the most, but nothing stops a round."),
+                Armor("armor_light", "Light Vest", 1, 0.2f, 1.05f, 1, 70f, false, new Color(0.22f, 0.24f, 0.26f), "A slick plate carrier with no pouches: fast and roomy, modest protection."),
+                Armor("armor_standard", "Plate Carrier", 2, 0.35f, 1f, 0, 100f, true, new Color(0.08f, 0.09f, 0.11f), "A plate carrier with pouches: balanced protection."),
+                Armor("armor_heavy", "Heavy Armor", 3, 0.5f, 0.88f, -1, 140f, true, new Color(0.04f, 0.04f, 0.05f), "Plates, shoulder guards, collar and groin protector: strong protection, slower and carries less."),
             };
         }
 

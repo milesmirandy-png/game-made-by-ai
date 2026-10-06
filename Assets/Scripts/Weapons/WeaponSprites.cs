@@ -29,17 +29,36 @@ namespace Swat
         public static Texture2D Get(WeaponData weapon, OfficerLoadout attachments = null)
         {
             if (weapon == null) return null;
-            bool fitted = attachments != null && !weapon.isSidearm;
-            bool suppressor = fitted && !string.IsNullOrEmpty(attachments.muzzleId);
-            bool optic = fitted && !string.IsNullOrEmpty(attachments.opticId);
-            bool light = fitted && !string.IsNullOrEmpty(attachments.lightId);
-            string key = weapon.id + (suppressor ? "s" : "") + (optic ? "o" : "") + (light ? "l" : "");
+            var fitting = new WeaponSpritePack.Fitting();
+            if (attachments != null && !weapon.isSidearm)
+                foreach (var id in Weapon.Ids(attachments))
+                {
+                    var attachment = GameData.Attachment(id);
+                    if (attachment == null) continue;
+                    switch (attachment.look)
+                    {
+                        case AttachmentLook.RedDot: fitting.optic = 1; break;
+                        case AttachmentLook.Reflex: fitting.optic = 2; break;
+                        case AttachmentLook.Holo: fitting.optic = 3; break;
+                        case AttachmentLook.Scope: fitting.optic = 4; break;
+                        case AttachmentLook.Suppressor: fitting.muzzle = 1; break;
+                        case AttachmentLook.FlashHider: fitting.muzzle = 2; break;
+                        case AttachmentLook.Compensator: fitting.muzzle = 3; break;
+                        case AttachmentLook.Brake: fitting.muzzle = 4; break;
+                        case AttachmentLook.VerticalGrip: fitting.grip = 1; break;
+                        case AttachmentLook.AngledGrip: fitting.grip = 2; break;
+                        case AttachmentLook.Light: fitting.light = true; break;
+                        case AttachmentLook.Laser: fitting.laser = true; break;
+                    }
+                }
+            bool suppressor = fitting.muzzle == 1, optic = fitting.optic > 0, light = fitting.light;
+            string key = weapon.id + fitting.Key;
             Texture2D texture;
             if (cache.TryGetValue(key, out texture) && texture != null) return texture;
 
             var image = PackImage(weapon.id);
             bool drawn = image == null;
-            if (!drawn) image = WeaponSpritePack.Fit(image, weapon.id, suppressor, optic, light);
+            if (!drawn) image = WeaponSpritePack.Fit(image, weapon.id, fitting);
             else
                 image = WeaponSpriteArt.Draw(weapon.category, new WeaponSpriteArt.Options
                 {

@@ -132,11 +132,12 @@ namespace Swat
 
         // Everything that happens at the gun when it fires: flame and star, light flash,
         // the weapon's own sound, and the noise the AI can hear.
-        public static void Fired(Transform muzzle, WeaponData weapon, float volume, float noiseRadius, NoiseKind kind, float pitch = 1f)
+        // flashScale: muzzle devices (a suppressor or flash hider shrinks the flash, a brake grows it).
+        public static void Fired(Transform muzzle, WeaponData weapon, float volume, float noiseRadius, NoiseKind kind, float pitch = 1f, float flashScale = 1f)
         {
             if (muzzle == null) return;
             Vector3 position = muzzle.position;
-            float size = weapon != null ? weapon.flashSize : 0.5f;
+            float size = (weapon != null ? weapon.flashSize : 0.5f) * flashScale;
             bool lessLethal = weapon != null && weapon.lessLethal;
             Color color = lessLethal ? new Color(1f, 0.85f, 0.7f) : new Color(1f, 0.82f, 0.42f);
             if (size > 0.3f || !lessLethal) EffectsManager.Instance.MuzzleBurst(position, muzzle.forward, size, color);

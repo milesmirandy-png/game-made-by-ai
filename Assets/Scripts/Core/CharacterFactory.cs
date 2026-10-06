@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Swat
@@ -26,6 +27,11 @@ namespace Swat
         public Color shoes, bag;      // shoe and backpack colour
         public bool soldier;          // built from the imported soldier model (unless Classic characters is on)
         public Color pouches, gear;   // soldier model: pouches, and gloves/boots (zero = from the vest / dark)
+        // Added with the gear update (zero values keep the full kit: helmet, NVG, goggles, balaclava, carrier).
+        public int headgear;          // GearCatalog.Headgear
+        public int face;              // GearCatalog.Face
+        public ArmorStyle armorStyle;
+        public int patch, patchColor; // GearCatalog.Patch and colour index (left shoulder and chest)
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -384,7 +390,7 @@ namespace Swat
         {
             Color vest = look.vestOn ? look.vest : Shapes.Shade(look.shirt, 0.85f);
             var recolor = SoldierColors(look);
-            ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor);
+            ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor, TorsoHidden(look));
             parts.leftLeg = SoldierPart(model, "legL", m, recolor);
             parts.rightLeg = SoldierPart(model, "legR", m, recolor);
             parts.leftArm = SoldierPart(model, "armL", m, recolor);
@@ -396,14 +402,25 @@ namespace Swat
             // The gun sits a little higher and more central than on the blocky figures, within reach of
             // these arms (the animator puts both hands on it).
             parts.gunHold = new Vector3(0.08f, 1.22f, 0.18f);
-            parts.head = SoldierPart(model, "head", m, recolor);
+            parts.head = SoldierPart(model, "head", m, recolor, null, HeadHidden(look));
             // A slightly bigger head in pixel art, as for the blocky figures, so helmets read from above.
             if (QualityManager.PixelArt) parts.head.localScale = Vector3.one * 1.15f;
+            DressHead(parts.head, look);
+            DressArmor(parts, look, m, vest);
+            if (look.patch > 0)
+            {
+                // The chosen patch on the left shoulder and the chest (the right shoulder keeps the squad colour).
+                Color colour = GearCatalog.PatchColor(look.patchColor);
+                Patch(parts.leftArm, new Vector3(-0.09f, -0.17f, 0.018f), Quaternion.Euler(0f, -90f, 0f), 0.07f, look.patch, colour);
+                bool plates = look.armorStyle != ArmorStyle.None;
+                Patch(m, new Vector3(-0.075f, 1.34f, plates ? 0.168f : 0.152f), Quaternion.identity, 0.06f, look.patch, colour);
+            }
 
             if (look.idMarker)
             {
-                Shapes.Box("ID Top", parts.head, new Vector3(0f, 0.285f, -0.03f), new Vector3(0.1f, 0.02f, 0.14f), look.idColor, false, 1.2f);
-                Shapes.Box("Patch", parts.rightArm, new Vector3(0.055f, -0.1f, 0f), new Vector3(0.01f, 0.08f, 0.08f), look.idColor, false);
+                float top = GearCatalog.HasHelmet(look.headgear) ? 0.285f : 0.268f;
+                Shapes.Box("ID Top", parts.head, new Vector3(0f, top, -0.03f), new Vector3(0.1f, 0.02f, 0.14f), look.idColor, false, 1.2f);
+                Shapes.Box("Patch", parts.rightArm, new Vector3(0.088f, -0.17f, 0.018f), new Vector3(0.01f, 0.07f, 0.07f), look.idColor, false);
             }
             // Shoulder tabs in the squad (or team) colour: what you see first from above.
             Color tab = look.idMarker ? Shapes.Shade(look.idColor, 0.85f) : Shapes.Shade(vest, 1.25f);
@@ -412,14 +429,145 @@ namespace Swat
         }
 
         // A part on its own pivot; within another part (a forearm in an upper arm), relative to that part's pivot.
-        static Transform SoldierPart(ModelLibrary.Model model, string name, Transform parent, System.Func<string, Color, Color> recolor, ModelLibrary.Part within = null)
+        static Transform SoldierPart(ModelLibrary.Model model, string name, Transform parent, System.Func<string, Color, Color> recolor, ModelLibrary.Part within = null, ICollection<string> hidden = null)
         {
             var part = model.Find(name);
             var pivot = new GameObject(name).transform;
             pivot.SetParent(parent, false);
             pivot.localPosition = part != null ? part.pivot - (within != null ? within.pivot : Vector3.zero) : Vector3.zero;
-            ModelLibrary.Spawn(model, name, pivot, Vector3.zero, recolor);
+            ModelLibrary.Spawn(model, name, pivot, Vector3.zero, recolor, hidden);
             return pivot;
+        }
+
+        // ---- Gear (the loadout's Look tab) ----
+
+        // The soldier model's head carries the helmet, night vision ("Scope"), goggles, helmet light,
+        // headset ("Band") and balaclava ("Mask") as their own colour slots; the torso has the vest,
+        // pouches and back pack. Leaving slots out gives the other kits.
+        static HashSet<string> HeadHidden(Appearance look)
+        {
+            var hide = new HashSet<string>();
+            var headgear = (GearCatalog.Headgear)look.headgear;
+            if (headgear != GearCatalog.Headgear.HelmetFull) hide.Add("Scope");
+            if (headgear >= GearCatalog.Headgear.Helmet) { hide.Add("Glasses"); hide.Add("Material.002"); }
+            if (!GearCatalog.HasHelmet(look.headgear)) { hide.Add("Helmet"); hide.Add("Torch"); }
+            if (headgear == GearCatalog.Headgear.Boonie || headgear == GearCatalog.Headgear.BareHead) hide.Add("Band");
+            if (look.face != (int)GearCatalog.Face.Balaclava) hide.Add("Mask");
+            return hide;
+        }
+
+        static HashSet<string> TorsoHidden(Appearance look)
+        {
+            var hide = new HashSet<string>();
+            if (look.face != (int)GearCatalog.Face.Balaclava) hide.Add("Mask");
+            switch (look.armorStyle)
+            {
+                case ArmorStyle.Light: hide.Add("Pouches"); hide.Add("Bag"); break;
+                case ArmorStyle.None: hide.Add("Vest"); hide.Add("Pouches"); hide.Add("Bag"); break;
+            }
+            return hide;
+        }
+
+        // Headgear and face pieces the model doesn't have, built from boxes on the head (head space:
+        // the skull top is about 0.23 m up, the face looks along +z).
+        static void DressHead(Transform head, Appearance look)
+        {
+            Color helmet = look.headwear.a > 0f ? look.headwear : new Color(0.12f, 0.13f, 0.15f);
+            Color dark = look.gear.a > 0f ? look.gear : new Color(0.08f, 0.08f, 0.09f);
+            switch ((GearCatalog.Headgear)look.headgear)
+            {
+                case GearCatalog.Headgear.HelmetVisor:
+                    Shapes.Box("Face Shield", head, new Vector3(0f, 0.078f, 0.088f), new Vector3(0.19f, 0.15f, 0.01f), new Color(0.16f, 0.21f, 0.27f), false).transform.localRotation = Quaternion.Euler(-10f, 0f, 0f);
+                    Shapes.Box("Shield Rim", head, new Vector3(0f, 0.152f, 0.084f), new Vector3(0.2f, 0.02f, 0.03f), Shapes.Shade(helmet, 0.8f), false);
+                    break;
+                case GearCatalog.Headgear.OpsCap:
+                    Shapes.Box("Cap", head, new Vector3(0f, 0.2f, -0.027f), new Vector3(0.17f, 0.09f, 0.2f), helmet, false);
+                    Shapes.Box("Brim", head, new Vector3(0f, 0.163f, 0.105f), new Vector3(0.16f, 0.012f, 0.08f), Shapes.Shade(helmet, 0.85f), false);
+                    break;
+                case GearCatalog.Headgear.Beanie:
+                    Shapes.Box("Beanie", head, new Vector3(0f, 0.205f, -0.027f), new Vector3(0.175f, 0.1f, 0.205f), dark, false);
+                    Shapes.Box("Fold", head, new Vector3(0f, 0.163f, -0.027f), new Vector3(0.181f, 0.032f, 0.211f), Shapes.Shade(dark, 0.8f), false);
+                    break;
+                case GearCatalog.Headgear.Boonie:
+                    Shapes.Box("Crown", head, new Vector3(0f, 0.208f, -0.027f), new Vector3(0.17f, 0.09f, 0.19f), look.pants, false);
+                    Shapes.Box("Brim", head, new Vector3(0f, 0.166f, -0.027f), new Vector3(0.32f, 0.012f, 0.32f), Shapes.Shade(look.pants, 0.9f), false);
+                    break;
+                case GearCatalog.Headgear.BareHead:
+                    Shapes.Box("Hair", head, new Vector3(0f, 0.205f, -0.03f), new Vector3(0.16f, 0.05f, 0.18f), new Color(0.12f, 0.09f, 0.07f), false);
+                    break;
+            }
+            switch ((GearCatalog.Face)look.face)
+            {
+                case GearCatalog.Face.GasMask:
+                    Shapes.Box("Mask Face", head, new Vector3(0f, 0.05f, 0.058f), new Vector3(0.13f, 0.12f, 0.04f), new Color(0.13f, 0.13f, 0.14f), false);
+                    Shapes.Box("Lens", head, new Vector3(0.035f, 0.104f, 0.072f), new Vector3(0.045f, 0.035f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false);
+                    Shapes.Box("Lens", head, new Vector3(-0.035f, 0.104f, 0.072f), new Vector3(0.045f, 0.035f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false);
+                    var filter = Shapes.Make(PrimitiveType.Cylinder, "Filter", head, new Vector3(0f, 0.02f, 0.095f), new Vector3(0.065f, 0.025f, 0.065f), new Color(0.2f, 0.21f, 0.2f), false).transform;
+                    filter.localRotation = Quaternion.Euler(70f, 0f, 0f);
+                    break;
+                case GearCatalog.Face.Shades:
+                    Shapes.Box("Shades", head, new Vector3(0f, 0.11f, 0.06f), new Vector3(0.15f, 0.025f, 0.01f), new Color(0.04f, 0.04f, 0.05f), false);
+                    break;
+            }
+        }
+
+        // Heavy armor adds shoulder guards, a collar and a groin protector in the vest colour.
+        static void DressArmor(CharacterParts parts, Appearance look, Transform m, Color vest)
+        {
+            if (look.armorStyle != ArmorStyle.Heavy) return;
+            Color guard = Shapes.Shade(vest, 1.1f);
+            Shapes.Box("Shoulder Guard", parts.leftArm, new Vector3(-0.012f, -0.05f, 0.012f), new Vector3(0.085f, 0.11f, 0.13f), guard, false);
+            Shapes.Box("Shoulder Guard", parts.rightArm, new Vector3(0.012f, -0.05f, 0.012f), new Vector3(0.085f, 0.11f, 0.13f), guard, false);
+            Shapes.Box("Collar", m, new Vector3(0f, 1.47f, 0.13f), new Vector3(0.22f, 0.07f, 0.035f), guard, false);
+            Shapes.Box("Collar", m, new Vector3(0.12f, 1.47f, 0.02f), new Vector3(0.035f, 0.07f, 0.22f), guard, false);
+            Shapes.Box("Collar", m, new Vector3(-0.12f, 1.47f, 0.02f), new Vector3(0.035f, 0.07f, 0.22f), guard, false);
+            Shapes.Box("Groin Plate", m, new Vector3(0f, 0.9f, 0.14f), new Vector3(0.17f, 0.15f, 0.03f), guard, false);
+        }
+
+        // A patch design in boxes, flat against a surface: local +z of the rotation is the outward face.
+        static void Patch(Transform parent, Vector3 position, Quaternion rotation, float size, int design, Color colour)
+        {
+            var root = new GameObject("Patch Design").transform;
+            root.SetParent(parent, false);
+            root.localPosition = position;
+            root.localRotation = rotation;
+            // Dark cloth behind light designs, tan behind black ones.
+            Color cloth = colour.r + colour.g + colour.b < 0.5f ? new Color(0.62f, 0.54f, 0.4f) : new Color(0.1f, 0.11f, 0.12f);
+            Shapes.Box("Cloth", root, Vector3.zero, new Vector3(size, size * 0.8f, 0.006f), cloth, false);
+            float t = size * 0.16f, front = 0.005f;
+            System.Action<float, float, float, float, float> bar = (x, y, w, h, angle) =>
+                Shapes.Box("Mark", root, new Vector3(x, y, front), new Vector3(w, h, 0.004f), colour, false).transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+            switch ((GearCatalog.Patch)design)
+            {
+                case GearCatalog.Patch.Badge:
+                    bar(0f, -size * 0.04f, size * 0.55f, size * 0.5f, 0f);
+                    bar(0f, size * 0.29f, size * 0.8f, t * 0.8f, 0f);
+                    break;
+                case GearCatalog.Patch.Stripes:
+                    for (int i = -1; i <= 1; i++) bar(0f, i * size * 0.24f, size * 0.9f, t, 0f);
+                    break;
+                case GearCatalog.Patch.Chevron:
+                    bar(-size * 0.16f, 0f, size * 0.5f, t, -38f);
+                    bar(size * 0.16f, 0f, size * 0.5f, t, 38f);
+                    break;
+                case GearCatalog.Patch.Star:
+                    for (int i = 0; i < 3; i++) bar(0f, 0f, size * 0.62f, t, i * 60f);
+                    break;
+                case GearCatalog.Patch.Cross:
+                    bar(0f, 0f, size * 0.6f, size * 0.2f, 0f);
+                    bar(0f, 0f, size * 0.2f, size * 0.6f, 0f);
+                    break;
+                case GearCatalog.Patch.Diamond:
+                    bar(0f, 0f, size * 0.42f, size * 0.42f, 45f);
+                    break;
+                case GearCatalog.Patch.Target:
+                    bar(0f, size * 0.27f, size * 0.6f, t * 0.7f, 0f);
+                    bar(0f, -size * 0.27f, size * 0.6f, t * 0.7f, 0f);
+                    bar(size * 0.27f, 0f, t * 0.7f, size * 0.6f, 0f);
+                    bar(-size * 0.27f, 0f, t * 0.7f, size * 0.6f, 0f);
+                    bar(0f, 0f, t, t, 0f);
+                    break;
+            }
         }
 
         static Transform SoldierPoint(ModelLibrary.Model model, string name, Transform parent, ModelLibrary.Part within)

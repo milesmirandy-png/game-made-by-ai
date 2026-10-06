@@ -16,35 +16,63 @@ namespace Swat
         public float NoiseMultiplier { get; private set; }
         public float MoveMultiplier { get; private set; }
         public float LightRangeMultiplier { get; private set; }
+        // From the magazine, optic, grip and muzzle attachments.
+        public int MagazineSize { get; private set; }
+        public float ReloadTime { get; private set; }
+        public float AimSpeed { get; private set; }          // how fast the sights come up (first person)
+        public float Zoom { get; private set; }              // optic magnification (1 = none)
+        public float LookAhead { get; private set; }         // extra camera reach while steady aiming from above
+        public float FlashMultiplier { get; private set; }
+        public bool HasLaser { get; private set; }
+        public AttachmentData Optic { get; private set; }
 
         public Weapon(WeaponData data, OfficerLoadout loadout)
         {
             Data = data;
-            Magazine = data.magazineSize;
-            Reserve = data.startingReserve;
             Mode = data.fireMode;
             SpreadMultiplier = RecoilMultiplier = NoiseMultiplier = MoveMultiplier = LightRangeMultiplier = 1f;
-            if (loadout == null || data.isSidearm) return;
-            foreach (var id in new[] { loadout.lightId, loadout.opticId, loadout.muzzleId, loadout.stockId })
-            {
-                var attachment = GameData.Attachment(id);
-                if (attachment == null) continue;
-                SpreadMultiplier *= attachment.spreadMultiplier;
-                RecoilMultiplier *= attachment.recoilMultiplier;
-                NoiseMultiplier *= attachment.noiseMultiplier;
-                MoveMultiplier *= attachment.moveMultiplier;
-                LightRangeMultiplier *= attachment.lightRangeMultiplier;
-            }
+            float magazine = 1f, reload = 1f;
+            AimSpeed = Zoom = FlashMultiplier = 1f;
+            LookAhead = data.steadyLookAhead;
+            if (loadout != null && !data.isSidearm)
+                foreach (var id in Ids(loadout))
+                {
+                    var attachment = GameData.Attachment(id);
+                    if (attachment == null) continue;
+                    SpreadMultiplier *= attachment.spreadMultiplier;
+                    RecoilMultiplier *= attachment.recoilMultiplier;
+                    NoiseMultiplier *= attachment.noiseMultiplier;
+                    MoveMultiplier *= attachment.moveMultiplier;
+                    LightRangeMultiplier *= attachment.lightRangeMultiplier;
+                    magazine *= attachment.magazineMultiplier;
+                    reload *= attachment.reloadMultiplier;
+                    AimSpeed *= attachment.aimSpeedMultiplier;
+                    FlashMultiplier *= attachment.flashMultiplier;
+                    LookAhead += attachment.lookAhead;
+                    if (attachment.zoom > Zoom) Zoom = attachment.zoom;
+                    if (attachment.laser) HasLaser = true;
+                    if (attachment.slot == AttachmentSlot.Optic) Optic = attachment;
+                }
+            MagazineSize = System.Math.Max(1, (int)System.Math.Round(data.magazineSize * magazine));
+            ReloadTime = data.reloadTime * reload;
+            Magazine = MagazineSize;
+            Reserve = data.startingReserve;
         }
 
-        public bool CanReload { get { return Magazine < Data.magazineSize && Reserve > 0; } }
+        // Every attachment id in a loadout (some may be empty).
+        public static string[] Ids(OfficerLoadout loadout)
+        {
+            return new[] { loadout.lightId, loadout.opticId, loadout.muzzleId, loadout.stockId, loadout.underbarrelId, loadout.magazineId };
+        }
+
+        public bool CanReload { get { return Magazine < MagazineSize && Reserve > 0; } }
         public float Spread { get { return Data.spread * SpreadMultiplier; } }
         public float Recoil { get { return Data.recoil * RecoilMultiplier; } }
         public float NoiseRadius { get { return Data.noiseRadius * NoiseMultiplier; } }
 
         public void FinishReload()
         {
-            int taken = System.Math.Min(Data.magazineSize - Magazine, Reserve);
+            int taken = System.Math.Min(MagazineSize - Magazine, Reserve);
             Magazine += taken;
             Reserve -= taken;
         }
@@ -62,7 +90,7 @@ namespace Swat
         // Fills the magazine and reserve back to what the weapon started with (game-mode respawns).
         public void Refill()
         {
-            Magazine = Data.magazineSize;
+            Magazine = MagazineSize;
             Reserve = Data.startingReserve;
         }
     }

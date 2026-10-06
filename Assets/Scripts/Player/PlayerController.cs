@@ -142,14 +142,25 @@ namespace Swat
             var armor = GameData.Armor(loadout.armorId);
             // The uniform is a whole kit (black, greens, tans...): the soldier model wears all of it.
             var kit = Progression.Kit(loadout.uniformIndex);
+            // Headgear, face and patches come from the Look tab; the vest's look from the armor.
+            var style = GearCatalog.StyleFor(armor);
+            bool helmet = GearCatalog.HasHelmet(loadout.headgearIndex);
+            var headgear = (GearCatalog.Headgear)loadout.headgearIndex;
             return new Appearance
             {
                 shirt = kit.shirt,
                 pants = kit.pants,
                 skin = CharacterFactory.Skin(officer.skinTone + officer.id.Length),
-                headwear = armor != null && armor.helmet ? kit.helmet : new Color(0.1f, 0.1f, 0.12f),
-                head = armor != null && armor.helmet ? HeadStyle.Helmet : HeadStyle.Cap,
-                vestOn = armor != null,
+                headwear = kit.helmet,
+                // The classic blocky figures get the nearest of their head styles.
+                head = helmet ? HeadStyle.Helmet : headgear == GearCatalog.Headgear.BareHead ? HeadStyle.Hair : HeadStyle.Cap,
+                hair = HairStyle.Buzz,
+                headgear = loadout.headgearIndex,
+                face = loadout.faceIndex,
+                armorStyle = style,
+                patch = loadout.patchIndex,
+                patchColor = loadout.patchColorIndex,
+                vestOn = style != ArmorStyle.None,
                 vest = armor != null ? kit.vest : Color.black,
                 pouches = kit.pouches,
                 gear = kit.gear,
