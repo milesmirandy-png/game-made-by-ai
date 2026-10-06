@@ -1,11 +1,10 @@
 namespace Swat
 {
-    // Top-down tactical view or first person (body cam), chosen in Settings ->
-    // Camera. A mission or match is built for one or the other: first person
-    // gets full-height walls, door headers and ceilings, which would hide
-    // everything from above. So the choice is applied when a level is built and
-    // stays until the next one. Menus and headquarters always use the top-down
-    // showcase camera. Online, each player picks their own view.
+    // Top-down tactical view or first person (body cam). V switches between them at any time: in the
+    // menus it changes the setting for the next mission, in a mission it switches straight away (the
+    // level's walls, doors, ceilings and lamps switch with it, see ViewParts). Settings -> Camera
+    // has the same choice. Menus and headquarters always use the top-down showcase camera. Online,
+    // each player picks their own view.
     public static class ViewMode
     {
         public static bool FirstPerson { get; private set; }
@@ -23,6 +22,22 @@ namespace Swat
         public static void Clear()
         {
             FirstPerson = false;
+        }
+
+        // Sets the view: saved as the setting, and in a mission at once.
+        public static void Set(bool firstPerson, bool inMission)
+        {
+            SaveManager.Settings.cameraView = firstPerson ? 1 : 0;
+            if (inMission) FirstPerson = firstPerson;
+        }
+
+        // V: the other view.
+        public static void Toggle(bool inMission)
+        {
+            bool firstPerson = SaveManager.Settings.cameraView != 1;
+            Set(firstPerson, inMission);
+            SaveManager.Save();
+            UIManager.Notify("View: " + (firstPerson ? "First person (body cam)" : "Top-down") + (inMission ? "" : " (for the next mission)"));
         }
 
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]

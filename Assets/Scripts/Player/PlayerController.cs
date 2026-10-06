@@ -110,6 +110,7 @@ namespace Swat
         float slideStart, slideReadyAt, nextSlideDust;
         Vector3 slideVelocity, moveVelocity;
         float lookYaw, lookPitch, recoilDebt, lastKickTime;
+        bool aimedFirstPerson;
         CapsuleCollider leanBox;
         float meleeReadyAt;
         static readonly Collider[] meleeHits = new Collider[16];
@@ -305,6 +306,15 @@ namespace Swat
 
         void Aim(float dt)
         {
+            if (ViewMode.FirstPerson != aimedFirstPerson)
+            {
+                // The view switched (V): carry on facing the same way, looking level.
+                aimedFirstPerson = ViewMode.FirstPerson;
+                lookYaw = transform.eulerAngles.y;
+                lookPitch = 0f;
+                recoilDebt = 0f;
+                AimDirection = transform.forward;
+            }
             if (ViewMode.FirstPerson)
             {
                 AimFirstPerson();

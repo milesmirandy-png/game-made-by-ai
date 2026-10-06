@@ -18,8 +18,10 @@ namespace Swat
     // is never rebuilt.
     public class DoorController : MonoBehaviour, IInteractable
     {
-        // Drawn low for the top-down view, full height in first person (the collider is full height either way).
-        static float VisualHeight { get { return ViewMode.FirstPerson ? ViewMode.FirstPersonDoorHeight - 0.03f : 1.4f; } }
+        // Drawn low for the top-down view, full height in first person (the collider is full height either
+        // way). Built low; RegisterView lets the level switch it (V).
+        const float VisualHeight = 1.4f;
+        const float FirstPersonHeight = ViewMode.FirstPersonDoorHeight - 0.03f;
         const float SolidHeight = 2.4f;
         const float SwingSpeed = 420f;
 
@@ -40,7 +42,7 @@ namespace Swat
         public event System.Action<DoorController> Opened;
 
         Transform hinge;
-        GameObject leaf, charge, wedge, trapMarker, trapWire;
+        GameObject leaf, charge, wedge, trapMarker, trapWire, frameLeft, frameRight, frameTop;
         int trapSide;   // which face the device is on: +1 the forward side, -1 the back
         NavMeshObstacle obstacle;
         float angle, targetAngle, detonateAt;
@@ -92,6 +94,15 @@ namespace Swat
             }
         }
 
+        // Full height in first person: the leaf, the frame posts and a frame top.
+        public void RegisterView(ViewParts view)
+        {
+            view.AddStretch(leaf, VisualHeight, FirstPersonHeight, SolidHeight, 0f, ProceduralTextures.TileMeters(Electronic || State == DoorState.Disabled ? SurfaceKind.Metal : SurfaceKind.Wood));
+            view.AddStretch(frameLeft, VisualHeight + 0.06f, FirstPersonHeight + 0.06f, 0f);
+            view.AddStretch(frameRight, VisualHeight + 0.06f, FirstPersonHeight + 0.06f, 0f);
+            view.AddFirstPersonOnly(frameTop);
+        }
+
         public static DoorController Create(Transform parent, string id, Vector3 center, bool alongX, float width, DoorState state, bool breachable, bool electronic)
         {
             var go = new GameObject("Door " + id);
@@ -121,9 +132,10 @@ namespace Swat
             Shapes.Box("Handle", door.leaf.transform, new Vector3(0.4f, -0.05f, -0.9f), new Vector3(0.08f, 0.03f, 0.9f), handle, false);
             var frame = new Color(0.2f, 0.21f, 0.23f);
             float frameHeight = VisualHeight + 0.06f;
-            Shapes.Box("Frame", go.transform, new Vector3(-width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
-            Shapes.Box("Frame", go.transform, new Vector3(width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
-            if (ViewMode.FirstPerson) Shapes.Box("Frame Top", go.transform, new Vector3(0f, frameHeight, 0f), new Vector3(width + 0.08f, 0.08f, 0.24f), frame, false);
+            door.frameLeft = Shapes.Box("Frame", go.transform, new Vector3(-width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
+            door.frameRight = Shapes.Box("Frame", go.transform, new Vector3(width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
+            door.frameTop = Shapes.Box("Frame Top", go.transform, new Vector3(0f, FirstPersonHeight + 0.06f, 0f), new Vector3(width + 0.08f, 0.08f, 0.24f), frame, false);
+            door.frameTop.SetActive(false);
             Shapes.Box("Threshold", go.transform, new Vector3(0f, 0.035f, 0f), new Vector3(width, 0.012f, 0.24f), frame, false);
             var box = door.leaf.GetComponent<BoxCollider>();
             box.size = new Vector3(1f, SolidHeight / VisualHeight, 1f);

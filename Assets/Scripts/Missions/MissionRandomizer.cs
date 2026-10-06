@@ -82,11 +82,11 @@ namespace Swat
 
             // Security devices.
             SecurityCamera.All.Clear();
-            foreach (var mount in level.cameraMounts) SecurityCamera.Create(level.root, mount.position, mount.yaw, plan.camerasActive);
+            foreach (var mount in level.cameraMounts) SecurityCamera.Create(level.root, mount.position, mount.yaw, plan.camerasActive).RegisterView(level.view);
             level.consoles.Clear();
             foreach (var mount in level.consoleMounts)
                 level.consoles.Add(SecurityConsole.Create(level.root, mount.id, mount.title, mount.position, mount.yaw, mount.unlockDoors, mount.reviewFootage));
-            level.alarm = level.hasAlarm ? AlarmSystem.Create(level.root, level.alarmPanel.position, level.alarmPanel.yaw, level.alarmBeacons, plan.alarmArmed) : null;
+            level.alarm = level.hasAlarm ? AlarmSystem.Create(level.root, level.alarmPanel.position, level.alarmPanel.yaw, level.alarmBeacons, plan.alarmArmed, level.view) : null;
 
             // Evidence: as many as the objectives ask for, plus one spare if there's room.
             int evidenceNeeded = 0;

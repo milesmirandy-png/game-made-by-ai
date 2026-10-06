@@ -436,6 +436,23 @@ namespace Swat
             StartCoroutine(LoadMission(Plan));
         }
 
+        // A mission or match is built and running (the view can switch at once).
+        bool InMission
+        {
+            get { return Level != null && (State == GameState.Deploying || State == GameState.Playing || State == GameState.Paused || State == GameState.Debrief); }
+        }
+
+        // Not while typing (a text field has the keyboard), rebinding keys, loading or in the level creator.
+        bool CanSwitchView
+        {
+            get
+            {
+                if (State == GameState.Loading || State == GameState.LevelEditor) return false;
+                if (UIManager.Instance != null && UIManager.Instance.Settings.Rebinding) return false;
+                return GUIUtility.keyboardControl == 0;
+            }
+        }
+
         void ClearMission()
         {
             ViewMode.Clear();
@@ -763,6 +780,8 @@ namespace Swat
                 if (GameInput.KeyHeld(KeyCode.LeftShift) || GameInput.KeyHeld(KeyCode.RightShift)) ScreenshotTour.Begin();
                 else ScreenshotTool.Capture(State.ToString());
             }
+            // V: top-down or first person, in the menus (for the next mission) or straight away in one.
+            if (GameInput.Down(InputAction.SwitchView) && CanSwitchView) ViewMode.Toggle(InMission);
 
             switch (State)
             {

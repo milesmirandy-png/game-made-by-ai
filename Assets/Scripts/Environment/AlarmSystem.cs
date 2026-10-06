@@ -20,7 +20,8 @@ namespace Swat
         public string Prompt { get { return State == AlarmState.Triggered ? "[E] Silence Alarm (hold)" : "[E] Disable Alarm (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up * 1.2f; } }
 
-        public static AlarmSystem Create(Transform parent, Vector3 panelPosition, float panelYaw, IList<Vector3> beaconPositions, bool armed)
+        // view: the level's first-person parts, so the beacons hang near the ceiling in first person.
+        public static AlarmSystem Create(Transform parent, Vector3 panelPosition, float panelYaw, IList<Vector3> beaconPositions, bool armed, ViewParts view = null)
         {
             var go = new GameObject("Alarm Panel");
             go.transform.SetParent(parent, false);
@@ -36,6 +37,9 @@ namespace Swat
                 var light = Shapes.PointLight(glow.transform.parent, position + Vector3.down * 0.3f, new Color(1f, 0.15f, 0.1f), 0f, 9f);
                 light.enabled = false;
                 alarm.beacons.Add(light);
+                if (view == null) continue;
+                view.AddLift(glow.transform, 1.1f);
+                view.AddLift(light.transform, 1.1f);
             }
             Instance = alarm;
             alarm.enabled = false;

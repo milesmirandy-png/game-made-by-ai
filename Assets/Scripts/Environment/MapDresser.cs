@@ -114,7 +114,9 @@ namespace Swat
                 {
                     Vector3 p = new Vector3(b.min.x + stepX * (ix + 0.5f), 0f, b.min.z + stepZ * (iz + 0.5f));
                     bool alongX = b.size.x >= b.size.z;
+                    // Hung at wall-top height from above, just under the ceiling in first person.
                     var lamp = Shapes.Box("Ceiling Lamp", props, p + Vector3.up * 1.43f, alongX ? new Vector3(1f, 0.04f, 0.3f) : new Vector3(0.3f, 0.04f, 1f), Color.white, false);
+                    level.view.AddLift(lamp.transform, ViewMode.FirstPersonWallHeight - 0.03f - 1.43f);
                     var renderer = lamp.GetComponent<Renderer>();
                     renderer.sharedMaterial = dark ? offMaterial : litMaterial;
                     lampRenderers.Add(renderer);
@@ -144,6 +146,7 @@ namespace Swat
                     Vector3 spot = door.transform.position + inward * 0.12f;
                     var emergency = Shapes.Box("Emergency Light", props, spot + Vector3.up * 1.3f + door.transform.right * (door.Width * 0.5f + 0.25f), new Vector3(0.25f, 0.08f, 0.08f), new Color(1f, 0.45f, 0.12f), false, 2f);
                     emergency.transform.rotation = door.transform.rotation;
+                    level.view.AddLift(emergency.transform, 0.9f);
                     pools.AddFlat(spot + inward * 0.9f + Vector3.up * 0.05f, new Vector2(2.6f, 2.6f), 0f, new Color(1f, 0.4f, 0.12f, 0.3f));
                     break;
                 }
@@ -197,7 +200,8 @@ namespace Swat
                 Vector3 inward = (frontIn ? 1f : -1f) * door.transform.forward;
                 Vector3 spot = door.transform.position + inward * 0.13f + Vector3.up * 1.3f;
                 float yaw = Mathf.Atan2(inward.x, inward.z) * Mathf.Rad2Deg;
-                EnvironmentProps.ExitSign(props, spot, yaw);
+                // Over the door frame in first person.
+                level.view.AddLift(EnvironmentProps.ExitSign(props, spot, yaw), ViewMode.FirstPersonDoorHeight + 0.15f - 1.3f);
                 pools.AddFlat(door.transform.position + inward * 0.8f + Vector3.up * 0.05f, new Vector2(1.6f, 1.6f), 0f, new Color(0.2f, 1f, 0.4f, 0.12f + profile.pool * 0.2f));
             }
         }
@@ -243,10 +247,14 @@ namespace Swat
         {
             public Mount mount;
             public System.Func<Transform, Vector3, float, Transform> build;
+            public float lift;   // how much higher it hangs in first person
         }
 
         static DecorItem Floor(System.Func<Transform, Vector3, float, Transform> build) { return new DecorItem { mount = Mount.Floor, build = build }; }
         static DecorItem Wall(System.Func<Transform, Vector3, float, Transform> build) { return new DecorItem { mount = Mount.Wall, build = build }; }
+        // Posters, boards, clocks and panels hang low enough to show over the low top-down walls; in first
+        // person they go up to eye level.
+        static DecorItem Hung(System.Func<Transform, Vector3, float, Transform> build) { return new DecorItem { mount = Mount.Wall, build = build, lift = 0.55f }; }
 
         static readonly Color[] PosterColors = { new Color(0.25f, 0.45f, 0.75f), new Color(0.75f, 0.55f, 0.2f), new Color(0.3f, 0.6f, 0.4f), new Color(0.6f, 0.25f, 0.3f) };
 
@@ -259,17 +267,17 @@ namespace Swat
                 case RoomKind.Office:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.FilingCabinet(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
                     break;
                 case RoomKind.Conference:
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Whiteboard(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Whiteboard(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
                     break;
                 case RoomKind.Lobby:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.WaterCooler(p, at, yaw)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
@@ -278,14 +286,14 @@ namespace Swat
                 case RoomKind.Stairwell:
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     break;
                 case RoomKind.Storage:
                 case RoomKind.Warehouse:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.BoxStack(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.BoxStack(p, at, yaw + 40f)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.Toolbox(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireAlarm(p, at, yaw)));
@@ -293,7 +301,7 @@ namespace Swat
                 case RoomKind.Security:
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.MonitorBank(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.FilingCabinet(p, at, yaw)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.2f, 0.3f, 0.5f))));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.2f, 0.3f, 0.5f))));
                     break;
                 case RoomKind.Restroom:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
@@ -306,34 +314,34 @@ namespace Swat
                     break;
                 case RoomKind.Utility:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.CleaningCart(p, at, yaw)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.Toolbox(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.BoxStack(p, at, yaw)));
                     break;
                 case RoomKind.Residential:
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
                     break;
                 case RoomKind.Medical:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.FilingCabinet(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.3f, 0.6f, 0.7f))));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.3f, 0.6f, 0.7f))));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Clock(p, at, yaw)));
                     break;
                 case RoomKind.Club:
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.6f, 0.2f, 0.7f))));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.15f, 0.5f, 0.75f))));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.6f, 0.2f, 0.7f))));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, new Color(0.15f, 0.5f, 0.75f))));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
                     break;
                 case RoomKind.Vault:
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.ElectricalPanel(p, at, yaw)));
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.BoxStack(p, at, yaw)));
                     break;
                 case RoomKind.Retail:
                     items.Add(Floor((p, at, yaw) => EnvironmentProps.TrashCan(p, at)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
                     break;
                 case RoomKind.Garage:
@@ -343,7 +351,7 @@ namespace Swat
                     break;
                 default:
                     items.Add(Wall((p, at, yaw) => EnvironmentProps.FireExtinguisher(p, at, yaw)));
-                    items.Add(Wall((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
+                    items.Add(Hung((p, at, yaw) => EnvironmentProps.Poster(p, at, yaw, poster)));
                     break;
             }
             return items;
@@ -387,7 +395,8 @@ namespace Swat
                         if (!NearDoorOrSpawn(spot.position, 1.3f))
                         {
                             wallSpots.RemoveAt(i);
-                            item.build(props, spot.position, spot.yaw);
+                            var built = item.build(props, spot.position, spot.yaw);
+                            if (item.lift > 0f) level.view.AddLift(built, item.lift);
                             break;
                         }
                     }

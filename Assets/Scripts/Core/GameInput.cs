@@ -12,7 +12,7 @@ namespace Swat
         SwitchWeapon, Flashlight, UseEquipment, TacticalMap, PlanningMode, ZoomPreset,
         Slot1, Slot2, Slot3, Slot4, Objectives, Pause, CommandWheel, Shout, Ability, FireMode,
         SelectOfficer1, SelectOfficer2, SelectOfficer3, SelectAllOfficers, ToggleFps, Screenshot,
-        Peek, Ping, Melee, Report, NightVision,
+        Peek, Ping, Melee, Report, NightVision, SwitchView,
     }
 
     // Gamepad buttons (Xbox-style names; read only when the Input System package is installed).
@@ -29,10 +29,10 @@ namespace Swat
         static readonly KeyCode[] Defaults =
         {
             KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, KeyCode.Mouse0, KeyCode.Mouse1, KeyCode.R, KeyCode.LeftShift, KeyCode.C, KeyCode.E,
-            KeyCode.Q, KeyCode.F, KeyCode.G, KeyCode.Tab, KeyCode.Space, KeyCode.V,
+            KeyCode.Q, KeyCode.F, KeyCode.G, KeyCode.Tab, KeyCode.Space, KeyCode.Y,
             KeyCode.Alpha1, KeyCode.Alpha2, KeyCode.Alpha3, KeyCode.Alpha4, KeyCode.M, KeyCode.Escape, KeyCode.Z, KeyCode.X, KeyCode.T, KeyCode.B,
             KeyCode.F1, KeyCode.F2, KeyCode.F3, KeyCode.F4, KeyCode.F10, KeyCode.F12,
-            KeyCode.LeftControl, KeyCode.Mouse2, KeyCode.LeftAlt, KeyCode.H, KeyCode.N,
+            KeyCode.LeftControl, KeyCode.Mouse2, KeyCode.LeftAlt, KeyCode.H, KeyCode.N, KeyCode.V,
         };
 
         static readonly string[] Names =
@@ -42,6 +42,7 @@ namespace Swat
             "Primary weapon", "Sidearm", "Previous equipment", "Next equipment", "Objectives", "Pause", "Command wheel (hold)", "Shout compliance", "Role ability", "Fire mode",
             "Select officer 1", "Select officer 2", "Select officer 3", "Select whole squad", "Show FPS", "Screenshot",
             "Peek / lean (hold)", "Ping a spot for your team (game modes)", "Melee shove / shield bash", "Report to TOC", "Night vision (helmet with NVG)",
+            "Switch view (top-down / first person)",
         };
 
         static KeyCode[] bindings = (KeyCode[])Defaults.Clone();
@@ -53,7 +54,7 @@ namespace Swat
             PadButton.North, PadButton.DpadUp, PadButton.RightShoulder, PadButton.Select, PadButton.None, PadButton.None,
             PadButton.None, PadButton.None, PadButton.DpadLeft, PadButton.DpadRight, PadButton.None, PadButton.Start, PadButton.LeftShoulder, PadButton.RightStick, PadButton.DpadDown, PadButton.None,
             PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
-            PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
+            PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
         };
 
         static readonly string[] PadNames = { "", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Start", "View", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right" };
@@ -101,11 +102,20 @@ namespace Swat
         {
             ResetToDefaults();
             if (saved == null) return;
+            bool hasSwitchView = false;
             foreach (var entry in saved)
             {
+                if (entry.action == InputAction.SwitchView.ToString()) hasSwitchView = true;
                 for (int i = 0; i < Defaults.Length; i++)
                     if (((InputAction)i).ToString() == entry.action) bindings[i] = (KeyCode)entry.key;
             }
+            if (hasSwitchView) return;
+            // Saved before V switched the view: the zoom preset (on V then) moves to its new key, and if
+            // something else was put on V, switching the view is left unbound rather than doubled up.
+            var zoom = (int)InputAction.ZoomPreset;
+            if (bindings[zoom] == KeyCode.V) bindings[zoom] = Defaults[zoom];
+            for (int i = 0; i < bindings.Length; i++)
+                if (i != (int)InputAction.SwitchView && bindings[i] == KeyCode.V) bindings[(int)InputAction.SwitchView] = KeyCode.None;
         }
 
         public static List<KeyBinding> Save()

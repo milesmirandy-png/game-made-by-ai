@@ -186,6 +186,7 @@ namespace Swat
             }
 
             GUI.enabled = true;
+            DrawViewTag(game, quality);
             if (Settings.Open) Settings.Draw(game);
             DrawNotes(game);
             DrawPerformance(quality);
@@ -344,6 +345,24 @@ namespace Swat
             UITheme.Text(new Rect(60f, h - 60f, w - 120f, 30f), plan.mission.location + "   |   " + OfficerSelectionManager.DifficultyNames[plan.difficulty] + "   |   Seed " + plan.seed, 18, UITheme.Dim);
             UITheme.Text(new Rect(0f, h - 60f, w - 60f, 30f), "Press Space to skip", 18, UITheme.Faint, TextAnchor.UpperRight);
             UITheme.Text(new Rect(60f, 30f, w - 120f, 40f), "DEPLOYING", 22, UITheme.Accent, TextAnchor.MiddleLeft, true);
+        }
+
+        // Before a mission: which view you'll deploy in, and that V switches it.
+        void DrawViewTag(GameManager game, QualityManager quality)
+        {
+            switch (game.State)
+            {
+                case GameState.MainMenu: case GameState.Headquarters: case GameState.Briefing: case GameState.OfficerSelection:
+                case GameState.Loadout: case GameState.VersusSetup: case GameState.Deploying:
+                    break;
+                default:
+                    return;
+            }
+            string key = UITheme.KeyFor(InputAction.SwitchView);
+            string view = SaveManager.Settings.cameraView == 1 ? "First person (body cam)" : "Top-down";
+            float y = quality != null && quality.ShowFps ? 30f : 8f;
+            if (game.State == GameState.Deploying) y = 60f;
+            UITheme.ShadowText(new Rect(UITheme.Width - 470f, y, 460f, 24f), "View: " + view + "   [" + key + "] switch", 15, UITheme.Dim, TextAnchor.UpperRight);
         }
 
         void DrawPerformance(QualityManager quality)

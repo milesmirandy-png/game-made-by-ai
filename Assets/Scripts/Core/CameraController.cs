@@ -4,7 +4,7 @@ namespace Swat
 {
     // Angled top-down tactical camera. In missions it smoothly follows the
     // team leader, leans towards the mouse cursor, zooms with the wheel
-    // between configurable limits, cycles zoom presets with V and stays inside
+    // between configurable limits, cycles zoom presets (Y by default) and stays inside
     // the map bounds. In menus it glides between showcase shots of the HQ.
     // With the first-person view chosen, FirstPersonRig places it at the
     // leader's eyes while they're alive and playing.
@@ -193,6 +193,9 @@ namespace Swat
             // First person while you're alive and in the mission (dead, spectating or at the end: from above).
             bool firstPerson = ViewMode.FirstPerson && player.IsAlive && SpectateTarget == null && game != null
                 && (game.State == GameState.Playing || game.State == GameState.Paused);
+            // The level's walls, doors and ceilings follow the camera: full height while you look through
+            // your officer's eyes, low again from above (switching with V, going down, spectating, the end).
+            if (game != null && game.Level != null && game.Level.view.FirstPerson != firstPerson) game.Level.view.Apply(firstPerson);
             if (firstPerson)
             {
                 FirstPersonRig.Tick(Cam, player, shake, punch);

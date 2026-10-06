@@ -214,17 +214,16 @@ namespace Swat
             float y = body.y;
             Section(ref y, lx, colW, "View");
             int view = s.cameraView;
-            if (Choice(ref y, lx, colW, "Camera", ref view, ViewNames))
+            if (Choice(ref y, lx, colW, "Camera (" + UITheme.KeyFor(InputAction.SwitchView) + " switches any time)", ref view, ViewNames))
             {
-                s.cameraView = view;
+                // Paused in a mission: straight away; otherwise for the next one.
+                ViewMode.Set(view == 1, game.Level != null && game.State == GameState.Paused);
                 changed = true;
-                // Levels are built for one view or the other (first person has ceilings and full walls).
-                if (game.State == GameState.Paused) message = "The camera view changes from the next deployment.";
             }
             changed |= Range(ref y, lx, colW, "Field of view", ref s.fieldOfView, 70f, 110f, Mathf.RoundToInt(s.fieldOfView) + " degrees");
             changed |= Check(ref y, lx, colW, "Body cam look (wide lens, grain, REC)", ref s.bodyCamLook);
             y += 8f;
-            UITheme.Text(new Rect(lx, y, colW, 120f), "First person: the mouse looks around, right mouse aims down the sights, Ctrl + A / D peeks. Missions are built with ceilings and full-height walls for it. Field of view and the body cam look apply in first person only; screen shake (Accessibility) also sets how much the body cam moves.", 13, UITheme.Faint);
+            UITheme.Text(new Rect(lx, y, colW, 120f), "First person: the mouse looks around, right mouse aims down the sights, Ctrl + A / D peeks. Walls go full height with ceilings in first person and drop low again from above. Field of view and the body cam look apply in first person only; screen shake (Accessibility) also sets how much the body cam moves.", 13, UITheme.Faint);
 
             y = body.y;
             Section(ref y, rx, colW, "Top-down camera");

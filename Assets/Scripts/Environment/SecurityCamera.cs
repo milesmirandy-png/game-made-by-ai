@@ -31,13 +31,22 @@ namespace Swat
             All.Clear();
         }
 
+        Transform mount;
+
+        // In first person the camera hangs up by the ceiling instead of just over the low top-down wall.
+        public void RegisterView(ViewParts view)
+        {
+            view.AddLift(mount, 0.75f);
+            view.AddLift(head, 0.75f);
+        }
+
         public static SecurityCamera Create(Transform parent, Vector3 position, float yaw, bool active)
         {
             var go = new GameObject("Security Camera");
             go.transform.SetParent(parent, false);
             go.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             var cam = go.AddComponent<SecurityCamera>();
-            Shapes.Box("Mount", go.transform, new Vector3(0f, 1.3f, -0.05f), new Vector3(0.12f, 0.5f, 0.12f), new Color(0.6f, 0.6f, 0.6f));
+            cam.mount = Shapes.Box("Mount", go.transform, new Vector3(0f, 1.3f, -0.05f), new Vector3(0.12f, 0.5f, 0.12f), new Color(0.6f, 0.6f, 0.6f)).transform;
             cam.head = new GameObject("Head").transform;
             cam.head.SetParent(go.transform, false);
             cam.head.localPosition = new Vector3(0f, 1.6f, 0f);

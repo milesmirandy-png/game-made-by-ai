@@ -47,6 +47,8 @@ namespace Swat
         public string mapId;
         public string displayName;
         public Transform root;
+        // What changes between the top-down and first-person views (switched with V).
+        public readonly ViewParts view = new ViewParts();
         public readonly List<MapArea> areas = new List<MapArea>();
         public Vector3 playerSpawn;
         public float playerYaw;

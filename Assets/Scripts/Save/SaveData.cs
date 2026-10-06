@@ -55,7 +55,7 @@ namespace Swat
         public float cameraSmoothing = 0.12f;
         public bool edgeScrolling;
         public int cameraShake = 1;        // 0 off, 1 low, 2 medium
-        public int cameraView;             // 0 top-down, 1 first person (body cam); applies from the next mission
+        public int cameraView;             // 0 top-down, 1 first person (body cam); V switches it any time
         public float fieldOfView = 90f;    // first person, horizontal degrees
         public bool bodyCamLook = true;    // first person: wide lens, grain and the REC overlay
         public bool realisticAmmo = true;  // HUD shows how full the magazine feels and magazines left, not exact rounds
