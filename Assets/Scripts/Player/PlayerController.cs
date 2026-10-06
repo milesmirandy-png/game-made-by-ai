@@ -386,6 +386,7 @@ namespace Swat
                 if (IsSteadyAiming) rate *= 0.7f;
                 if (IsSprinting) rate *= 0.6f;
                 if (Health.HasShield) rate *= 0.65f;
+                if (Health.ArmInjured) rate *= 0.85f;
                 return rate;
             }
         }
@@ -456,8 +457,8 @@ namespace Swat
             bool sprintInput = sprintLatch || GameInput.KeyHeld(GameInput.Binding(InputAction.Sprint));
             // Sprinting from a crouch (or after a slide) stands you up.
             if (sprintInput && IsMoving && IsCrouched && !IsSteadyAiming && !Health.Bracing && Stamina > maxStamina * 0.25f) SetCrouch(false);
-            // Choking on gas: no sprinting.
-            bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing && GasExposure < 0.3f;
+            // Choking on gas or limping on a wounded leg: no sprinting.
+            bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing && GasExposure < 0.3f && !Health.LegInjured;
             if (Stamina <= 0f) exhausted = true;
             if (exhausted && Stamina > maxStamina * 0.25f) exhausted = false;
             IsSprinting = wantsSprint && !exhausted;
@@ -469,6 +470,7 @@ namespace Swat
             if (IsSteadyAiming) speed *= steadyAimMultiplier;
             if (Health.HasShield) speed *= Health.Bracing ? 0.35f : 0.9f;
             speed *= 1f - 0.3f * GasExposure;
+            if (Health.LegInjured) speed *= 0.8f;
 
             if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
             verticalVelocity += Physics.gravity.y * dt;

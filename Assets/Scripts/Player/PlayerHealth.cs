@@ -22,6 +22,11 @@ namespace Swat
             GameManager.Instance.CameraRig.Shake(0.25f);
         }
 
+        protected override void OnWounded(bool leg)
+        {
+            UIManager.Notify(leg ? "Leg wound: you're limping until it's treated (medical kit)" : "Arm wound: your aim is shaky until it's treated (medical kit)", true);
+        }
+
         protected override void OnDowned()
         {
             var player = GetComponent<PlayerController>();

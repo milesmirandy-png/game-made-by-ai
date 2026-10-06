@@ -19,6 +19,10 @@ namespace Swat
         public bool HasShield { get; private set; }
         public bool Bracing { get; private set; }
         public bool IsDown { get { return Current <= 0f; } }
+        // Limb hits (missions only): a leg wound means limping (slower, no sprint), an arm wound a
+        // shakier aim, until a medical kit treats it.
+        public bool LegInjured { get; private set; }
+        public bool ArmInjured { get; private set; }
         public Team Team { get { return Team.Police; } }
         public bool IsAlive { get { return !IsDown; } }
         public float DamageTaken { get; private set; }
@@ -91,6 +95,7 @@ namespace Swat
                 armorPoints = Mathf.Max(0f, armorPoints - info.amount * 0.5f);
             }
 
+            if (amount >= 6f && !VersusMatch.Active) Wound(info);
             Current = Mathf.Max(0f, Current - amount);
             DamageTaken += amount;
             OnDamaged(info, amount);
@@ -122,10 +127,38 @@ namespace Swat
             return 0f;
         }
 
+        // Where the round landed: below the hips is a leg, out to the side at chest height an arm.
+        void Wound(DamageInfo info)
+        {
+            if (info.point == Vector3.zero) return;
+            Vector3 local = transform.InverseTransformPoint(info.point);
+            if (local.y < 0.85f)
+            {
+                if (LegInjured) return;
+                LegInjured = true;
+                OnWounded(true);
+            }
+            else if (local.y < 1.45f && Mathf.Abs(local.x) > 0.17f)
+            {
+                if (ArmInjured) return;
+                ArmInjured = true;
+                OnWounded(false);
+            }
+        }
+
+        // A medical kit (or a revive) treats wounds as well as health.
+        public void TreatWounds()
+        {
+            LegInjured = ArmInjured = false;
+        }
+
+        protected virtual void OnWounded(bool leg) { }
+
         // Restores health gradually (never an instant full heal).
         public void HealOverTime(float amount, float seconds)
         {
             if (IsDown || amount <= 0f) return;
+            TreatWounds();
             healRemaining += amount;
             healPerSecond = healRemaining / Mathf.Max(0.5f, seconds);
         }
@@ -134,6 +167,7 @@ namespace Swat
         {
             if (!IsDown) return;
             Current = Mathf.Min(Max, health);
+            TreatWounds();
             OnRevived();
         }
 
@@ -144,6 +178,7 @@ namespace Swat
             Current = Max;
             armorPoints = Armor != null ? Armor.durability : 0f;
             healRemaining = 0f;
+            TreatWounds();
             if (wasDown) OnRevived();
         }
 

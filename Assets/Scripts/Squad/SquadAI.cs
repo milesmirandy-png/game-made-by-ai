@@ -244,11 +244,8 @@ namespace Swat
             if (Time.time < orderReadyAt) return;
 
             RoleUpkeep();
-            if (gassedUntil > 0f && Time.time > gassedUntil)
-            {
-                gassedUntil = 0f;
-                mover.SetSpeedMultiplier(1f);
-            }
+            if (gassedUntil > 0f && Time.time > gassedUntil) gassedUntil = 0f;
+            UpdatePace();
             // A loose weapon right next to them gets picked up on the way past.
             var loose = DroppedWeapon.Nearest(transform.position, 1.8f);
             if (loose != null) loose.Secure(this);
@@ -392,7 +389,7 @@ namespace Swat
             if (Time.time < nextShot) return;
             if (weapon.Magazine <= 0)
             {
-                if (weapon.Reserve > 0) StartReload();
+                if (weapon.CanReload) StartReload();
                 else if (Inventory.CurrentIndex == 0) SwitchToSidearm();
                 return;
             }
@@ -531,14 +528,23 @@ namespace Swat
         }
 
         float lastHeal = -100f;
-        float gassedUntil, gasRadioAt;
+        float gassedUntil, gasRadioAt, pace = 1f;
+
+        // Slower while choking on gas or limping on a wounded leg.
+        void UpdatePace()
+        {
+            float wanted = (Time.time < gassedUntil ? 0.65f : 1f) * (Health.LegInjured ? 0.8f : 1f);
+            if (Mathf.Approximately(wanted, pace)) return;
+            pace = wanted;
+            mover.SetSpeedMultiplier(pace);
+        }
 
         // CS gas: without a gas mask they choke and slow down (and say so).
         public void Gassed()
         {
             if (Loadout != null && Loadout.faceIndex == (int)GearCatalog.Face.GasMask) return;
-            if (Time.time > gassedUntil) mover.SetSpeedMultiplier(0.65f);
             gassedUntil = Time.time + 2f;
+            UpdatePace();
             if (Time.time >= gasRadioAt)
             {
                 gasRadioAt = Time.time + 12f;

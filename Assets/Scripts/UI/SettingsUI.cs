@@ -171,6 +171,7 @@ namespace Swat
             changed |= Check(ref y, lx, colW, "Hit stop and last-takedown slow-mo", ref s.hitStop);
             changed |= Check(ref y, lx, colW, "Heavy weapon handling (guns turn by weight)", ref s.heavyHandling);
             changed |= Check(ref y, lx, colW, "Classic blocky characters (next mission)", ref s.classicCharacters);
+            changed |= Check(ref y, lx, colW, "Realistic ammo (feel the magazine, no exact count)", ref s.realisticAmmo);
 
             y = body.y;
             Section(ref y, rx, colW, "Minimap");

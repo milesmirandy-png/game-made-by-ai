@@ -62,6 +62,15 @@ namespace Swat
             DrawRadio();
         }
 
+        static string WoundText(PlayerController player)
+        {
+            var health = player.Health;
+            if (health.LegInjured && health.ArmInjured) return "ARM + LEG WOUNDS";
+            if (health.LegInjured) return "LEG WOUND";
+            if (health.ArmInjured) return "ARM WOUND";
+            return "";
+        }
+
         // Damage shows as a soft red tint creeping in from the screen edges rather than a full-screen flash.
         static void DrawDamageEdges(float amount)
         {
@@ -182,7 +191,8 @@ namespace Swat
                 UITheme.Text(new Rect(rect.x + 70f, rect.y + 26f, 230f, 20f), officer.Status, 14, officer.IsAlive ? UITheme.Dim : UITheme.Bad);
                 UITheme.Bar(new Rect(rect.x + 48f, rect.y + 50f, 250f, 5f), officer.Health.Fraction, HealthColor(officer.Health.Fraction));
                 var weapon = officer.Inventory.Current;
-                UITheme.Text(new Rect(rect.x + 200f, rect.y + 6f, 100f, 22f), weapon.Magazine + "/" + weapon.Reserve, 14, UITheme.Dim, TextAnchor.UpperRight);
+                string ammo = SaveManager.Settings.realisticAmmo ? (weapon.UsesMagazines ? weapon.MagazinesLeft + " mags" : weapon.Reserve + " loose") : weapon.Magazine + "/" + weapon.Reserve;
+                UITheme.Text(new Rect(rect.x + 200f, rect.y + 6f, 100f, 22f), ammo, 14, UITheme.Dim, TextAnchor.UpperRight);
                 y += 68f;
             }
             if (!string.IsNullOrEmpty(squad.LastOrder) && Time.unscaledTime - squad.LastOrderTime < 4f)
@@ -209,7 +219,9 @@ namespace Swat
             string state = !player.IsAlive ? "DOWN" : player.Health.Bracing ? "Shield braced" : player.IsSliding ? "Sliding"
                 : player.Peeking ? (player.Lean < -0.1f ? "Peeking left" : player.Lean > 0.1f ? "Peeking right" : "Peeking") : player.IsSprinting ? "Sprinting" : player.IsCrouched ? "Crouched"
                 : player.IsSteadyAiming ? "Steady aim" : player.IsMoving ? "Moving" : "Ready";
-            UITheme.Text(new Rect(x, rect.y + 28f, cw, 20f), UITheme.RoleName(player.Officer.role) + "  |  " + state + (player.FlashlightOn ? "  |  Light on" : ""), 13, UITheme.Dim);
+            string wounds = WoundText(player);
+            UITheme.Text(new Rect(x, rect.y + 28f, cw, 20f), UITheme.RoleName(player.Officer.role) + "  |  " + state + (player.FlashlightOn ? "  |  Light on" : "") + (player.NightVision ? "  |  NVG" : "")
+                + (wounds.Length > 0 ? "  |  <color=#ff7a5c>" + wounds + "</color>" : ""), 13, UITheme.Dim);
             var health = player.Health;
             UITheme.Text(new Rect(x, rect.y + 52f, 70f, 18f), "HEALTH", 12, UITheme.Dim, TextAnchor.MiddleLeft, true);
             var healthRect = new Rect(x + 72f, rect.y + 56f, cw - 120f, 10f);
@@ -246,8 +258,32 @@ namespace Swat
             if (weapon.Data.lessLethal) mode += "  LESS-LETHAL";
             UITheme.Text(new Rect(rect.x + 144f, rect.y + 32f, 250f, 18f), mode + (weapons.IsReloading ? "   RELOADING" : weapons.IsSwitching ? "   SWITCHING" : ""), 13, weapons.IsReloading ? UITheme.Warn : UITheme.Dim);
             Color ammoColor = weapon.Magazine == 0 ? UITheme.Bad : weapon.Magazine <= weapon.MagazineSize / 4 ? UITheme.Warn : UITheme.TextColor;
-            UITheme.Text(new Rect(rect.x + 144f, rect.y + 46f, 120f, 40f), weapon.Magazine.ToString(), 34, ammoColor, TextAnchor.UpperLeft, true);
-            UITheme.Text(new Rect(rect.x + 220f, rect.y + 60f, 160f, 24f), "/ " + weapon.Reserve, 20, UITheme.Dim);
+            if (SaveManager.Settings.realisticAmmo && !VersusMatch.Active)
+            {
+                // Realistic ammo: how full the magazine feels, and the magazines in the pouches as pips.
+                UITheme.Text(new Rect(rect.x + 144f, rect.y + 50f, 120f, 34f), weapon.MagazineFeel.ToUpperInvariant(), 24, ammoColor, TextAnchor.UpperLeft, true);
+                if (weapon.UsesMagazines)
+                {
+                    var spares = weapon.Spares;
+                    int shown = 0;
+                    for (int i = 0; i < spares.Count && shown < 10; i++)
+                    {
+                        if (spares[i] <= 0) continue;
+                        float fill = spares[i] / (float)weapon.MagazineSize;
+                        var pip = new Rect(rect.x + 262f + shown * 12f, rect.y + 54f, 8f, 22f);
+                        UITheme.Fill(pip, new Color(0f, 0f, 0f, 0.45f));
+                        UITheme.Fill(new Rect(pip.x, pip.yMax - pip.height * fill, pip.width, pip.height * fill), fill > 0.95f ? UITheme.TextColor : UITheme.Dim);
+                        shown++;
+                    }
+                    if (shown == 0) UITheme.Text(new Rect(rect.x + 262f, rect.y + 56f, 130f, 20f), "no spare mags", 13, UITheme.Bad);
+                }
+                else UITheme.Text(new Rect(rect.x + 262f, rect.y + 56f, 130f, 20f), weapon.Reserve + " loose", 15, UITheme.Dim);
+            }
+            else
+            {
+                UITheme.Text(new Rect(rect.x + 144f, rect.y + 46f, 120f, 40f), weapon.Magazine.ToString(), 34, ammoColor, TextAnchor.UpperLeft, true);
+                UITheme.Text(new Rect(rect.x + 220f, rect.y + 60f, 160f, 24f), "/ " + weapon.Reserve, 20, UITheme.Dim);
+            }
             if (weapons.IsReloading) UITheme.Bar(new Rect(rect.x + 144f, rect.y + 88f, 240f, 4f), weapons.ReloadProgress, UITheme.Warn);
 
             // Equipment strip.

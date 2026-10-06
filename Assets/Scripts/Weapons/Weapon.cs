@@ -7,7 +7,37 @@ namespace Swat
     {
         public WeaponData Data { get; private set; }
         public int Magazine { get; set; }
-        public int Reserve { get; set; }
+        // Spare ammo. Magazine-fed guns carry it as separate magazines (Spares): a reload swaps in
+        // the fullest one and the one coming out goes back in the pouch with whatever it still holds,
+        // so a hasty reload doesn't throw rounds away, but you can end up with a pouch of half-empty
+        // magazines. Tube-fed shotguns, revolvers and launchers load loose rounds as before.
+        public int Reserve
+        {
+            get
+            {
+                if (!UsesMagazines) return looseRounds;
+                int sum = 0;
+                foreach (int rounds in spares) sum += rounds;
+                return sum;
+            }
+            set
+            {
+                if (!UsesMagazines) { looseRounds = System.Math.Max(0, value); return; }
+                // Refill: full magazines, plus a partial one for the rest.
+                spares.Clear();
+                int left = System.Math.Max(0, value);
+                while (left > 0)
+                {
+                    int rounds = System.Math.Min(left, MagazineSize);
+                    spares.Add(rounds);
+                    left -= rounds;
+                }
+            }
+        }
+        public bool UsesMagazines { get; private set; }
+        public IList<int> Spares { get { return spares; } }
+        readonly List<int> spares = new List<int>();
+        int looseRounds;
         public FireMode Mode { get; private set; }
         public bool Automatic { get { return Mode == FireMode.FullAuto; } }
         public bool Burst { get { return Mode == FireMode.Burst; } }
@@ -55,6 +85,7 @@ namespace Swat
                 }
             MagazineSize = System.Math.Max(1, (int)System.Math.Round(data.magazineSize * magazine));
             ReloadTime = data.reloadTime * reload;
+            UsesMagazines = FedByMagazine(data);
             Magazine = MagazineSize;
             Reserve = data.startingReserve;
         }
@@ -65,16 +96,86 @@ namespace Swat
             return new[] { loadout.lightId, loadout.opticId, loadout.muzzleId, loadout.stockId, loadout.underbarrelId, loadout.magazineId };
         }
 
-        public bool CanReload { get { return Magazine < MagazineSize && Reserve > 0; } }
+        // Tube-fed shotguns, revolvers and launchers are loaded round by round.
+        public static bool FedByMagazine(WeaponData data)
+        {
+            switch (data.category)
+            {
+                case WeaponCategory.Shotgun:
+                case WeaponCategory.Revolver:
+                case WeaponCategory.LessLethal:
+                case WeaponCategory.GrenadeLauncher:
+                case WeaponCategory.Pepperball:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
+        public bool CanReload
+        {
+            get
+            {
+                if (Magazine >= MagazineSize) return false;
+                if (!UsesMagazines) return looseRounds > 0;
+                foreach (int rounds in spares) if (rounds > Magazine) return true;
+                return false;
+            }
+        }
+
+        // Spare magazines with any rounds in them.
+        public int MagazinesLeft
+        {
+            get
+            {
+                int count = 0;
+                foreach (int rounds in spares) if (rounds > 0) count++;
+                return count;
+            }
+        }
+
+        // The ammo line for the HUD and wheel: exact rounds, or with realistic ammo how full the
+        // magazine feels and how many magazines are left.
+        public string AmmoText(bool realistic)
+        {
+            if (!realistic) return Magazine + " / " + Reserve;
+            if (!UsesMagazines) return MagazineFeel + ", " + Reserve + " loose";
+            int mags = MagazinesLeft;
+            return MagazineFeel + ", " + mags + (mags == 1 ? " mag" : " mags");
+        }
+
+        // How full the magazine in the gun feels, in words (realistic ammo shows no exact count).
+        public string MagazineFeel
+        {
+            get
+            {
+                if (Magazine <= 0) return "Empty";
+                float f = Magazine / (float)MagazineSize;
+                return f >= 0.95f ? "Full" : f >= 0.65f ? "Heavy" : f >= 0.35f ? "Half" : "Light";
+            }
+        }
         public float Spread { get { return Data.spread * SpreadMultiplier; } }
         public float Recoil { get { return Data.recoil * RecoilMultiplier; } }
         public float NoiseRadius { get { return Data.noiseRadius * NoiseMultiplier; } }
 
         public void FinishReload()
         {
-            int taken = System.Math.Min(MagazineSize - Magazine, Reserve);
-            Magazine += taken;
-            Reserve -= taken;
+            if (!UsesMagazines)
+            {
+                int taken = System.Math.Min(MagazineSize - Magazine, looseRounds);
+                Magazine += taken;
+                looseRounds -= taken;
+                return;
+            }
+            int best = -1;
+            for (int i = 0; i < spares.Count; i++)
+                if (spares[i] > Magazine && (best < 0 || spares[i] > spares[best])) best = i;
+            if (best < 0) return;
+            int incoming = spares[best];
+            spares.RemoveAt(best);
+            // The magazine coming out keeps its rounds (an empty one is dropped).
+            if (Magazine > 0) spares.Add(Magazine);
+            Magazine = incoming;
         }
 
         // Automatic and burst weapons that allow it switch to semi-automatic and back.

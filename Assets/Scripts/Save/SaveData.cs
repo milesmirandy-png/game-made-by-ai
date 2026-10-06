@@ -58,6 +58,7 @@ namespace Swat
         public int cameraView;             // 0 top-down, 1 first person (body cam); applies from the next mission
         public float fieldOfView = 90f;    // first person, horizontal degrees
         public bool bodyCamLook = true;    // first person: wide lens, grain and the REC overlay
+        public bool realisticAmmo = true;  // HUD shows how full the magazine feels and magazines left, not exact rounds
         public float mouseSensitivity = 1f;
         public float aimSmoothing;         // 0 = off (direct)
         public float controllerSensitivity = 1f;
