@@ -143,6 +143,7 @@ namespace Swat
                 idMarker = true,
                 idColor = UITheme.RoleColor(officer.role),
                 holster = true,
+                soldier = true,
             };
         }
 

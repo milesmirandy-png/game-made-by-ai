@@ -582,7 +582,7 @@ namespace Swat
                 shirt = new Color(0.12f, 0.16f, 0.26f), pants = new Color(0.1f, 0.13f, 0.21f), skin = skin,
                 headwear = new Color(0.08f, 0.09f, 0.12f), head = HeadStyle.Helmet, vestOn = true, vest = new Color(0.16f, 0.17f, 0.2f),
                 ring = new Color(0.2f, 0.45f, 1f), armed = true, outfit = Outfit.Tactical, idMarker = true, idColor = new Color(0.36f, 0.62f, 0.95f),
-                holster = true,
+                holster = true, soldier = true,
             };
         }
 
@@ -593,7 +593,7 @@ namespace Swat
                 shirt = new Color(0.42f, 0.12f, 0.12f), pants = new Color(0.16f, 0.12f, 0.12f), skin = skin,
                 headwear = new Color(0.14f, 0.1f, 0.1f), head = HeadStyle.Helmet, vestOn = true, vest = new Color(0.22f, 0.18f, 0.18f),
                 ring = new Color(1f, 0.25f, 0.2f), armed = true, outfit = Outfit.Tactical, idMarker = true, idColor = new Color(0.95f, 0.3f, 0.25f),
-                width = 1.04f, holster = true,
+                width = 1.04f, holster = true, soldier = true,
             };
         }
 

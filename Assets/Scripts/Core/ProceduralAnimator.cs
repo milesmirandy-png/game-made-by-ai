@@ -144,8 +144,12 @@ namespace Swat
             }
 
             float blend = 1f - Mathf.Exp(-14f * dt);
-            parts.leftArm.localRotation = Quaternion.Slerp(parts.leftArm.localRotation, Quaternion.Euler(left), blend);
-            parts.rightArm.localRotation = Quaternion.Slerp(parts.rightArm.localRotation, Quaternion.Euler(right), blend);
+            // Arms that hold the gun by reach (the imported soldier's) are posed in PoseSoldierArms instead.
+            bool gunOut = parts.gunRoot != null && parts.gunRoot.gameObject.activeSelf;
+            bool reachRight = parts.rightForearm != null && gunOut && (pose == Pose.Aim || pose == Pose.Shielding);
+            bool reachLeft = parts.leftForearm != null && gunOut && pose == Pose.Aim;
+            if (!reachLeft) parts.leftArm.localRotation = Quaternion.Slerp(parts.leftArm.localRotation, Quaternion.Euler(left), blend);
+            if (!reachRight) parts.rightArm.localRotation = Quaternion.Slerp(parts.rightArm.localRotation, Quaternion.Euler(right), blend);
 
             if (parts.gunRoot != null && parts.gunRoot.gameObject.activeSelf)
             {
@@ -154,13 +158,67 @@ namespace Swat
                 // Small sway while moving and a slow idle drift.
                 float swayX = Mathf.Sin(bobPhase * 0.5f) * 2.5f * moveBlend + Mathf.Sin(breath * 0.7f) * 0.6f;
                 float swayY = Mathf.Sin(bobPhase) * 1.5f * moveBlend;
-                Vector3 targetPosition = new Vector3(0.12f, 1.17f - r * 0.12f - switchDip * 0.25f - (lowered ? 0.25f : 0f), 0.22f - recoil * 0.1f - (lowered ? 0.12f : 0f));
+                Vector3 hold = parts.gunHold;
+                Vector3 targetPosition = new Vector3(hold.x, hold.y - r * 0.12f - switchDip * 0.25f - (lowered ? 0.25f : 0f), hold.z - recoil * 0.1f - (lowered ? 0.12f : 0f));
                 Quaternion targetRotation = Quaternion.Euler(-recoil * 10f + r * 35f + switchDip * 55f + (lowered ? 45f : 0f) + swayY, swayX, r * -25f);
                 // Recoil is instant; everything else eases.
                 float gunBlend = recoil > 0.05f ? 1f : 1f - Mathf.Exp(-18f * dt);
                 parts.gunRoot.localPosition = Vector3.Lerp(parts.gunRoot.localPosition, targetPosition, gunBlend);
                 parts.gunRoot.localRotation = Quaternion.Slerp(parts.gunRoot.localRotation, targetRotation, gunBlend);
             }
+            if (parts.leftForearm != null) PoseSoldierArms(dt);
+        }
+
+        // The imported soldier's arms: aiming, both hands go on the gun (trigger hand on the grip, the
+        // other on the handguard, or on the magazine mid-reload), following recoil and sway; in every other
+        // pose the forearms straighten and the arms swing as above.
+        void PoseSoldierArms(float dt)
+        {
+            float blend = recoil > 0.05f ? 1f : 1f - Mathf.Exp(-20f * dt);
+            bool holding = parts.gunRoot != null && parts.gunRoot.gameObject.activeSelf && (pose == Pose.Aim || pose == Pose.Shielding);
+            if (!holding)
+            {
+                parts.leftForearm.localRotation = Quaternion.Slerp(parts.leftForearm.localRotation, Quaternion.identity, blend);
+                parts.rightForearm.localRotation = Quaternion.Slerp(parts.rightForearm.localRotation, Quaternion.identity, blend);
+                return;
+            }
+            float length = parts.muzzle != null ? parts.muzzle.localPosition.z : 0.5f;
+            bool pistol = length < 0.35f;
+            Reach(parts.rightArm, parts.rightForearm, parts.rightHand, parts.gunRoot.TransformPoint(new Vector3(0f, -0.045f, -0.02f)), 1f, blend);
+            if (pose == Pose.Shielding)
+            {
+                // The other arm holds the shield.
+                parts.leftForearm.localRotation = Quaternion.Slerp(parts.leftForearm.localRotation, Quaternion.identity, blend);
+                return;
+            }
+            Vector3 support = pistol ? new Vector3(-0.01f, -0.06f, 0.02f) : new Vector3(0f, -0.025f, Mathf.Min(0.24f, length * 0.45f));
+            if (reload > 0f) support = Vector3.Lerp(support, new Vector3(0f, -0.13f, 0.06f), Mathf.Sin(reload * Mathf.PI));
+            Reach(parts.leftArm, parts.leftForearm, parts.leftHand, parts.gunRoot.TransformPoint(support), -1f, blend);
+        }
+
+        // Two-bone reach: swings the upper arm and forearm (rigid parts) so the hand lands on target,
+        // the elbow bending down and out to the side (side: -1 left, +1 right).
+        void Reach(Transform upper, Transform forearm, Transform hand, Vector3 target, float side, float blend)
+        {
+            var model = parts.model;
+            Vector3 shoulder = upper.position;
+            float l1 = upper.TransformVector(forearm.localPosition).magnitude;
+            float l2 = forearm.TransformVector(hand.localPosition).magnitude;
+            Vector3 toTarget = target - shoulder;
+            if (toTarget.sqrMagnitude < 1e-6f || l1 < 1e-4f || l2 < 1e-4f) return;
+            float dist = Mathf.Clamp(toTarget.magnitude, Mathf.Abs(l1 - l2) + 0.01f, l1 + l2 - 0.005f);
+            Vector3 dir = toTarget.normalized;
+            Vector3 bend = Vector3.ProjectOnPlane(-model.up + model.right * side * 0.6f - model.forward * 0.2f, dir);
+            bend = bend.sqrMagnitude > 1e-6f ? bend.normalized : model.right * side;
+            float a = (l1 * l1 - l2 * l2 + dist * dist) / (2f * dist);
+            float h = Mathf.Sqrt(Mathf.Max(0f, l1 * l1 - a * a));
+            Vector3 elbow = shoulder + dir * a + bend * h;
+            Vector3 reach = shoulder + dir * dist;
+            // Turn each rest direction (shoulder to elbow, elbow to hand, as modelled) onto the new one.
+            var upperRotation = Quaternion.FromToRotation(forearm.localPosition, upper.parent.InverseTransformDirection(elbow - shoulder));
+            upper.localRotation = Quaternion.Slerp(upper.localRotation, upperRotation, blend);
+            var foreRotation = Quaternion.FromToRotation(hand.localPosition, upper.InverseTransformDirection(reach - forearm.position));
+            forearm.localRotation = Quaternion.Slerp(forearm.localRotation, foreRotation, blend);
         }
     }
 }

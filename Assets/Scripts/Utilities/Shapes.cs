@@ -63,17 +63,25 @@ namespace Swat
             if (root == null || !ToonCharacters) return;
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
-                var source = renderer.sharedMaterial;
-                if (source == null) continue;
-                var shader = source.shader;
-                if (shader == toonShader || shader == unlitShader || shader == decalShader || shader == glowShader || source.mainTexture != null) continue;
-                Material toon;
-                if (!toonMaterials.TryGetValue(source, out toon) || toon == null)
+                // Imported models carry several materials (one per colour); swap each.
+                var shared = renderer.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < shared.Length; i++)
                 {
-                    toon = new Material(toonShader) { name = source.name + " Toon", color = source.color };
-                    toonMaterials[source] = toon;
+                    var source = shared[i];
+                    if (source == null) continue;
+                    var shader = source.shader;
+                    if (shader == toonShader || shader == unlitShader || shader == decalShader || shader == glowShader || source.mainTexture != null) continue;
+                    Material toon;
+                    if (!toonMaterials.TryGetValue(source, out toon) || toon == null)
+                    {
+                        toon = new Material(toonShader) { name = source.name + " Toon", color = source.color };
+                        toonMaterials[source] = toon;
+                    }
+                    shared[i] = toon;
+                    changed = true;
                 }
-                renderer.sharedMaterial = toon;
+                if (changed) renderer.sharedMaterials = shared;
             }
         }
 

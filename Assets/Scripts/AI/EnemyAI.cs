@@ -103,7 +103,9 @@ namespace Swat
             if (data.armed)
             {
                 gun = GameData.Weapon(SuspectGun(data.archetype)) ?? GameData.Weapon("smg_compact");
-                CharacterFactory.SetWeapon(parts, gun, null);
+                // Some carry the pack's double-barrel shotgun or snub-nosed revolver instead (looks only).
+                string variant = gun.id == "shotgun_ts8" && Random.value < 0.5f ? "gun_double" : gun.id == "revolver_r6" && Random.value < 0.5f ? "gun_snub" : null;
+                CharacterFactory.SetWeapon(parts, gun, null, variant);
             }
             ai.body = go.AddComponent<EnemyController>();
             ai.body.Init(parts, ai.mover, data.armed);

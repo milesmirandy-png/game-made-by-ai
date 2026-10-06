@@ -2,10 +2,12 @@ using UnityEngine;
 
 namespace Swat
 {
-    // Builds a small low-poly model for each weapon category out of boxes, in the
-    // same colours as the pixel-art sprites: charcoal steel, dark steel and the
-    // weapon's accent colour for the furniture (stock, grip, handguard). If the
-    // WeaponData has a modelPrefab, that is used instead. +z is the muzzle.
+    // The 3D gun in a character's hands. Most weapons use a model from the
+    // imported low-poly weapon pack (ImportedModel says which); the rest are
+    // built out of boxes, in the same colours as the pixel-art sprites:
+    // charcoal steel, dark steel and the weapon's accent colour for the
+    // furniture (stock, grip, handguard). If the WeaponData has a modelPrefab,
+    // that is used instead. +z is the muzzle.
     public static class WeaponModels
     {
         // Charcoal steel and polymer, as in the weapon sprites.
@@ -15,8 +17,45 @@ namespace Swat
         static readonly Color Orange = new Color(0.95f, 0.5f, 0.1f);
         static readonly Color Yellow = new Color(0.95f, 0.78f, 0.12f);
 
+        // Which imported model each weapon uses (the closest look in the pack). Weapons not listed
+        // (the LMG, rotary gun, launchers, auto and drum shotguns, pepperball and stun pistol) stay boxes.
+        public static string ImportedModel(string weaponId)
+        {
+            switch (weaponId)
+            {
+                case "rifle_compact": return "gun_ak";
+                case "rifle_service": case "rifle_b4": return "gun_m4";
+                case "rifle_cx": return "gun_bullpup";
+                case "dmr_dm2": return "gun_awp";
+                case "carbine_pc9": return "gun_bolt";
+                case "pdw_x4": return "gun_p90";
+                case "smg_compact": return "gun_uzi";
+                case "smg_v10": return "gun_mp5";
+                case "mp_m9": return "gun_skorpion";
+                case "smg_kv": return "gun_vector";
+                case "shotgun_ts8": return "gun_pump";
+                case "pistol_p17": return "gun_pistol";
+                case "pistol_bk6": return "gun_pistol2";
+                case "pistol_h50": return "gun_heavy";
+                case "revolver_r6": return "gun_revolver";
+                default: return null;
+            }
+        }
+
+        // Models that already have a scope or sight on top (no extra optic box).
+        static bool HasOwnSight(string modelId)
+        {
+            return modelId == "gun_awp" || modelId == "gun_bolt" || modelId == "gun_bullpup" || modelId == "gun_p90";
+        }
+
         // Returns the distance from the grip to the muzzle.
         public static float Build(WeaponData weapon, Transform parent, OfficerLoadout attachments)
+        {
+            return Build(weapon, parent, attachments, null);
+        }
+
+        // modelOverride: use this imported model instead of the usual one (suspects' variety).
+        public static float Build(WeaponData weapon, Transform parent, OfficerLoadout attachments, string modelOverride)
         {
             if (weapon.modelPrefab != null)
             {
@@ -24,6 +63,28 @@ namespace Swat
                 foreach (var collider in model.GetComponentsInChildren<Collider>()) Object.Destroy(collider);
                 var muzzle = model.transform.Find("Muzzle");
                 return muzzle != null ? muzzle.localPosition.z : 0.5f;
+            }
+            string imported = SaveManager.Settings.classicCharacters ? null : modelOverride ?? ImportedModel(weapon.id);
+            var importedModel = ModelLibrary.Get(imported);
+            if (importedModel != null && ModelLibrary.Spawn(importedModel, "gun", parent, Vector3.zero) != null)
+            {
+                var point = importedModel.Find("muzzle");
+                float front = point != null ? point.pivot.z : 0.5f;
+                if (attachments != null && !weapon.isSidearm)
+                {
+                    if (!string.IsNullOrEmpty(attachments.lightId))
+                        Box(parent, 0.04f, -0.03f, front * 0.6f, 0.03f, 0.03f, 0.07f, new Color(0.75f, 0.75f, 0.7f));
+                    if (!string.IsNullOrEmpty(attachments.opticId) && !HasOwnSight(imported))
+                        Box(parent, 0f, 0.085f, 0.06f, 0.04f, 0.045f, 0.08f, DarkSteel);
+                    if (!string.IsNullOrEmpty(attachments.muzzleId))
+                    {
+                        float y = point != null ? point.pivot.y : 0.015f;
+                        var suppressor = Shapes.Make(PrimitiveType.Cylinder, "Suppressor", parent, new Vector3(0f, y, front + 0.08f), new Vector3(0.045f, 0.08f, 0.045f), DarkSteel, false).transform;
+                        suppressor.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                        front += 0.16f;
+                    }
+                }
+                return front;
             }
 
             Color wood = weapon.accent;

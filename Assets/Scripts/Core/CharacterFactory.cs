@@ -24,6 +24,7 @@ namespace Swat
         public bool shortSleeves, skirt, backpack, lanyard, beard, gloves, sneakers, holster, bandage, hoodUp, bandana;
         public int glasses;           // 0 none, 1 glasses, 2 sunglasses
         public Color shoes, bag;      // shoe and backpack colour
+        public bool soldier;          // built from the imported soldier model (unless Classic characters is on)
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -31,6 +32,11 @@ namespace Swat
     public class CharacterParts
     {
         public Transform root, model, head, leftArm, rightArm, leftLeg, rightLeg, gunRoot, muzzle, shield;
+        // The imported soldier's arms bend at the elbow (null on the blocky figures, whose arms are one piece);
+        // the hand points are where its hands hold the gun.
+        public Transform leftForearm, rightForearm, leftHand, rightHand;
+        // Where the gun is held (model space).
+        public Vector3 gunHold = new Vector3(0.12f, 1.17f, 0.22f);
         public Renderer ring;
         public GameObject alertMarker, visuals;
         public Light flashlight;
@@ -156,6 +162,58 @@ namespace Swat
             Color skin = look.skin;
             Color hairColor = look.headwear;
 
+            // Officers, the game-mode teams and armoured suspects use the imported soldier model (split on the
+            // joints the animator moves); everyone else, or everyone with Classic characters on, is built from boxes.
+            var soldier = look.soldier && !SaveManager.Settings.classicCharacters ? ModelLibrary.Get("soldier") : null;
+            if (soldier != null) BuildSoldier(parts, look, m, soldier);
+            else BuildBlocky(parts, look, m, shoe, skin, hairColor, tactical);
+
+            parts.gunRoot = new GameObject("Gun").transform;
+            parts.gunRoot.SetParent(m, false);
+            parts.gunRoot.localPosition = parts.gunHold;
+            parts.muzzle = new GameObject("Muzzle").transform;
+            parts.muzzle.SetParent(parts.gunRoot, false);
+            parts.muzzle.localPosition = new Vector3(0f, 0f, 0.5f);
+            parts.ShowWeapon(look.armed);
+
+            if (look.shield)
+            {
+                // The imported riot shield (in police black with a white band), or a box if it's missing.
+                var shieldModel = SaveManager.Settings.classicCharacters ? null : ModelLibrary.Get("police_shield");
+                if (shieldModel != null)
+                {
+                    parts.shield = new GameObject("Shield").transform;
+                    parts.shield.SetParent(m, false);
+                    parts.shield.localPosition = new Vector3(-0.12f, 1.0f, 0.5f);
+                    ModelLibrary.Spawn(shieldModel, "shield", parts.shield, Vector3.zero, (slot, original) => new Color(0.07f, 0.08f, 0.1f));
+                    Shapes.Box("Label", parts.shield, new Vector3(0f, 0.12f, 0.045f), new Vector3(0.36f, 0.06f, 0.01f), new Color(0.85f, 0.85f, 0.85f), false);
+                    Shapes.Box("Visor", parts.shield, new Vector3(0f, 0.37f, 0.005f), new Vector3(0.21f, 0.07f, 0.02f), new Color(0.35f, 0.6f, 0.9f), false, 1.2f);
+                }
+                else
+                {
+                    parts.shield = Shapes.Box("Shield", m, new Vector3(-0.12f, 1.0f, 0.5f), new Vector3(0.62f, 1.05f, 0.06f), new Color(0.06f, 0.07f, 0.09f), false).transform;
+                    Shapes.Box("Visor", parts.shield, new Vector3(0f, 0.3f, -0.6f), new Vector3(0.6f, 0.08f, 0.5f), new Color(0.35f, 0.6f, 0.9f), false, 1.2f);
+                    Shapes.Box("Label", parts.shield, new Vector3(0f, -0.05f, -0.6f), new Vector3(0.7f, 0.08f, 0.5f), new Color(0.85f, 0.85f, 0.85f), false);
+                }
+            }
+
+            parts.ring = Shapes.Make(PrimitiveType.Cylinder, "Ring", v, new Vector3(0f, 0.04f, 0f), new Vector3(0.95f, 0.01f, 0.95f), look.ring, false, 1.5f).GetComponent<Renderer>();
+            // Soft contact shadow so characters sit on the floor even without real-time shadows.
+            DecalMesh.Single("Blob Shadow", v, root.position + Vector3.up * 0.035f, new Vector2(0.95f, 0.95f), 0f, new Color(0f, 0f, 0f, 0.4f), Shapes.DecalMaterial(ProceduralTextures.Radial));
+
+            parts.alertMarker = new GameObject("Alert Marker");
+            parts.alertMarker.transform.SetParent(v, false);
+            Shapes.Box("Bar", parts.alertMarker.transform, new Vector3(0f, 2.45f, 0f), new Vector3(0.12f, 0.4f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
+            Shapes.Box("Dot", parts.alertMarker.transform, new Vector3(0f, 2.12f, 0f), new Vector3(0.12f, 0.12f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
+            parts.alertMarker.SetActive(false);
+            Shapes.Toonify(m);
+            parts.CacheRenderers();
+            return parts;
+        }
+
+        // The original blocky figure: legs, torso, outfit, head, face and arms from boxes.
+        static void BuildBlocky(CharacterParts parts, Appearance look, Transform m, Color shoe, Color skin, Color hairColor, bool tactical)
+        {
             // Legs swing from the hips: thigh, shin and shoe (white soles on sneakers).
             parts.leftLeg = Leg("Leg L", m, new Vector3(-0.11f, 0.8f, 0f), look, shoe, tactical);
             parts.rightLeg = Leg("Leg R", m, new Vector3(0.11f, 0.8f, 0f), look, shoe, tactical);
@@ -293,33 +351,75 @@ namespace Swat
             if (look.holster) Shapes.Box("Holster", parts.rightLeg, new Vector3(0.11f, -0.2f, 0f), new Vector3(0.06f, 0.2f, 0.13f), Gear, false);
             if (look.bandage && !shortSleeves) Shapes.Box("Arm Bandage", parts.leftArm, new Vector3(0f, -0.36f, 0f), new Vector3(0.145f, 0.07f, 0.145f), new Color(0.95f, 0.95f, 0.92f), false);
 
-            parts.gunRoot = new GameObject("Gun").transform;
-            parts.gunRoot.SetParent(m, false);
-            parts.gunRoot.localPosition = new Vector3(0.12f, 1.17f, 0.22f);
-            parts.muzzle = new GameObject("Muzzle").transform;
-            parts.muzzle.SetParent(parts.gunRoot, false);
-            parts.muzzle.localPosition = new Vector3(0f, 0f, 0.5f);
-            parts.ShowWeapon(look.armed);
+        }
 
-            if (look.shield)
+        // The imported soldier: torso on the model, head, arms and legs on their own pivots (where the
+        // animator turns them), recoloured from the look: uniform, vest, helmet, skin, gloves and boots.
+        static void BuildSoldier(CharacterParts parts, Appearance look, Transform m, ModelLibrary.Model model)
+        {
+            Color vest = look.vestOn ? look.vest : Shapes.Shade(look.shirt, 0.85f);
+            System.Func<string, Color, Color> recolor = (slot, original) =>
             {
-                parts.shield = Shapes.Box("Shield", m, new Vector3(-0.12f, 1.0f, 0.5f), new Vector3(0.62f, 1.05f, 0.06f), new Color(0.06f, 0.07f, 0.09f), false).transform;
-                Shapes.Box("Visor", parts.shield, new Vector3(0f, 0.3f, -0.6f), new Vector3(0.6f, 0.08f, 0.5f), new Color(0.35f, 0.6f, 0.9f), false, 1.2f);
-                Shapes.Box("Label", parts.shield, new Vector3(0f, -0.05f, -0.6f), new Vector3(0.7f, 0.08f, 0.5f), new Color(0.85f, 0.85f, 0.85f), false);
+                switch (slot)
+                {
+                    case "Vest": return vest;
+                    case "Pouches": case "Bag": return Shapes.Shade(vest, 1.35f);
+                    case "Shirt": return look.shirt;
+                    case "Pants": return look.pants;
+                    case "Helmet": return look.headwear;
+                    case "Skin": return look.skin;
+                    case "Gloves": case "Shoes": return Gear;
+                    case "Belt": case "Pads": return Shapes.Shade(Gear, 1.5f);
+                    case "Mask": return Shapes.Shade(look.headwear, 0.85f);
+                    case "Scarf": return Shapes.Shade(look.shirt, 0.7f);
+                    default: return original; // headset, goggles, watch, torch: their own colours
+                }
+            };
+            ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor);
+            parts.leftLeg = SoldierPart(model, "legL", m, recolor);
+            parts.rightLeg = SoldierPart(model, "legR", m, recolor);
+            parts.leftArm = SoldierPart(model, "armL", m, recolor);
+            parts.rightArm = SoldierPart(model, "armR", m, recolor);
+            parts.leftForearm = SoldierPart(model, "foreL", parts.leftArm, recolor, model.Find("armL"));
+            parts.rightForearm = SoldierPart(model, "foreR", parts.rightArm, recolor, model.Find("armR"));
+            parts.leftHand = SoldierPoint(model, "handL", parts.leftForearm, model.Find("foreL"));
+            parts.rightHand = SoldierPoint(model, "handR", parts.rightForearm, model.Find("foreR"));
+            // The gun sits a little higher and more central than on the blocky figures, within reach of
+            // these arms (the animator puts both hands on it).
+            parts.gunHold = new Vector3(0.08f, 1.22f, 0.18f);
+            parts.head = SoldierPart(model, "head", m, recolor);
+            // A slightly bigger head in pixel art, as for the blocky figures, so helmets read from above.
+            if (QualityManager.PixelArt) parts.head.localScale = Vector3.one * 1.15f;
+
+            if (look.idMarker)
+            {
+                Shapes.Box("ID Top", parts.head, new Vector3(0f, 0.285f, -0.03f), new Vector3(0.1f, 0.02f, 0.14f), look.idColor, false, 1.2f);
+                Shapes.Box("Patch", parts.rightArm, new Vector3(0.055f, -0.1f, 0f), new Vector3(0.01f, 0.08f, 0.08f), look.idColor, false);
             }
+            // Shoulder tabs in the squad (or team) colour: what you see first from above.
+            Color tab = look.idMarker ? Shapes.Shade(look.idColor, 0.85f) : Shapes.Shade(vest, 1.25f);
+            Shapes.Box("Shoulder Tab", parts.leftArm, new Vector3(0f, 0.035f, 0f), new Vector3(0.12f, 0.04f, 0.15f), tab, false);
+            Shapes.Box("Shoulder Tab", parts.rightArm, new Vector3(0f, 0.035f, 0f), new Vector3(0.12f, 0.04f, 0.15f), tab, false);
+        }
 
-            parts.ring = Shapes.Make(PrimitiveType.Cylinder, "Ring", v, new Vector3(0f, 0.04f, 0f), new Vector3(0.95f, 0.01f, 0.95f), look.ring, false, 1.5f).GetComponent<Renderer>();
-            // Soft contact shadow so characters sit on the floor even without real-time shadows.
-            DecalMesh.Single("Blob Shadow", v, root.position + Vector3.up * 0.035f, new Vector2(0.95f, 0.95f), 0f, new Color(0f, 0f, 0f, 0.4f), Shapes.DecalMaterial(ProceduralTextures.Radial));
+        // A part on its own pivot; within another part (a forearm in an upper arm), relative to that part's pivot.
+        static Transform SoldierPart(ModelLibrary.Model model, string name, Transform parent, System.Func<string, Color, Color> recolor, ModelLibrary.Part within = null)
+        {
+            var part = model.Find(name);
+            var pivot = new GameObject(name).transform;
+            pivot.SetParent(parent, false);
+            pivot.localPosition = part != null ? part.pivot - (within != null ? within.pivot : Vector3.zero) : Vector3.zero;
+            ModelLibrary.Spawn(model, name, pivot, Vector3.zero, recolor);
+            return pivot;
+        }
 
-            parts.alertMarker = new GameObject("Alert Marker");
-            parts.alertMarker.transform.SetParent(v, false);
-            Shapes.Box("Bar", parts.alertMarker.transform, new Vector3(0f, 2.45f, 0f), new Vector3(0.12f, 0.4f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
-            Shapes.Box("Dot", parts.alertMarker.transform, new Vector3(0f, 2.12f, 0f), new Vector3(0.12f, 0.12f, 0.12f), new Color(1f, 0.2f, 0.1f), false, 3f);
-            parts.alertMarker.SetActive(false);
-            Shapes.Toonify(m);
-            parts.CacheRenderers();
-            return parts;
+        static Transform SoldierPoint(ModelLibrary.Model model, string name, Transform parent, ModelLibrary.Part within)
+        {
+            var part = model.Find(name);
+            var point = new GameObject(name).transform;
+            point.SetParent(parent, false);
+            point.localPosition = part != null && within != null ? part.pivot - within.pivot : new Vector3(0f, -0.28f, 0.05f);
+            return point;
         }
 
         // Clothing details layered over the torso.
@@ -495,7 +595,13 @@ namespace Swat
                     look.hoodUp = Random.value < 0.5f;
                     look.backpack = Random.value < 0.25f;
                     break;
-                case EnemyArchetype.Armored: look.outfit = Swat.Outfit.Plain; look.width = Random.Range(1.05f, 1.12f); look.gloves = true; break;
+                case EnemyArchetype.Armored:
+                    // Kitted out like a soldier, in black.
+                    look.outfit = Swat.Outfit.Plain; look.width = Random.Range(1.0f, 1.06f); look.gloves = true;
+                    look.soldier = true;
+                    look.shirt = new Color(0.14f, 0.14f, 0.15f); look.pants = new Color(0.12f, 0.12f, 0.13f);
+                    look.vest = new Color(0.2f, 0.19f, 0.17f); look.vestOn = true; look.headwear = new Color(0.1f, 0.1f, 0.11f);
+                    break;
                 case EnemyArchetype.TrainingDummy: look.outfit = Swat.Outfit.HiVis; look.beard = false; look.glasses = 0; break;
                 default:
                     float roll = Random.value;
@@ -584,6 +690,12 @@ namespace Swat
         // Replaces the gun in the character's hands. Attachments are cosmetic shapes on the model.
         public static void SetWeapon(CharacterParts parts, WeaponData weapon, OfficerLoadout attachments)
         {
+            SetWeapon(parts, weapon, attachments, null);
+        }
+
+        // modelOverride: a different imported gun model for the same weapon (suspects' variety).
+        public static void SetWeapon(CharacterParts parts, WeaponData weapon, OfficerLoadout attachments, string modelOverride)
+        {
             parts.weapon = weapon;
             for (int i = parts.gunRoot.childCount - 1; i >= 0; i--)
             {
@@ -595,7 +707,7 @@ namespace Swat
                 parts.ShowWeapon(false);
                 return;
             }
-            float length = WeaponModels.Build(weapon, parts.gunRoot, attachments);
+            float length = WeaponModels.Build(weapon, parts.gunRoot, attachments, modelOverride);
             parts.muzzle.localPosition = new Vector3(0f, 0.01f, length);
             // Guns are drawn a bit larger in pixel art so their shapes survive the low resolution.
             parts.gunRoot.localScale = Vector3.one * (QualityManager.PixelArt ? 1.25f : 1f);
