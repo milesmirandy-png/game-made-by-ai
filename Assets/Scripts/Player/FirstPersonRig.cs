@@ -437,10 +437,10 @@ namespace Swat
         // the grip, the other on the handguard (or both on a pistol; the shield arm is hidden).
         static void BuildArms()
         {
-            var model = SaveManager.Settings.classicCharacters ? null : ModelLibrary.Get("soldier");
+            var model = CharacterFactory.SoldierModel();
             var look = PlayerController.OfficerAppearance(player.Officer, player.Loadout, true);
             look = VersusMatch.TeamColours(look, player.VersusSide);
-            var recolor = CharacterFactory.SoldierColors(look);
+            var recolor = CharacterFactory.ArmColors(look);
             support = pistol ? new Vector3(-0.01f, -0.06f, 0.02f) : new Vector3(0f, -0.025f, Mathf.Min(0.24f, front * 0.45f));
             rightFore = Forearm(model, "foreR", "handR", recolor, look, ref rightRest);
             PlaceForearm(rightFore, rightRest, new Vector3(0f, -0.045f, -0.02f), pistol ? new Vector3(0.25f, -0.4f, -1f) : new Vector3(0.3f, -0.45f, -1f));
@@ -455,7 +455,7 @@ namespace Swat
             pivot.SetParent(gunPivot, false);
             var forearm = model != null ? model.Find(part) : null;
             var hand = model != null ? model.Find(handPoint) : null;
-            if (forearm != null && hand != null && ModelLibrary.Spawn(model, part, pivot, Vector3.zero, recolor, null, GearCatalog.CamoFor(look.camo)) != null)
+            if (forearm != null && hand != null && ModelLibrary.Spawn(model, part, pivot, Vector3.zero, recolor, null, CharacterFactory.ArmCamo(look)) != null)
             {
                 rest = hand.pivot - forearm.pivot;
                 return pivot;

@@ -40,6 +40,7 @@ namespace Swat
         public int patchColorIndex;
         public int facialHairIndex;
         public int hairColorIndex = 1;
+        public bool longSleeves = true;
         public List<EquipmentCount> equipment = new List<EquipmentCount>();
 
         public OfficerLoadout Clone()

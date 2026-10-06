@@ -22,7 +22,12 @@ What it does:
   axes, and makes sure the triangles face outward;
 - **soldier**: splits it into torso, head, upper arms, forearms and legs, with
   pivots at the neck, shoulders, elbows and hips, plus hand points. The game's
-  procedural animation moves these, and puts the hands on the gun;
+  procedural animation moves these, and puts the hands on the gun. It's
+  written twice: `soldier.bytes` after one step of crease-aware Loop
+  subdivision (`subdivide.py`: faces, limbs and cloth get rounder, while
+  colour borders and edges sharper than 45 degrees stay crisp, so pouches
+  and goggles keep their shape), and `soldier_low.bytes`, the original mesh,
+  which the game uses on the Potato and Low graphics presets;
 - **police shield**: stands it upright, 1.05 m tall, handles on the back;
 - **guns**: points the barrel along +Z, scales each to a set length, puts the
   origin at the grip and records the muzzle point. The table at the top of

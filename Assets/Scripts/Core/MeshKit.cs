@@ -12,16 +12,77 @@ namespace Swat
     public static class MeshKit
     {
         static readonly Dictionary<string, Mesh> cache = new Dictionary<string, Mesh>();
+        static readonly Dictionary<string, float> measured = new Dictionary<string, float>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             cache.Clear();
+            measured.Clear();
+        }
+
+        // How far forward (+z) a slot's surface is at (x, y) in a part: where eyes and brows go on the face.
+        public static float FrontZ(ModelLibrary.Model model, string partName, string slot, float x, float y, float fallback)
+        {
+            string key = model.id + "/" + partName + "/" + slot + "/z/" + x + "/" + y;
+            float z;
+            if (measured.TryGetValue(key, out z)) return z;
+            z = fallback;
+            bool any = false;
+            var part = model.Find(partName);
+            if (part != null && part.mesh != null)
+            {
+                var v = part.mesh.vertices;
+                for (int s = 0; s < part.slots.Length; s++)
+                {
+                    if (model.slotNames[part.slots[s]] != slot) continue;
+                    var t = part.mesh.GetTriangles(s);
+                    for (int i = 0; i + 2 < t.Length; i += 3)
+                    {
+                        Vector3 a = v[t[i]], b = v[t[i + 1]], c = v[t[i + 2]];
+                        float d = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+                        if (Mathf.Abs(d) < 1e-12f) continue;
+                        float w0 = ((b.y - c.y) * (x - c.x) + (c.x - b.x) * (y - c.y)) / d;
+                        float w1 = ((c.y - a.y) * (x - c.x) + (a.x - c.x) * (y - c.y)) / d;
+                        float w2 = 1f - w0 - w1;
+                        if (w0 < -1e-5f || w1 < -1e-5f || w2 < -1e-5f) continue;
+                        float hz = w0 * a.z + w1 * b.z + w2 * c.z;
+                        if (!any || hz > z) z = hz;
+                        any = true;
+                    }
+                }
+            }
+            measured[key] = z;
+            return z;
+        }
+
+        // The outermost x of a part's vertices between two heights (sign -1 for the left side).
+        public static float OuterX(ModelLibrary.Model model, string partName, float y0, float y1, float sign, float fallback)
+        {
+            string key = model.id + "/" + partName + "/x/" + y0 + "/" + y1 + "/" + sign;
+            float x;
+            if (measured.TryGetValue(key, out x)) return x;
+            x = fallback;
+            var part = model.Find(partName);
+            if (part != null && part.mesh != null)
+            {
+                bool any = false;
+                foreach (var p in part.mesh.vertices)
+                {
+                    if (p.y < y0 || p.y > y1) continue;
+                    if (!any || p.x * sign > x * sign) x = p.x;
+                    any = true;
+                }
+            }
+            measured[key] = x;
+            return x;
         }
 
         // keep(centre, highest y) picks triangles of the given slots (positions relative to the part's pivot).
         public static Mesh Shell(ModelLibrary.Model model, string partName, string[] slots, System.Func<Vector3, float, bool> keep, float offset, float bulge, string key)
         {
+            if (model == null) return null;
+            key = model.id + "/" + key;
             Mesh mesh;
             if (cache.TryGetValue(key, out mesh) && mesh != null) return mesh;
             var part = model != null ? model.Find(partName) : null;

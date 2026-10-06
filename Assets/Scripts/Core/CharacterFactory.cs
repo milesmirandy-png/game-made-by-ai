@@ -36,6 +36,7 @@ namespace Swat
         public int facialHair;        // GearCatalog.FacialHair
         public Color hairColor;       // soldier model's hair, brows and beard (zero = dark brown)
         public bool features;         // soldier model: draw eyes and brows (officers)
+        public bool longSleeves;      // soldier model: sleeves down to the gloves (false = rolled up, bare forearms)
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -175,7 +176,7 @@ namespace Swat
 
             // Officers, the game-mode teams and armoured suspects use the imported soldier model (split on the
             // joints the animator moves); everyone else, or everyone with Classic characters on, is built from boxes.
-            var soldier = look.soldier && !SaveManager.Settings.classicCharacters ? ModelLibrary.Get("soldier") : null;
+            var soldier = look.soldier ? SoldierModel() : null;
             if (soldier != null) BuildSoldier(parts, look, m, soldier);
             else BuildBlocky(parts, look, m, shoe, skin, hairColor, tactical);
 
@@ -364,6 +365,15 @@ namespace Swat
 
         }
 
+        // The smoothed soldier, or the original lower-detail one on the Potato and Low presets
+        // (null with Classic characters on).
+        public static ModelLibrary.Model SoldierModel()
+        {
+            if (SaveManager.Settings.classicCharacters) return null;
+            var low = QualityManager.Current.textures == 0 ? ModelLibrary.Get("soldier_low") : null;
+            return low ?? ModelLibrary.Get("soldier");
+        }
+
         // The soldier model's colours for a look: uniform, vest, pouches, helmet, skin, gloves and boots
         // (headset, goggles, watch and torch keep their own). Also used for the first-person arms.
         public static System.Func<string, Color, Color> SoldierColors(Appearance look)
@@ -388,6 +398,20 @@ namespace Swat
             };
         }
 
+        // The arms: the model's forearms are bare (rolled-up sleeves); long sleeves colour that skin as the
+        // shirt (and carry the camouflage on), down to the gloves.
+        public static System.Func<string, Color, Color> ArmColors(Appearance look)
+        {
+            var colors = SoldierColors(look);
+            if (!look.longSleeves) return colors;
+            return (slot, original) => slot == "Skin" ? colors("Shirt", original) : colors(slot, original);
+        }
+
+        public static ModelLibrary.Camo ArmCamo(Appearance look)
+        {
+            return GearCatalog.CamoFor(look.camo, look.longSleeves);
+        }
+
         // The imported soldier: torso on the model, head, arms and legs on their own pivots (where the
         // animator turns them), recoloured from the look: uniform, vest, helmet, skin, gloves and boots.
         static void BuildSoldier(CharacterParts parts, Appearance look, Transform m, ModelLibrary.Model model)
@@ -398,10 +422,12 @@ namespace Swat
             ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor, TorsoHidden(look), camo);
             parts.leftLeg = SoldierPart(model, "legL", m, recolor, null, null, camo);
             parts.rightLeg = SoldierPart(model, "legR", m, recolor, null, null, camo);
-            parts.leftArm = SoldierPart(model, "armL", m, recolor, null, null, camo);
-            parts.rightArm = SoldierPart(model, "armR", m, recolor, null, null, camo);
-            parts.leftForearm = SoldierPart(model, "foreL", parts.leftArm, recolor, model.Find("armL"), null, camo);
-            parts.rightForearm = SoldierPart(model, "foreR", parts.rightArm, recolor, model.Find("armR"), null, camo);
+            var armColors = ArmColors(look);
+            var armCamo = ArmCamo(look);
+            parts.leftArm = SoldierPart(model, "armL", m, armColors, null, null, armCamo);
+            parts.rightArm = SoldierPart(model, "armR", m, armColors, null, null, armCamo);
+            parts.leftForearm = SoldierPart(model, "foreL", parts.leftArm, armColors, model.Find("armL"), null, armCamo);
+            parts.rightForearm = SoldierPart(model, "foreR", parts.rightArm, armColors, model.Find("armR"), null, armCamo);
             parts.leftHand = SoldierPoint(model, "handL", parts.leftForearm, model.Find("foreL"));
             parts.rightHand = SoldierPoint(model, "handR", parts.rightForearm, model.Find("foreR"));
             // The gun sits a little higher and more central than on the blocky figures, within reach of
@@ -412,11 +438,19 @@ namespace Swat
             if (QualityManager.PixelArt) parts.head.localScale = Vector3.one * 1.15f;
             DressHead(parts.head, look, model);
             DressArmor(parts, look, m, vest, model);
+            if (look.idMarker && look.armorStyle != ArmorStyle.None)
+            {
+                // A radio on the right of the chest with a short antenna.
+                float chest = MeshKit.FrontZ(model, "torso", "Vest", 0.1f, 1.37f, 0.155f);
+                Shapes.Box("Radio", m, new Vector3(0.1f, 1.37f, chest + 0.012f), new Vector3(0.036f, 0.07f, 0.024f), new Color(0.1f, 0.1f, 0.11f), false);
+                Shapes.Box("Radio Knob", m, new Vector3(0.09f, 1.412f, chest + 0.012f), new Vector3(0.01f, 0.014f, 0.01f), new Color(0.2f, 0.2f, 0.21f), false);
+                Shapes.Box("Antenna", m, new Vector3(0.115f, 1.44f, chest + 0.006f), new Vector3(0.006f, 0.075f, 0.006f), new Color(0.07f, 0.07f, 0.08f), false);
+            }
             if (look.patch > 0)
             {
                 // The chosen patch on the left shoulder and the chest (the right shoulder keeps the squad colour).
                 Color colour = GearCatalog.PatchColor(look.patchColor);
-                Patch(parts.leftArm, new Vector3(-0.09f, -0.17f, 0.018f), Quaternion.Euler(0f, -90f, 0f), 0.07f, look.patch, colour);
+                Patch(parts.leftArm, new Vector3(MeshKit.OuterX(model, "armL", -0.2f, -0.14f, -1f, -0.09f) + 0.002f, -0.17f, 0.018f), Quaternion.Euler(0f, -90f, 0f), 0.07f, look.patch, colour);
                 bool plates = look.armorStyle != ArmorStyle.None;
                 Patch(m, new Vector3(-0.075f, 1.34f, plates ? 0.168f : 0.152f), Quaternion.identity, 0.06f, look.patch, colour);
             }
@@ -425,7 +459,7 @@ namespace Swat
             {
                 float top = GearCatalog.HasHelmet(look.headgear) ? 0.285f : 0.268f;
                 Shapes.Box("ID Top", parts.head, new Vector3(0f, top, -0.03f), new Vector3(0.1f, 0.02f, 0.14f), look.idColor, false, 1.2f);
-                Shapes.Box("Patch", parts.rightArm, new Vector3(0.088f, -0.17f, 0.018f), new Vector3(0.01f, 0.07f, 0.07f), look.idColor, false);
+                Shapes.Box("Patch", parts.rightArm, new Vector3(MeshKit.OuterX(model, "armR", -0.2f, -0.14f, 1f, 0.09f) - 0.002f, -0.17f, 0.018f), new Vector3(0.01f, 0.07f, 0.07f), look.idColor, false);
             }
             // Shoulder tabs in the squad (or team) colour: what you see first from above.
             Color tab = look.idMarker ? Shapes.Shade(look.idColor, 0.85f) : Shapes.Shade(vest, 1.25f);
@@ -528,12 +562,17 @@ namespace Swat
             // gas mask cover them; shades cover the eyes).
             bool goggles = headgear == GearCatalog.Headgear.HelmetFull || headgear == GearCatalog.Headgear.HelmetGoggles;
             if (look.features && !goggles && face != GearCatalog.Face.GasMask)
+            {
+                // Sit them on this model's face (the smoothed and low-detail heads differ by a few millimetres).
+                float eyeZ = MeshKit.FrontZ(model, "head", "Skin", 0.03f, 0.106f, 0.064f) + 0.001f;
+                float browZ = MeshKit.FrontZ(model, "head", "Skin", 0.03f, 0.123f, 0.06f) + 0.001f;
                 for (int side = -1; side <= 1; side += 2)
                 {
                     if (face != GearCatalog.Face.Shades)
-                        Shapes.Box("Eye", head, new Vector3(side * 0.03f, 0.106f, 0.066f), new Vector3(0.019f, 0.011f, 0.006f), new Color(0.06f, 0.05f, 0.05f), false).transform.localRotation = Quaternion.Euler(0f, side * 34f, 0f);
-                    Shapes.Box("Brow", head, new Vector3(side * 0.03f, 0.123f, 0.062f), new Vector3(0.027f, 0.008f, 0.006f), hair, false).transform.localRotation = Quaternion.Euler(0f, side * 34f, -side * 8f);
+                        Shapes.Box("Eye", head, new Vector3(side * 0.03f, 0.106f, eyeZ), new Vector3(0.019f, 0.011f, 0.006f), new Color(0.06f, 0.05f, 0.05f), false).transform.localRotation = Quaternion.Euler(0f, side * 34f, 0f);
+                    Shapes.Box("Brow", head, new Vector3(side * 0.03f, 0.123f, browZ), new Vector3(0.027f, 0.008f, 0.006f), hair, false).transform.localRotation = Quaternion.Euler(0f, side * 34f, -side * 8f);
                 }
+            }
 
             // Facial hair shows with a bare face or shades (a balaclava or gas mask covers it).
             if (face == GearCatalog.Face.Bare || face == GearCatalog.Face.Shades)
@@ -546,7 +585,7 @@ namespace Swat
                         MeshKit.Piece("Beard", head, MeshKit.Shell(model, "head", skin, (c, top) => c.y < 0.07f && c.z > 0f, 0.007f, 0.1f, "beard"), hair, Vector3.zero, Quaternion.identity);
                         break;
                     case GearCatalog.FacialHair.Moustache:
-                        Shapes.Box("Moustache", head, new Vector3(0f, 0.07f, 0.08f), new Vector3(0.045f, 0.011f, 0.01f), hair, false);
+                        Shapes.Box("Moustache", head, new Vector3(0f, 0.07f, MeshKit.FrontZ(model, "head", "Skin", 0f, 0.07f, 0.075f) + 0.003f), new Vector3(0.045f, 0.011f, 0.01f), hair, false);
                         break;
                 }
         }

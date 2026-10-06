@@ -164,6 +164,7 @@ namespace Swat
                 facialHair = loadout.facialHairIndex,
                 hairColor = GearCatalog.HairColor(loadout.hairColorIndex),
                 features = true,
+                longSleeves = loadout.longSleeves,
                 vestOn = style != ArmorStyle.None,
                 vest = armor != null ? kit.vest : Color.black,
                 pouches = kit.pouches,

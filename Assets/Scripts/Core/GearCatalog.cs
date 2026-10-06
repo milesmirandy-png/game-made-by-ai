@@ -51,6 +51,20 @@ namespace Swat
 
         static ModelLibrary.Camo[] camos;
 
+        static ModelLibrary.Camo[] sleeved;
+
+        // With sleeves: also on the model's forearm skin (long sleeves cover it).
+        public static ModelLibrary.Camo CamoFor(int camo, bool sleeves)
+        {
+            var plain = CamoFor(camo);
+            if (plain == null || !sleeves) return plain;
+            if (sleeved == null) sleeved = new ModelLibrary.Camo[camos.Length];
+            int i = Mathf.Clamp(camo - 1, 0, camos.Length - 1);
+            if (sleeved[i] == null)
+                sleeved[i] = new ModelLibrary.Camo { id = plain.id + " sleeves", slots = new[] { "Shirt", "Pants", "Skin" }, colors = plain.colors, cuts = plain.cuts, scale = plain.scale, seed = plain.seed };
+            return sleeved[i];
+        }
+
         public static ModelLibrary.Camo CamoFor(int camo)
         {
             if (camo <= 0) return null;
@@ -77,6 +91,7 @@ namespace Swat
         static void ResetStatics()
         {
             camos = null;
+            sleeved = null;
         }
 
         public static ArmorStyle StyleFor(ArmorData armor)

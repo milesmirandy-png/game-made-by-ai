@@ -307,7 +307,14 @@ namespace Swat
                 changed = true;
             }
             UITheme.Fill(new Rect(x + cw * 0.38f + 40f, y + 36f, cw * 0.62f - 80f, 6f), Progression.Uniform(loadout.uniformIndex));
-            y += 50f;
+            y += 44f;
+            int sleeves = loadout.longSleeves ? 0 : 1;
+            if (Pick(ref y, x, cw, "Sleeves", ref sleeves, SleeveNames))
+            {
+                loadout.longSleeves = sleeves == 0;
+                changed = true;
+            }
+            y += 4f;
 
             Section(ref y, x, cw, "HEAD AND FACE");
             changed |= Pick(ref y, x, cw, "Headgear", ref loadout.headgearIndex, GearCatalog.HeadgearNames);
@@ -337,6 +344,8 @@ namespace Swat
             UITheme.Text(new Rect(x, y, cw, 60f), "Looks only: headgear, face and patches don't change protection, which comes from the armor. The right shoulder keeps the officer's role colour so the squad stays easy to tell apart.", 13, UITheme.Faint);
             return changed;
         }
+
+        static readonly string[] SleeveNames = { "Long", "Rolled up" };
 
         static bool Pick(ref float y, float x, float cw, string label, ref int value, string[] options)
         {
