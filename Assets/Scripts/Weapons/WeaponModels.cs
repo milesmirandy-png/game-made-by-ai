@@ -446,13 +446,6 @@ namespace Swat
                     case AttachmentLook.QuickMag:
                         Box(parent, 0f, m.magY - 0.008f, m.magZ, 0.012f, 0.018f, 0.034f, Coyote);
                         break;
-                    case AttachmentLook.DrumMag:
-                    {
-                        // Over the lower part of the stick magazine, as if it replaced it.
-                        var drum = Cylinder(parent, new Vector3(0f, m.magY + 0.025f, m.magZ), 0.14f, 0.06f, Polymer);
-                        drum.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                        break;
-                    }
                     case AttachmentLook.FixedStock:
                         Box(parent, 0f, m.stockY - 0.005f, m.rearZ - 0.012f, 0.05f, 0.12f, 0.024f, Shapes.Shade(DarkSteel, 0.7f));
                         break;

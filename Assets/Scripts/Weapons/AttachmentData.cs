@@ -5,7 +5,7 @@ namespace Swat
     public enum AttachmentSlot { Light, Optic, Muzzle, Stock, Underbarrel, Magazine }
 
     // What an attachment looks like on the gun (WeaponModels builds each one).
-    public enum AttachmentLook { None, Light, RedDot, Reflex, Holo, Scope, Suppressor, Compensator, Brake, FlashHider, FixedStock, SkeletonStock, VerticalGrip, AngledGrip, Laser, ExtendedMag, QuickMag, DrumMag }
+    public enum AttachmentLook { None, Light, RedDot, Reflex, Holo, Scope, Suppressor, Compensator, Brake, FlashHider, FixedStock, SkeletonStock, VerticalGrip, AngledGrip, Laser, ExtendedMag, QuickMag }
 
     // A small, balanced weapon attachment. Effects multiply the weapon's stats.
     [CreateAssetMenu(menuName = "SWAT/Attachment", fileName = "NewAttachment")]

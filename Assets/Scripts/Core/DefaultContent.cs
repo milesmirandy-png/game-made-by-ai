@@ -232,7 +232,6 @@ namespace Swat
                 // Magazines
                 Tune(Attachment("mag_quick", "Quick-Pull Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 1f, 1f, 0, "A pull tab on the magazine: faster reloads."), AttachmentLook.QuickMag, reload: 0.82f),
                 Tune(Attachment("mag_extended", "Extended Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 0.98f, 1f, 1, "Half again as many rounds per magazine; slower reloads."), AttachmentLook.ExtendedMag, magazine: 1.5f, reload: 1.12f),
-                Tune(Attachment("mag_drum", "Drum Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 0.95f, 1f, 3, "Twice the rounds per magazine; heavy and slow to reload."), AttachmentLook.DrumMag, magazine: 2f, reload: 1.35f),
             };
         }
 
