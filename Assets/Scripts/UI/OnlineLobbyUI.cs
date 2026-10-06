@@ -73,7 +73,7 @@ namespace Swat
                 var game2 = games[i];
                 var row = new Rect(x, y, cw, 30f);
                 UITheme.Fill(row, new Color(UITheme.Good.r, UITheme.Good.g, UITheme.Good.b, 0.08f));
-                string modeName = game2.mode >= 1 && game2.mode <= 3 ? VersusMatch.ModeNames[game2.mode] : "";
+                string modeName = game2.mode >= 1 && game2.mode <= VersusMatch.LastMode ? VersusMatch.ModeNames[game2.mode] : "";
                 UITheme.Text(new Rect(row.x + 8f, row.y, cw - 130f, 30f), game2.host + "'s game   " + modeName + "  -  " + MissionBriefing.MapName(game2.map) + "   " + game2.players + "/" + game2.max + (game2.open ? "" : "   (in a match)"),
                     14, UITheme.TextColor, TextAnchor.MiddleLeft);
                 if (UITheme.Button(new Rect(row.xMax - 110f, row.y + 2f, 110f, 26f), "Join", game2.open && game2.players < game2.max, true, 14))
@@ -175,7 +175,7 @@ namespace Swat
             float x = 60f, y = 120f, cw = 560f;
             if (o != null && !connecting)
             {
-                var mode = (GameMode)Mathf.Clamp(o.mode, 1, 3);
+                var mode = (GameMode)Mathf.Clamp(o.mode, 1, VersusMatch.LastMode);
                 var card = new Rect(x, y, cw, 118f);
                 UITheme.Panel(card);
                 UITheme.Fill(new Rect(card.x, card.y, 5f, card.height), VersusSetupUI.ModeColor(mode));

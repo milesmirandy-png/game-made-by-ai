@@ -57,7 +57,9 @@ namespace Swat
         ProceduralAnimator animator;
         ICombatTarget target;
         Vector3 lastKnown;
-        float lastKnownTime = -100f, targetReadyAt, nextShot, reloadEnd, strafeUntil, stunUntil, staggerUntil;
+        float lastKnownTime = -100f, targetReadyAt, nextShot, reloadEnd, strafeUntil, stunUntil, staggerUntil, pingUntil;
+        Vector3 pingPoint;
+        bool visible = true;
         int skill, autoLeft, burstLeft;
 
         public static ArenaBot Spawn(Transform parent, int side, string callsign, Appearance look, WeaponData weapon, OfficerLoadout attachments, Vector3 position, float yaw, int skill)
@@ -146,6 +148,16 @@ namespace Swat
             {
                 Engage(match);
                 return;
+            }
+            // A teammate pinged a spot: go and look (defenders and zone holders stay put).
+            if (Time.time < pingUntil && Role != BotRole.Defend && !match.HoldsZone(this))
+            {
+                if (AIManager.FlatDistance(pingPoint, Position) > 2f)
+                {
+                    MoveTo(pingPoint, true);
+                    return;
+                }
+                pingUntil = 0f;
             }
             // Go and check where an opponent was last seen (defenders hold their post instead).
             if (Role != BotRole.Defend && Time.time - lastKnownTime < 5f && AIManager.FlatDistance(lastKnown, Position) > 2f && !match.HoldsZone(this))
@@ -293,6 +305,25 @@ namespace Swat
             target = null;
         }
 
+        // A teammate's ping: head there for a while (unless busy fighting).
+        public void Ping(Vector3 point)
+        {
+            pingPoint = point;
+            pingUntil = Time.time + 12f;
+        }
+
+        // Gun Game: a different gun in hand, full and ready.
+        public void SetGun(WeaponData weapon)
+        {
+            if (weapon == null || (Gun != null && Gun.Data == weapon)) return;
+            Gun = new Weapon(weapon, null);
+            CharacterFactory.SetWeapon(Parts, weapon, null);
+            if (!visible) Parts.SetVisible(false);
+            reloadEnd = 0f;
+            burstLeft = weapon.burstCount;
+            nextShot = Mathf.Max(nextShot, Time.time + weapon.switchTime);
+        }
+
         // An opponent was spotted by a teammate nearby.
         public void HearOf(Vector3 position)
         {
@@ -360,12 +391,14 @@ namespace Swat
         public void SetSeen(bool seen)
         {
             Seen = seen;
-            Parts.SetVisible(seen || !IsAlive);
+            visible = seen || !IsAlive;
+            Parts.SetVisible(visible);
         }
 
-        public void SetVisible(bool visible)
+        public void SetVisible(bool show)
         {
-            Parts.SetVisible(visible);
+            visible = show;
+            Parts.SetVisible(show);
         }
     }
 }

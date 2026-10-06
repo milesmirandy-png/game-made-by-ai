@@ -42,6 +42,13 @@ namespace Swat
             HasShield = shield;
         }
 
+        // Gun Game leaves the shield at the van.
+        public void SetShield(bool carried)
+        {
+            HasShield = carried;
+            if (!carried) SetBracing(false);
+        }
+
         public void SetBracing(bool brace)
         {
             Bracing = brace && HasShield && !IsDown;

@@ -44,14 +44,14 @@ namespace Swat
         void SetVisible(bool visible);
     }
 
-    public enum MatchEventKind { Takedown, FlagTaken, FlagDropped, FlagReturned, FlagCaptured, ZoneTaken, PlayerLeft }
+    public enum MatchEventKind { Takedown, FlagTaken, FlagDropped, FlagReturned, FlagCaptured, ZoneTaken, PlayerLeft, RoundWon }
 
     // Something worth a line in the feed (and maybe a banner). The host decides these and sends them
     // to everyone, and each player words them from their own side ("You", "your flag").
     public struct MatchEvent
     {
         public MatchEventKind kind;
-        public int side;      // victim's side, the flag's side, or the zone's new owner
+        public int side;      // victim's side, the flag's side, the zone's new owner, or a round's winner (2: a draw)
         public int a, b;      // actors: killer and victim, or whoever moved the flag (-1 none)
         public int weapon;    // weapon index for takedowns (-1 none)
         public string name;   // a player who left
@@ -66,6 +66,8 @@ namespace Swat
     //   Team Deathmatch: first team to the tag-out limit.
     //   Capture the Flag: take the other team's flag back to your own (yours must be home).
     //   Zone Control: hold the zone alone to own it; the owner scores every second.
+    //   Gun Game: every tag-out moves you up a ladder of weapons; finishing it wins for your team.
+    //   Elimination: rounds with no respawns; the last team standing wins the round.
     public class VersusMatch : MonoBehaviour
     {
         public static VersusMatch Instance { get; private set; }
@@ -73,16 +75,28 @@ namespace Swat
 
         // ---- Options (shown on the Game Modes screen) ----
 
-        public static readonly string[] ModeNames = { "Mission", "Team Deathmatch", "Capture the Flag", "Zone Control" };
+        public static readonly string[] ModeNames = { "Mission", "Team Deathmatch", "Capture the Flag", "Zone Control", "Gun Game", "Elimination" };
         public static readonly string[] ModeGoals =
         {
             "",
             "Tag out the other team. First to the limit wins.",
             "Bring the other team's flag to your base. Your own flag must be home to score.",
             "Stand in the zone with no opponents inside to take it. Your team scores every second it's yours.",
+            "Every tag-out swaps your gun for the next one on the ladder. Tag someone out with the last gun to win.",
+            "No respawns until the round ends. Tag out the whole other team to win the round.",
         };
-        static readonly int[][] ScoreLimits = { new[] { 0 }, new[] { 15, 25, 40 }, new[] { 1, 3, 5 }, new[] { 60, 100, 200 } };
-        static readonly int[][] TimeLimits = { new[] { 0 }, new[] { 5, 10, 15 }, new[] { 8, 12, 20 }, new[] { 5, 8, 12 } };
+        public const int LastMode = (int)GameMode.Elimination;
+        static readonly int[][] ScoreLimits = { new[] { 0 }, new[] { 15, 25, 40 }, new[] { 1, 3, 5 }, new[] { 60, 100, 200 }, new[] { 8, 12, 16 }, new[] { 3, 5, 7 } };
+        static readonly int[][] TimeLimits = { new[] { 0 }, new[] { 5, 10, 15 }, new[] { 8, 12, 20 }, new[] { 5, 8, 12 }, new[] { 8, 12, 15 }, new[] { 10, 15, 20 } };
+        // Gun Game: the full ladder, from heavy hitters down to a small pistol. Shorter ladders skip rungs evenly.
+        static readonly string[] LadderIds =
+        {
+            "rotary_rg6", "lmg_lm8", "smg_kv", "rifle_service", "shotgun_d20", "rifle_cx", "pdw_x4", "shotgun_as12",
+            "rifle_b4", "launcher_gl6", "dmr_dm2", "shotgun_ts8", "carbine_pc9", "mp_m9", "revolver_r6", "pistol_bk6",
+        };
+        // Elimination: a round lasts at most this long; then the team with more officers still in wins it.
+        public const float RoundLength = 120f;
+        const float RoundBreak = 4f;
         public static readonly string[] SkillNames = { "Easy", "Normal", "Hard" };
         // Maps that work for team play (single floor, room to move).
         public static readonly string[] MapIds = { "warehouse", "office", "store", "motel", "bank", "clinic", "nightclub", "factory", "training" };
@@ -104,7 +118,14 @@ namespace Swat
 
         public static string ScoreUnit(GameMode mode)
         {
-            return mode == GameMode.TeamDeathmatch ? "tag-outs" : mode == GameMode.CaptureTheFlag ? "captures" : "points";
+            switch (mode)
+            {
+                case GameMode.TeamDeathmatch: return "tag-outs";
+                case GameMode.CaptureTheFlag: return "captures";
+                case GameMode.GunGame: return "guns";
+                case GameMode.Elimination: return "rounds";
+                default: return "points";
+            }
         }
 
         public static string SideName(int side) { return side == 0 ? "Blue" : "Red"; }
@@ -112,7 +133,7 @@ namespace Swat
         // The mission record the normal briefing-free flow deploys with (officer selection, loadout, deploy).
         public static MissionData CreateMission(VersusOptions options)
         {
-            var mode = (GameMode)Mathf.Clamp(options.mode, 1, 3);
+            var mode = (GameMode)Mathf.Clamp(options.mode, 1, LastMode);
             var m = ScriptableObject.CreateInstance<MissionData>();
             string map = System.Array.IndexOf(MapIds, options.mapId) >= 0 ? options.mapId : MapIds[0];
             m.name = m.id = "versus_" + mode + "_" + map;
@@ -126,8 +147,22 @@ namespace Swat
             m.alarmArmedChance = m.camerasActiveChance = m.randomLockChance = m.powerOutageChance = 0f;
             m.optionalCount = 0;
             m.parTime = MinutesFor(mode, options.timeIndex) * 60f;
-            m.thumbnailColor = mode == GameMode.TeamDeathmatch ? new Color(0.45f, 0.18f, 0.18f) : mode == GameMode.CaptureTheFlag ? new Color(0.2f, 0.3f, 0.5f) : new Color(0.25f, 0.4f, 0.25f);
+            m.thumbnailColor = VersusSetupUI.ModeColor(mode) * 0.45f;
+            m.thumbnailColor.a = 1f;
             return m;
+        }
+
+        // Gun Game: the weapons for a ladder of the given length (always ending on the last one).
+        public static List<WeaponData> BuildLadder(int length)
+        {
+            var ladder = new List<WeaponData>();
+            length = Mathf.Clamp(length, 2, LadderIds.Length);
+            for (int i = 0; i < length; i++)
+            {
+                var weapon = GameData.Weapon(LadderIds[Mathf.RoundToInt(i * (LadderIds.Length - 1) / (float)(length - 1))]);
+                ladder.Add(weapon ?? GameData.Weapon("rifle_compact"));
+            }
+            return ladder;
         }
 
         // Weapons travel over the network as their index in the game's weapon list.
@@ -186,6 +221,24 @@ namespace Swat
         public bool Mirror { get; private set; }         // online, not hosting: the host runs the match
         public string LocalName { get; private set; }
         public float[] BaseYaw { get { return baseYaw; } }
+        public List<WeaponData> Ladder { get; private set; }      // Gun Game
+        public int Round { get; private set; }                    // Elimination
+        public bool RoundOver { get; private set; }
+        public float RoundStart { get; private set; }             // match time the round began
+        public float RoundTimeLeft { get { return Mathf.Max(0f, RoundLength - (Elapsed - RoundStart)); } }
+        public IVersusMember Spectating { get; private set; }     // the teammate the camera follows while you're out
+
+        // A spot (or an opponent) a teammate pointed out.
+        public struct Ping
+        {
+            public Vector3 position;
+            public bool enemy;
+            public int fromId;
+            public string from;
+            public float time;
+        }
+        public const float PingLife = 6f;
+        public readonly List<Ping> Pings = new List<Ping>();
 
         readonly List<ICombatTarget>[] members = { new List<ICombatTarget>(), new List<ICombatTarget>() };
         readonly List<Vector3>[] spawns = { new List<Vector3>(), new List<Vector3>() };
@@ -200,6 +253,8 @@ namespace Swat
         Renderer[] zoneEdges;
         int zoneColorState = -2;
         readonly List<GameObject> spawned = new List<GameObject>();
+        int playerRung = -1;
+        float roundOverUntil, downSince = -1f, nextPingAt;
 
         void Awake()
         {
@@ -255,6 +310,7 @@ namespace Swat
             AssignRoles(0);
             AssignRoles(1);
             running = true;
+            if (Mode == GameMode.GunGame) StartGunGame();
             UIManager.Banner(ModeNames[(int)Mode].ToUpperInvariant(), ModeGoals[(int)Mode], BannerKind.Info);
             if (NetSession.IsHost) NetSession.Instance.OnMatchBuilt(this);
         }
@@ -287,6 +343,7 @@ namespace Swat
             player.TeleportTo(setup.spawn, setup.spawnYaw);
             player.Health.ProtectedUntil = Time.time + 2f;
             running = true;
+            if (Mode == GameMode.GunGame) StartGunGame();
             UIManager.Banner(ModeNames[(int)Mode].ToUpperInvariant() + "  -  " + SideName(MySide).ToUpperInvariant() + " TEAM", ModeGoals[(int)Mode], BannerKind.Info);
         }
 
@@ -304,6 +361,14 @@ namespace Swat
             PlayerRespawnAt = -1f;
             ZoneControl = 0f;
             ZoneOwner = -1;
+            Ladder = Mode == GameMode.GunGame ? BuildLadder(ScoreLimit) : null;
+            playerRung = -1;
+            Round = 1;
+            RoundOver = false;
+            RoundStart = 0f;
+            Spectating = null;
+            downSince = -1f;
+            Pings.Clear();
             LocalName = NetSession.Online ? NetSession.Instance.LocalName : leader != null ? leader.Officer.callsign : "You";
         }
 
@@ -328,6 +393,9 @@ namespace Swat
             roamPoints.Clear();
             Feed.Clear();
             Flags[0] = Flags[1] = null;
+            Pings.Clear();
+            Spectating = null;
+            if (GameManager.Instance != null && GameManager.Instance.CameraRig != null) GameManager.Instance.CameraRig.SpectateTarget = null;
             zoneEdges = null;
             zoneColorState = -2;
             level = null;
@@ -634,6 +702,9 @@ namespace Swat
                 Elapsed += dt;
                 for (int side = 0; side < 2; side++) if (Flags[side] != null) PlaceFlagVisual(Flags[side]);
                 UpdateZoneColor();
+                if (Mode == GameMode.GunGame) UpdateLadder();
+                UpdateSpectate();
+                UpdatePings();
                 if (now >= nextVisibility)
                 {
                     nextVisibility = now + 0.2f;
@@ -664,6 +735,10 @@ namespace Swat
             if (player != null && !player.IsAlive && PlayerRespawnAt > 0f && now >= PlayerRespawnAt) RespawnPlayer();
             if (Mode == GameMode.CaptureTheFlag) UpdateFlags(now);
             if (Mode == GameMode.ZoneControl) UpdateZone(dt);
+            if (Mode == GameMode.GunGame) UpdateLadder();
+            if (Mode == GameMode.Elimination) UpdateRounds();
+            UpdateSpectate();
+            UpdatePings();
             if (now >= nextVisibility)
             {
                 nextVisibility = now + 0.2f;
@@ -689,6 +764,9 @@ namespace Swat
         {
             if (player == null) return;
             PlayerRespawnAt = -1f;
+            Spectating = null;
+            downSince = -1f;
+            GameManager.Instance.CameraRig.SpectateTarget = null;
             player.TeleportTo(point, yaw);
             player.ResetStance();
             player.Health.RestoreFull();
@@ -997,7 +1075,8 @@ namespace Swat
         public void OnBotDown(ArenaBot bot, DamageInfo info)
         {
             if (!running) return;
-            bot.RespawnAt = Time.time + RespawnDelay;
+            // Elimination: out until the next round.
+            bot.RespawnAt = Mode == GameMode.Elimination ? float.MaxValue : Time.time + RespawnDelay;
             Credit(info, bot.Side, bot.NetId);
         }
 
@@ -1006,11 +1085,11 @@ namespace Swat
         {
             if (!running || player == null) return;
             PlayerDeaths++;
-            PlayerRespawnAt = Time.time + RespawnDelay;
+            PlayerRespawnAt = Mode == GameMode.Elimination ? -1f : Time.time + RespawnDelay;
             var hit = player.Health.LastHit;
             var shooter = hit.shooter as IVersusMember;
             PlayerTaggedBy = shooter != null ? shooter.Callsign + (hit.weapon != null ? "  (" + hit.weapon.displayName + ")" : "") : "the other team";
-            UIManager.Notify("Tagged out! Back in " + Mathf.RoundToInt(RespawnDelay) + " seconds", true);
+            UIManager.Notify(Mode == GameMode.Elimination ? "Tagged out! You're out until the next round" : "Tagged out! Back in " + Mathf.RoundToInt(RespawnDelay) + " seconds", true);
             // Online the host keeps score: tell it who did it.
             if (Mirror) NetSession.Instance.SendDown(shooter != null ? shooter.NetId : -1, WeaponIndex(hit.weapon));
             else Credit(hit, MySide, MyId);
@@ -1022,7 +1101,7 @@ namespace Swat
             if (!running || Mirror || remote == null || remote.Down) return;
             remote.SetDown(true);
             remote.Deaths++;
-            remote.RespawnAt = Time.time + RespawnDelay;
+            remote.RespawnAt = Mode == GameMode.Elimination ? 0f : Time.time + RespawnDelay; // 0: not until the next round
             var info = new DamageInfo { weapon = WeaponAt(weaponIndex), shooter = Find(attackerId) as MonoBehaviour, byPlayer = attackerId == MyId };
             Credit(info, remote.Side, remote.NetId);
         }
@@ -1035,6 +1114,215 @@ namespace Swat
             if (Mode == GameMode.TeamDeathmatch) Score[1 - victimSide] += 1f;
             int killer = member != null ? member.NetId : info.byPlayer ? MyId : -1;
             Post(new MatchEvent { kind = MatchEventKind.Takedown, a = killer, b = victimId, side = victimSide, weapon = WeaponIndex(info.weapon) });
+        }
+
+        // ---- Gun Game ----
+
+        // Everyone starts on the first gun. Shields stay behind (they'd block the gun).
+        void StartGunGame()
+        {
+            if (player != null)
+            {
+                player.Health.SetShield(false);
+                if (player.Parts.shield != null) player.Parts.shield.gameObject.SetActive(false);
+            }
+            UpdateLadder();
+        }
+
+        public WeaponData LadderWeapon(int takedowns)
+        {
+            return Ladder != null && Ladder.Count > 0 ? Ladder[Mathf.Clamp(takedowns, 0, Ladder.Count - 1)] : null;
+        }
+
+        public int KillsOf(ICombatTarget target)
+        {
+            if (target == null) return 0;
+            if (target == (ICombatTarget)player) return PlayerKills;
+            var member = target as IVersusMember;
+            return member != null ? member.Kills : 0;
+        }
+
+        // Each player carries the gun for their number of tag-outs; a team's score is its best climber.
+        void UpdateLadder()
+        {
+            if (Ladder == null || Ladder.Count == 0) return;
+            if (player != null)
+            {
+                int rung = Mathf.Clamp(PlayerKills, 0, Ladder.Count - 1);
+                if (rung != playerRung)
+                {
+                    bool promoted = playerRung >= 0;
+                    playerRung = rung;
+                    player.Weapons.SetOnlyWeapon(Ladder[rung]);
+                    if (promoted)
+                    {
+                        bool last = rung == Ladder.Count - 1;
+                        UIManager.Banner(last ? "FINAL GUN" : "NEXT GUN", Ladder[rung].displayName + "   (" + (rung + 1) + " of " + Ladder.Count + ")", BannerKind.Good);
+                        AudioManager.Play2D(Sound.ObjectiveTone, 0.5f, last ? 1.3f : 1.1f, SoundCategory.Interface);
+                    }
+                }
+            }
+            if (Mirror) return;
+            foreach (var bot in Bots) bot.SetGun(LadderWeapon(bot.Kills));
+            for (int side = 0; side < 2; side++)
+            {
+                int best = 0;
+                foreach (var target in members[side]) best = Mathf.Max(best, KillsOf(target));
+                Score[side] = Mathf.Min(best, ScoreLimit);
+            }
+        }
+
+        // ---- Elimination ----
+
+        // Officers on a side still in this round (a player still loading counts as in).
+        public int StillIn(int side)
+        {
+            int count = 0;
+            foreach (var target in members[side])
+            {
+                if (target == null) continue;
+                var remote = target as NetActor;
+                if (remote != null ? !remote.Down : target.IsAlive) count++;
+            }
+            return count;
+        }
+
+        void UpdateRounds()
+        {
+            if (RoundOver)
+            {
+                if (Elapsed < roundOverUntil) return;
+                // The match is decided: let CheckEnd finish it. Otherwise, next round.
+                if (Score[0] >= ScoreLimit || Score[1] >= ScoreLimit) RoundOver = false;
+                else StartRound();
+                return;
+            }
+            int blue = StillIn(0), red = StillIn(1);
+            int winner = -2;
+            if (blue == 0 && red == 0) winner = -1;
+            else if (red == 0) winner = 0;
+            else if (blue == 0) winner = 1;
+            else if (RoundTimeLeft <= 0f) winner = blue > red ? 0 : red > blue ? 1 : -1;
+            if (winner == -2) return;
+            if (winner >= 0) Score[winner] += 1f;
+            RoundOver = true;
+            roundOverUntil = Elapsed + RoundBreak;
+            Post(new MatchEvent { kind = MatchEventKind.RoundWon, side = winner < 0 ? 2 : winner, a = -1, b = -1, weapon = -1 });
+        }
+
+        // Everyone back at their base, healthy and loaded, for the next round.
+        void StartRound()
+        {
+            Round++;
+            RoundOver = false;
+            RoundStart = Elapsed;
+            foreach (var bot in Bots) bot.Respawn(NextSpawn(bot.Side), baseYaw[bot.Side]);
+            foreach (var remote in Remotes) RespawnRemote(remote);
+            if (player != null) RespawnLocal(NextSpawn(MySide), baseYaw[MySide]);
+            RoundBanner();
+        }
+
+        void RoundBanner()
+        {
+            UIManager.Banner("ROUND " + Round, "Last team standing takes the round", BannerKind.Info);
+            AudioManager.Play2D(Sound.RadioOrder, 0.5f, 1f, SoundCategory.Interface);
+        }
+
+        // Online, not hosting: the host's round state.
+        public void ApplyRound(int round, bool over, float start)
+        {
+            if (Mode != GameMode.Elimination) return;
+            bool next = round > Round;
+            Round = round;
+            RoundOver = over;
+            RoundStart = start;
+            if (next) RoundBanner();
+        }
+
+        // ---- Spectating ----
+
+        // Out of play: after a moment the camera follows a teammate who is still in. Fire picks the next one.
+        void UpdateSpectate()
+        {
+            var game = GameManager.Instance;
+            var rig = game.CameraRig;
+            if (player == null || player.IsAlive)
+            {
+                downSince = -1f;
+                if (Spectating != null || rig.SpectateTarget != null)
+                {
+                    Spectating = null;
+                    rig.SpectateTarget = null;
+                }
+                return;
+            }
+            if (downSince < 0f) downSince = Time.time;
+            if (Time.time - downSince < 1.5f) return;
+            bool next = game.AcceptsGameplayInput && GameInput.Down(InputAction.Fire);
+            if (Spectating == null || !Spectating.IsAlive || next) Spectating = NextTeammate(Spectating);
+            rig.SpectateTarget = Spectating != null ? Spectating.Transform : null;
+        }
+
+        IVersusMember NextTeammate(IVersusMember current)
+        {
+            var team = new List<IVersusMember>();
+            foreach (var other in Others) if (other.Side == MySide && other.IsAlive) team.Add(other);
+            if (team.Count == 0) return null;
+            int index = current != null ? team.IndexOf(current) : -1;
+            return team[(index + 1) % team.Count];
+        }
+
+        // ---- Pings ----
+
+        // Middle mouse points out a spot to your team; close to an opponent you can see, it marks them.
+        void UpdatePings()
+        {
+            float now = Time.unscaledTime;
+            for (int i = Pings.Count - 1; i >= 0; i--)
+                if (now - Pings[i].time > PingLife) Pings.RemoveAt(i);
+            var game = GameManager.Instance;
+            if (player == null || !player.IsAlive || !game.AcceptsGameplayInput || !GameInput.Down(InputAction.Ping) || now < nextPingAt) return;
+            nextPingAt = now + 0.5f;
+            Vector3 point = player.AimPoint;
+            point.y = player.Position.y;
+            bool enemy = false;
+            float best = 2.5f * 2.5f;
+            foreach (var other in Others)
+            {
+                if (other.Side == MySide || !other.IsAlive || !other.Seen) continue;
+                Vector3 offset = other.Position - point;
+                offset.y = 0f;
+                if (offset.sqrMagnitude >= best) continue;
+                best = offset.sqrMagnitude;
+                point = other.Position;
+                enemy = true;
+            }
+            AddPing(point, enemy, MyId, MySide, true);
+            if (NetSession.Online) NetSession.Instance.SendPing(MyId, MySide, enemy, point);
+        }
+
+        // A ping from anyone on a team: shown to that team (show), and their bots go and look.
+        public void AddPing(Vector3 point, bool enemy, int fromId, int side, bool show)
+        {
+            if (show)
+            {
+                for (int i = Pings.Count - 1; i >= 0; i--) if (Pings[i].fromId == fromId) Pings.RemoveAt(i); // one ping each
+                Pings.Add(new Ping { position = point, enemy = enemy, fromId = fromId, from = Name(fromId), time = Time.unscaledTime });
+                AudioManager.RadioChirp(enemy ? 1.4f : 1.15f);
+            }
+            if (Mirror) return;
+            // The two nearest bots on that team head over (unless they're carrying a flag or defending).
+            ArenaBot first = null, second = null;
+            float d1 = float.MaxValue, d2 = float.MaxValue;
+            foreach (var bot in Bots)
+            {
+                if (bot.Side != side || !bot.IsAlive || IsCarrying(bot)) continue;
+                float d = (bot.Position - point).sqrMagnitude;
+                if (d < d1) { second = first; d2 = d1; first = bot; d1 = d; }
+                else if (d < d2) { second = bot; d2 = d; }
+            }
+            if (first != null) first.Ping(point);
+            if (second != null) second.Ping(point);
         }
 
         // ---- Events: the feed and banners ----
@@ -1088,6 +1376,18 @@ namespace Swat
                     break;
                 case MatchEventKind.PlayerLeft:
                     Announce((string.IsNullOrEmpty(e.name) ? "A player" : e.name) + " left the match", e.side);
+                    break;
+                case MatchEventKind.RoundWon:
+                    if (e.side > 1)
+                    {
+                        Announce("Round " + Round + " is a draw", MySide);
+                        UIManager.Banner("ROUND DRAWN", "Nobody takes this one", BannerKind.Info);
+                        break;
+                    }
+                    Announce(SideName(e.side) + " team won round " + Round, e.side);
+                    UIManager.Banner(e.side == MySide ? "ROUND WON" : "ROUND LOST",
+                        SideName(0) + " " + Mathf.FloorToInt(Score[0]) + "  -  " + Mathf.FloorToInt(Score[1]) + " " + SideName(1), e.side == MySide ? BannerKind.Good : BannerKind.Bad);
+                    AudioManager.Play2D(e.side == MySide ? Sound.Complete : Sound.Warning, 0.6f, 1f, SoundCategory.Interface);
                     break;
             }
         }
@@ -1168,8 +1468,11 @@ namespace Swat
         {
             int winner = -2;
             string reason = null;
-            if (Score[0] >= ScoreLimit) { winner = 0; reason = "Score limit reached"; }
-            else if (Score[1] >= ScoreLimit) { winner = 1; reason = "Score limit reached"; }
+            // Elimination: the round-won banner gets its moment before the results.
+            if (Mode == GameMode.Elimination && RoundOver) return;
+            string limitReason = Mode == GameMode.GunGame ? "Finished the gun ladder" : Mode == GameMode.Elimination ? "Won the last round" : "Score limit reached";
+            if (Score[0] >= ScoreLimit) { winner = 0; reason = limitReason; }
+            else if (Score[1] >= ScoreLimit) { winner = 1; reason = limitReason; }
             else if (Elapsed >= TimeLimit)
             {
                 int blue = Mathf.FloorToInt(Score[0]), red = Mathf.FloorToInt(Score[1]);

@@ -130,7 +130,7 @@ namespace Swat
                 if (GameInput.Down(InputAction.Slot1)) UIManager.Notify("You can't use a primary weapon while carrying a shield");
                 return;
             }
-            if (index == Inventory.CurrentIndex) return;
+            if (index == Inventory.CurrentIndex || Inventory.SingleWeapon) return;
             Inventory.CurrentIndex = index;
             reloadEnd = 0f;
             bloom = 0f;
@@ -150,7 +150,7 @@ namespace Swat
             WheelEntries.Clear();
             if (Inventory.Primary != null)
                 WheelEntries.Add(WeaponEntry(Inventory.Primary, 0, !Inventory.PrimaryBlocked));
-            if (Inventory.Sidearm != null)
+            if (Inventory.Sidearm != null && !Inventory.SingleWeapon)
                 WheelEntries.Add(WeaponEntry(Inventory.Sidearm, 1, true));
             for (int i = 0; i < Inventory.Equipment.Count; i++)
             {
@@ -226,7 +226,23 @@ namespace Swat
 
         void ApplyWeaponModel()
         {
-            CharacterFactory.SetWeapon(player.Parts, Current.Data, Inventory.CurrentIndex == 0 ? player.Loadout : null);
+            CharacterFactory.SetWeapon(player.Parts, Current.Data, Inventory.CurrentIndex == 0 && !Inventory.SingleWeapon ? player.Loadout : null);
+        }
+
+        // Gun Game: hands you the gun for your rung of the ladder (full, no attachments).
+        public void SetOnlyWeapon(WeaponData data)
+        {
+            if (data == null) return;
+            Inventory.SetOnly(new Weapon(data, null));
+            reloadEnd = 0f;
+            bloom = 0f;
+            burstLeft = 0;
+            spin = 0f;
+            pumpAt = -1f;
+            switchEnd = Time.time + data.switchTime;
+            lowAmmoWarned = false;
+            ApplyWeaponModel();
+            AudioManager.Play(Sound.WeaponRaise, player.Position, 0.5f, 1f, SoundCategory.Weapons);
         }
 
         void CycleEquipment(int direction)
@@ -413,7 +429,7 @@ namespace Swat
             {
                 if (settings.autoReload) StartReload();
             }
-            else if (Inventory.CurrentIndex == 0 && settings.autoSwitchWhenEmpty && Inventory.Sidearm != null)
+            else if (Inventory.CurrentIndex == 0 && settings.autoSwitchWhenEmpty && Inventory.Sidearm != null && !Inventory.SingleWeapon)
             {
                 UIManager.Notify("Out of ammo: switching to sidearm");
                 Switch(1);

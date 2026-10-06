@@ -328,9 +328,16 @@ namespace Swat
             }
         }
 
-        // Game modes: bases, the zone and the flags.
+        // Game modes: bases, the zone, the flags and your team's pings.
         void DrawVersusAreas(VersusMatch match)
         {
+            foreach (var ping in match.Pings)
+            {
+                Vector2 p = ToMap(ping.position);
+                var color = ping.enemy ? new Color(1f, 0.45f, 0.2f) : new Color(1f, 0.85f, 0.3f);
+                RingAt(p, 7f, color, 2f);
+                Label(new Rect(p.x - 40f, p.y - 22f, 80f, 16f), ping.enemy ? "ENEMY" : "PING", 11, color, TextAnchor.UpperCenter, true);
+            }
             for (int side = 0; side < 2; side++)
             {
                 Vector2 b = ToMap(match.Bases[side]);

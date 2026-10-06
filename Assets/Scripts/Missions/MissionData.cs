@@ -7,7 +7,7 @@ namespace Swat
     public enum MissionType { BuildingClearance, CivilianRescue, Investigation, Emergency, Training }
 
     // Mission = the normal SWAT operation; the others are team-versus-team exercises (game modes).
-    public enum GameMode { Mission, TeamDeathmatch, CaptureTheFlag, ZoneControl }
+    public enum GameMode { Mission, TeamDeathmatch, CaptureTheFlag, ZoneControl, GunGame, Elimination }
 
     public enum ObjectiveType
     {

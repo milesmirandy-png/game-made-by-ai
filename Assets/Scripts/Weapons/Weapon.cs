@@ -111,6 +111,17 @@ namespace Swat
             if (bonus != null) foreach (var entry in bonus) Add(entry.id, entry.count);
         }
 
+        // Gun Game: one gun and nothing else (no sidearm to swap to, no shield in the way).
+        public void SetOnly(Weapon weapon)
+        {
+            Primary = weapon;
+            Sidearm = weapon;
+            PrimaryBlocked = false;
+            CurrentIndex = 0;
+        }
+
+        public bool SingleWeapon { get { return Primary != null && Primary == Sidearm; } }
+
         void Add(string id, int count)
         {
             var data = GameData.Equipment(id);

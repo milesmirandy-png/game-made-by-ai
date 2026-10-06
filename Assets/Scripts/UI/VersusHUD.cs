@@ -2,9 +2,10 @@ using UnityEngine;
 
 namespace Swat
 {
-    // In-match HUD for the game modes: score and clock (top centre), flag or
-    // zone status, the takedown feed and team list (right), the respawn
-    // countdown, and labels over players, flags and the zone.
+    // In-match HUD for the game modes: score and clock (top centre), flag,
+    // zone, gun ladder or round status, the takedown feed and team list
+    // (right), the respawn countdown and who you're watching while out, and
+    // labels over players, flags, the zone and your team's pings.
     public static class VersusHUD
     {
         static readonly Color Blue = new Color(0.3f, 0.58f, 1f);
@@ -29,7 +30,8 @@ namespace Swat
             float w = UITheme.Width;
             var rect = new Rect(w * 0.5f - 230f, 14f, 460f, 74f);
             UITheme.Panel(rect);
-            UITheme.Text(new Rect(rect.x, rect.y + 4f, rect.width, 18f), VersusMatch.ModeNames[(int)match.Mode].ToUpperInvariant() + "   -   FIRST TO " + match.ScoreLimit, 12, UITheme.Dim, TextAnchor.UpperCenter, true);
+            string goal = match.Mode == GameMode.GunGame ? match.ScoreLimit + "-GUN LADDER" : match.Mode == GameMode.Elimination ? "FIRST TO " + match.ScoreLimit + " ROUNDS" : "FIRST TO " + match.ScoreLimit;
+            UITheme.Text(new Rect(rect.x, rect.y + 4f, rect.width, 18f), VersusMatch.ModeNames[(int)match.Mode].ToUpperInvariant() + "   -   " + goal, 12, UITheme.Dim, TextAnchor.UpperCenter, true);
             var blue = new Rect(rect.x + 14f, rect.y + 24f, 130f, 42f);
             var red = new Rect(rect.xMax - 144f, rect.y + 24f, 130f, 42f);
             UITheme.Fill(blue, new Color(Blue.r * 0.35f, Blue.g * 0.35f, Blue.b * 0.35f, 0.9f));
@@ -38,11 +40,26 @@ namespace Swat
             UITheme.Fill(new Rect(red.xMax - red.width * Mathf.Clamp01(match.Score[1] / Mathf.Max(1, match.ScoreLimit)), red.yMax - 3f, red.width * Mathf.Clamp01(match.Score[1] / Mathf.Max(1, match.ScoreLimit)), 3f), Red);
             UITheme.Text(blue, "BLUE  " + Mathf.FloorToInt(match.Score[0]), 24, Color.white, TextAnchor.MiddleCenter, true);
             UITheme.Text(red, Mathf.FloorToInt(match.Score[1]) + "  RED", 24, Color.white, TextAnchor.MiddleCenter, true);
-            float left = match.TimeLeft;
-            UITheme.Text(new Rect(rect.x + 150f, rect.y + 26f, rect.width - 300f, 38f), MissionScoring.FormatTime(left), 24, left < 30f ? UITheme.Warn : UITheme.TextColor, TextAnchor.MiddleCenter, true);
+            // Elimination shows the round clock in the middle; the other modes the match clock.
+            float left = match.Mode == GameMode.Elimination ? match.RoundTimeLeft : match.TimeLeft;
+            string clock = match.Mode == GameMode.Elimination && match.RoundOver ? "--:--" : MissionScoring.FormatTime(left);
+            UITheme.Text(new Rect(rect.x + 150f, rect.y + 26f, rect.width - 300f, 38f), clock, 24, left < 30f ? UITheme.Warn : UITheme.TextColor, TextAnchor.MiddleCenter, true);
 
             float y = rect.yMax + 4f;
-            if (match.Mode == GameMode.CaptureTheFlag)
+            if (match.Mode == GameMode.GunGame && match.Ladder != null)
+            {
+                int rung = Mathf.Clamp(match.PlayerKills, 0, match.Ladder.Count - 1);
+                bool last = rung == match.Ladder.Count - 1;
+                string next = last ? "FINAL GUN - one more tag-out wins" : "next: " + match.Ladder[rung + 1].displayName;
+                UITheme.ShadowText(new Rect(rect.x - 160f, y, rect.width + 320f, 22f), "Your gun " + (rung + 1) + "/" + match.Ladder.Count + ":  " + match.Ladder[rung].displayName + "     " + next, 15,
+                    last ? UITheme.Warn : UITheme.TextColor, TextAnchor.UpperCenter, true);
+            }
+            else if (match.Mode == GameMode.Elimination)
+            {
+                string state = match.RoundOver ? "next round starting" : "still in  " + match.StillIn(0) + " vs " + match.StillIn(1);
+                UITheme.ShadowText(new Rect(rect.x - 120f, y, rect.width + 240f, 22f), "Round " + match.Round + "     " + state + "     match " + MissionScoring.FormatTime(match.TimeLeft), 15, UITheme.TextColor, TextAnchor.UpperCenter, true);
+            }
+            else if (match.Mode == GameMode.CaptureTheFlag)
             {
                 int theirs = 1 - match.MySide;
                 UITheme.ShadowText(new Rect(rect.x - 120f, y, rect.width + 240f, 22f), "Your flag: " + FlagStatus(match, match.MySide) + "     " + VersusMatch.SideName(theirs) + " flag: " + FlagStatus(match, theirs), 15, UITheme.TextColor, TextAnchor.UpperCenter);
@@ -103,7 +120,10 @@ namespace Swat
             {
                 if (mate.Side != match.MySide) continue;
                 string state = mate.IsAlive ? mate.Kills + " tag-outs" : mate.RespawnAt > 0f && !match.Mirror ? "back in " + Mathf.CeilToInt(Mathf.Max(0f, mate.RespawnAt - Time.time)) : "tagged out";
+                if (match.Mode == GameMode.GunGame && match.Ladder != null) state = "gun " + (Mathf.Clamp(mate.Kills, 0, match.Ladder.Count - 1) + 1) + "/" + match.Ladder.Count + (mate.IsAlive ? "" : "   (tagged out)");
+                if (match.Mode == GameMode.Elimination && !mate.IsAlive) state = "out this round";
                 if (match.IsCarrying(mate)) state = "HAS THE FLAG";
+                if (match.Spectating == mate) state += "   [watching]";
                 UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), (mate.IsHuman ? "* " : "") + mate.Callsign + "   " + state, 14, mate.IsAlive ? UITheme.TextColor : UITheme.Faint, TextAnchor.UpperRight);
                 y += 20f;
             }
@@ -112,12 +132,19 @@ namespace Swat
         static void DrawRespawn(GameManager game, VersusMatch match)
         {
             var player = game.Player;
-            if (player == null || player.IsAlive || match.PlayerRespawnAt <= 0f) return;
+            if (player == null || player.IsAlive) return;
+            bool eliminated = match.Mode == GameMode.Elimination;
+            if (match.PlayerRespawnAt <= 0f && !eliminated) return;
             float w = UITheme.Width, h = UITheme.Height;
-            int seconds = Mathf.CeilToInt(Mathf.Max(0f, match.PlayerRespawnAt - Time.time));
-            UITheme.ShadowText(new Rect(0f, h * 0.36f, w, 50f), "TAGGED OUT", 42, Red, TextAnchor.MiddleCenter, true);
-            UITheme.ShadowText(new Rect(0f, h * 0.36f + 52f, w, 26f), "by " + match.PlayerTaggedBy, 18, UITheme.TextColor, TextAnchor.MiddleCenter);
-            UITheme.ShadowText(new Rect(0f, h * 0.36f + 82f, w, 30f), "Back in " + seconds, 22, UITheme.Accent, TextAnchor.MiddleCenter, true);
+            // Smaller and higher once you're watching a teammate, so the view stays clear.
+            bool watching = match.Spectating != null;
+            float top = watching ? 110f : h * 0.36f;
+            UITheme.ShadowText(new Rect(0f, top, w, 50f), "TAGGED OUT", watching ? 26 : 42, Red, TextAnchor.MiddleCenter, true);
+            UITheme.ShadowText(new Rect(0f, top + (watching ? 34f : 52f), w, 26f), "by " + match.PlayerTaggedBy, watching ? 15 : 18, UITheme.TextColor, TextAnchor.MiddleCenter);
+            string when = eliminated ? "Out until the next round" : "Back in " + Mathf.CeilToInt(Mathf.Max(0f, match.PlayerRespawnAt - Time.time));
+            UITheme.ShadowText(new Rect(0f, top + (watching ? 56f : 82f), w, 30f), when, watching ? 17 : 22, UITheme.Accent, TextAnchor.MiddleCenter, true);
+            if (watching)
+                UITheme.ShadowText(new Rect(0f, h - 210f, w, 26f), "Watching " + match.Spectating.Callsign + "   -   " + GameInput.PromptKey(InputAction.Fire) + " for the next teammate", 17, UITheme.TextColor, TextAnchor.MiddleCenter, true);
         }
 
         // Names over players, and markers for the flags and the zone (pinned to the screen edge when off-screen).
@@ -145,6 +172,41 @@ namespace Swat
                 }
             if (match.Mode == GameMode.ZoneControl)
                 Marker(cam, match.Zone.center + Vector3.up * 2.6f, "ZONE", match.ZoneOwner < 0 ? Color.white : SideColor(match.ZoneOwner));
+            DrawPings(game, match, cam);
+        }
+
+        static readonly Color PingHere = new Color(1f, 0.85f, 0.3f);
+        static readonly Color PingEnemy = new Color(1f, 0.45f, 0.2f);
+
+        // Your team's pings: a diamond with who sent it and how far it is, pulsing when new.
+        static void DrawPings(GameManager game, VersusMatch match, Camera cam)
+        {
+            var player = game.Player;
+            foreach (var ping in match.Pings)
+            {
+                float age = Time.unscaledTime - ping.time;
+                float fade = Mathf.Clamp01((VersusMatch.PingLife - age) / 1f);
+                var color = ping.enemy ? PingEnemy : PingHere;
+                color.a = fade;
+                Vector2 gui;
+                bool front = UITheme.WorldToGui(cam, ping.position + Vector3.up * 0.4f, out gui);
+                float w = UITheme.Width, h = UITheme.Height, margin = 60f;
+                if (!front || gui.x < margin || gui.x > w - margin || gui.y < margin || gui.y > h - margin)
+                {
+                    if (!front) gui = new Vector2(w - gui.x, h - gui.y);
+                    gui.x = Mathf.Clamp(gui.x, margin, w - margin);
+                    gui.y = Mathf.Clamp(gui.y, margin + 80f, h - margin - 140f);
+                }
+                float size = 9f;
+                UITheme.LineTo(gui + new Vector2(0f, -size), gui + new Vector2(size, 0f), color, 3f);
+                UITheme.LineTo(gui + new Vector2(size, 0f), gui + new Vector2(0f, size), color, 3f);
+                UITheme.LineTo(gui + new Vector2(0f, size), gui + new Vector2(-size, 0f), color, 3f);
+                UITheme.LineTo(gui + new Vector2(-size, 0f), gui + new Vector2(0f, -size), color, 3f);
+                if (age < 1f) UITheme.Ring(gui, Mathf.Lerp(10f, 34f, age), new Color(color.r, color.g, color.b, (1f - age) * fade), 2f);
+                string distance = player != null ? "  " + Mathf.RoundToInt(Vector3.Distance(player.Position, ping.position)) + " m" : "";
+                UITheme.ShadowText(new Rect(gui.x - 110f, gui.y - 34f, 220f, 20f), (ping.enemy ? "ENEMY" : "HERE") + distance, 13, color, TextAnchor.MiddleCenter, true);
+                UITheme.ShadowText(new Rect(gui.x - 110f, gui.y + 12f, 220f, 18f), ping.from, 12, new Color(1f, 1f, 1f, 0.8f * fade), TextAnchor.MiddleCenter);
+            }
         }
 
         static void Marker(Camera cam, Vector3 world, string label, Color color)

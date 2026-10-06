@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has eight parts: **peek, slide, balance and
-punch** (newest, first), **online multiplayer and
+and what is still unverified. It has nine parts: **Gun Game, Elimination,
+spectating and pings** (newest, first), **peek, slide, balance and
+punch**, **online multiplayer and
 the screenshot tour**, the **gun pack, NPC and arsenal
 update**, the **game modes, arsenal and sprite update**, the **pixel-art
 style**, the **ten levels,
@@ -13,10 +14,85 @@ something).
 The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check. The
 owner has built the game and played it, including LAN matches with friends;
-that is the only play-testing, and it happened before the newest part, which
-has only been compiled. No profiling or performance measurements have been
+that is the only play-testing, and it happened before the two newest parts,
+which have only been compiled. No profiling or performance measurements have been
 made, and no screenshots are in the repository. Treat everything below as
 "implemented in code" unless it says otherwise.
+
+# Part 0f: Gun Game, Elimination, spectating and pings
+
+## What was added
+
+- **Gun Game** (`GameMode.GunGame`, `VersusMatch` "Gun Game" section). The
+  ladder is 16 guns, from the RG6 rotary down to the BK6 pistol. Ladders of 8
+  or 12 take evenly spaced rungs and always end on the BK6:
+  - 8: RG6, KV, D20, X4, GL6, TS8, M9, BK6.
+  - 12: RG6, LM8, SR3, D20, CX, AS12, B4, DM2, TS8, PC9, R6, BK6.
+  A member's rung is simply their tag-out count, which every copy of an
+  online match already knows: kills arrive in snapshots, and your own come
+  from the host's takedown events. So no new per-player state had to be
+  synced. You carry only the rung's gun: `WeaponInventory.SetOnly` makes
+  primary and sidearm the same weapon, switching and the wheel skip the
+  sidearm, and there are no attachments. A shield is set aside
+  (`OperatorHealth.SetShield`). Bots get theirs with `ArenaBot.SetGun`. The
+  host scores each team as its best climber's rung; reaching the ladder's
+  length wins ("Finished the gun ladder"). Banners announce "NEXT GUN" and
+  "FINAL GUN".
+- **Elimination** (`GameMode.Elimination`): no respawns mid-round (bots,
+  remote players and you). A round ends when one side has nobody left (both
+  empty: a draw) or after 120 s (more officers still in wins; equal is a
+  draw). The winner scores a round, a `RoundWon` event shows a banner on
+  every screen, and after a 4 s break everyone is respawned at their base
+  (`StartRound`), remote players through the existing respawn message. A
+  player still loading counts as in, so a slow loader can't lose round one
+  for their team. The match ends after the break of the deciding round, or
+  when the match clock runs out. Snapshots carry the round number, whether
+  it's over and when it started, so clients show the round clock and a
+  "ROUND n" banner.
+- **Spectating** (all modes): 1.5 s after you're tagged out, the camera
+  (`CameraController.SpectateTarget`) follows a teammate who's still in;
+  Fire picks the next. It stops when you respawn or the match ends. Fog of
+  war already used your whole team's eyes, so what's shown doesn't change.
+- **Pings** (new action `Ping`, middle mouse, game modes only): a ping at the
+  aim point, or on an opponent your team can see within 2.5 m of it. One
+  active ping per player lasts 6 s. It shows as a diamond with the sender and
+  distance (pinned to the screen edge when off-screen), a ring on the
+  tactical map and a radio chirp. The two nearest bots of that team go there
+  for up to 12 s (`ArenaBot.Ping`), unless they're defending, holding the
+  zone or carrying a flag. Online, a new `Ping` message goes from a player to
+  the host and from the host to that player's teammates. The host's bots
+  react to every team's pings, but the host only sees its own team's.
+- **UI:** the Game Modes screen lists the five modes in shorter rows, and the
+  score stepper reads "Ladder" or "Rounds to win". The HUD shows your gun and
+  the next (Gun Game), and the round, who's still in and the match clock
+  (Elimination, with the round clock in the middle). The team list shows
+  rungs, "out this round" and whom you're watching. The tagged-out text
+  moves up while you're spectating.
+- **Online version:** `MessageVersion` is now 3 (new modes, round fields in
+  snapshots, `Ping`), so a copy without this part is refused with "Different
+  game version".
+
+## Limitations
+
+- In Gun Game every tag-out counts, including with a launcher grenade that
+  catches several people, which can skip rungs. There's no knife or
+  demotion.
+- Elimination has no buy phase, side swap or overtime. A draw scores nobody,
+  so a long run of draws can let the match clock decide it.
+- Spectating follows bots and players on your team, not opponents, and there
+  is no free camera.
+- Pings are mouse-only (no gamepad button is free), and only in the game
+  modes.
+- Bots don't use the rotary gun's spin-up (true before this part too).
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors).
+- The ladder rungs for 8, 12 and 16 guns were computed with the same rounding
+  the game uses and checked for repeats (none).
+- **Not done:** any play-testing. Not checked in play: the new modes offline or online,
+  round resets with remote players, spectating, pings between two copies,
+  and the new HUD layout at different resolutions.
 
 # Part 0e: Peek, slide, balance and more punch
 

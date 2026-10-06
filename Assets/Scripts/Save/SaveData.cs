@@ -115,7 +115,7 @@ namespace Swat
     [Serializable]
     public class VersusOptions
     {
-        public int mode = 1;               // GameMode: 1 Team Deathmatch, 2 Capture the Flag, 3 Zone Control
+        public int mode = 1;               // GameMode: 1 Team Deathmatch, 2 Capture the Flag, 3 Zone Control, 4 Gun Game, 5 Elimination
         public string mapId = "warehouse";
         public int teamSize = 4;           // per side, including you
         public int scoreIndex = 1;

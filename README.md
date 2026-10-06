@@ -18,13 +18,39 @@ icons: pixel-art guns from a free-to-use sprite pack (see [CREDITS.md](CREDITS.m
 > [REPORT.md](REPORT.md#testing-performed)), the custom shaders pass a syntax
 > check, and the level creator's layout logic and the online transport pass
 > tests run outside Unity. The owner has played built copies, LAN games with
-> friends included; that is the only play-testing so far. The newest update
-> (peek, slide, balance and feel) has been compiled but **not played yet**. No
+> friends included; that is the only play-testing so far. The two newest
+> updates (peek, slide, balance and feel; then Gun Game, Elimination,
+> spectating and pings) have been compiled but **not played yet**. No
 > performance has been measured, and no gameplay screenshots are in the
 > repository yet. [Screenshots/README.md](Screenshots/README.md) explains how
 > to capture them (the screenshot tour does most of it).
 
-## What's new: peek, slide, balance and more punch
+## What's new: Gun Game, Elimination, spectating and pings
+
+- **Gun Game** (new game mode): everyone starts with the RG6 rotary gun.
+  Every tag-out swaps your gun for the next one on the ladder, down to the
+  little BK6 pistol at the end. Tag someone out with the last gun and your team
+  wins. Ladders of 8, 12 or 16 guns. Shields stay at the van, and there's no
+  sidearm to fall back on: you only have the gun for your rung. The HUD shows
+  your gun, the next one and everyone's progress.
+- **Elimination** (new game mode): no respawns during a round. Tag out the
+  whole other team to win the round. If the 2-minute round clock runs out,
+  the team with more officers still in takes it. First to 3, 5 or 7 rounds.
+  Between rounds everyone is put back at their base with full health and
+  ammo.
+- **Spectate while you're out:** a moment after you're tagged out (in any
+  mode), the camera follows a teammate who's still in. **Left mouse** switches
+  to the next one. It matters most in Elimination, where you can sit out a
+  whole round.
+- **Pings (middle mouse):** point out a spot for your team. Ping close to an
+  opponent you can see and it's marked as ENEMY. Teammates see a marker with
+  your name and the distance, also on the tactical map and pinned to the
+  screen edge when off-screen, plus a radio chirp. The two nearest bots on
+  your team go and check it out. Online, pings go to your teammates only.
+- All five modes work offline and online. Everyone needs this version to
+  play together; an older copy is told it's a different version.
+
+## Earlier: peek, slide, balance and more punch
 
 - **Peek / lean (hold Left Ctrl).** Your officer leans their upper body out
   past a corner or door frame without stepping out. On its own it leans
@@ -317,6 +343,7 @@ All keys can be remapped in **Settings -> Controls**.
 | **Left Shift** | Sprint (uses stamina; loud). From a crouch it stands you up |
 | **C** | Crouch. While sprinting: slide |
 | **Left Ctrl (hold)** | Peek / lean past a corner or door frame (picks the open side; hold a movement key to lean that way on screen) |
+| **Middle mouse** | Game modes: ping a spot (or a visible opponent) for your team |
 | **E** | Interact: doors, civilians, surrendered suspects, consoles, evidence, stairs, van resupply (prompts marked HOLD need the key held) |
 | **Q** | Tap: switch between primary and sidearm. Hold: weapon wheel (all weapons and equipment) |
 | **F** | Toggle flashlight |
@@ -431,20 +458,28 @@ uses the normal deployment: the van arrives, then the exercise starts.
 | Team Deathmatch | Tag out players on the other team. First team to the limit (15 / 25 / 40) wins. |
 | Capture the Flag | Take the red flag (deep inside the building) back to your flag at the van. Your own flag must be at your base to score. A dropped flag returns after 20 seconds, or straight away when a teammate touches it. |
 | Zone Control | A zone is marked in a room about halfway between the bases. Stand in it with no opponents inside to take it; while it's yours your team scores a point per second. |
+| Gun Game | Every tag-out moves you to the next gun on a ladder of 8, 12 or 16 (from the RG6 rotary gun down to the BK6 pistol). The first to tag someone out with the last gun wins for their team. Your team's score is its best climber's rung. |
+| Elimination | Rounds with no respawns: tag out the whole other team to win the round (or have more officers left when the 2-minute round clock runs out). First to 3, 5 or 7 rounds. Everyone restarts at their base each round. |
 
 - **Teams:** you plus your squadmates (bots using their own loadouts; extra
   places are filled by other officers) against the Red Team (bots with random
   weapons). Team size 1 vs 1 to 6 vs 6; bot skill Easy, Normal or Hard.
   Online, other players take places on either team (see below).
 - **Respawns:** 5 seconds after being tagged out, at your base, with full
-  health and ammo and a moment of protection. Ammo also refills at the van.
+  health and ammo and a moment of protection (in Elimination, at the start of
+  the next round). Ammo also refills at the van. While you wait, the camera
+  follows a teammate; **left mouse** switches to the next one.
+- **Pings:** middle mouse marks a spot, or a visible opponent, for your team
+  (on screen and on the tactical map). The two nearest bots on your team go
+  and look.
 - **Maps:** warehouse, office, corner store, motel, bank, clinic, nightclub,
   steelworks and the training facility. Every usable door starts open.
 - **What you see:** the Red Team is only shown while your team can see them
   (the Line of Sight setting), plus a moment after they fire near you. Flags,
   the zone and both bases are marked on screen and on the minimap.
-- **HUD:** score and clock at the top, flag or zone status under it, a
-  takedown feed and your team on the right, and a respawn countdown.
+- **HUD:** score and clock at the top (Elimination: the round clock); flag,
+  zone, gun-ladder or round status under it; a takedown feed and your team on
+  the right; and a respawn countdown with who you're watching.
 - Flashbangs daze bots on both teams; less-lethal weapons briefly stop a bot
   from shooting.
 - Match results show both teams' scoreboards; **Rematch** replays the same

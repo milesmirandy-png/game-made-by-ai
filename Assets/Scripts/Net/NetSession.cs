@@ -71,7 +71,7 @@ namespace Swat
         const float SnapshotInterval = 1f / 15f, StateInterval = 1f / 20f;
         const int NoId = 255;
 
-        enum Msg : byte { Lobby = 1, ChooseSide, Profile, Start, Setup, Loaded, Snapshot, State, Shot, Hit, Down, Respawn, Event, End, ToLobby, Remove }
+        enum Msg : byte { Lobby = 1, ChooseSide, Profile, Start, Setup, Loaded, Snapshot, State, Shot, Hit, Down, Respawn, Event, End, ToLobby, Remove, Ping }
 
         public static NetSession Instance { get; private set; }
         public static bool IsHost { get { return Instance != null && Instance.Role == NetRole.Host; } }
@@ -344,8 +344,9 @@ namespace Swat
             return weapon != null && !loadout.useShield ? weapon.id : loadout.sidearmId;
         }
 
-        // Raised whenever a message gains or changes a field (2: lean and slide in movement updates).
-        const int MessageVersion = 2;
+        // Raised whenever a message gains or changes a field (2: lean and slide in movement updates;
+        // 3: Gun Game and Elimination, round state in snapshots, pings).
+        const int MessageVersion = 3;
 
         // Both copies of the game must have the same weapons, officers, maps and messages.
         static int ContentHash()
@@ -609,6 +610,9 @@ namespace Swat
             writer.Byte(match.ZoneOwner + 1);
             writer.Byte(match.ZoneCount[0]);
             writer.Byte(match.ZoneCount[1]);
+            writer.Byte(Mathf.Clamp(match.Round, 0, 255));
+            writer.Bool(match.RoundOver);
+            writer.Float(match.RoundStart);
             for (int side = 0; side < 2; side++)
             {
                 var flag = match.Flags[side];
@@ -751,6 +755,26 @@ namespace Swat
         }
 
         // Client: you were tagged out; the host credits whoever did it.
+        // A ping: a player sends theirs to the host; the host passes it to that player's teammates.
+        public void SendPing(int fromId, int side, bool enemy, Vector3 point)
+        {
+            if (peer == null) return;
+            writer.Reset();
+            writer.Byte((byte)Msg.Ping);
+            writer.Byte(fromId < 0 ? NoId : fromId);
+            writer.Bool(enemy);
+            Pos(writer, point);
+            var data = writer.ToArray();
+            if (IsClient)
+            {
+                if (peer.Connections.Count > 0) peer.Send(peer.Connections[0], data, true);
+                return;
+            }
+            if (!IsHost) return;
+            foreach (var player in Players)
+                if (player.connection != null && player.side == side && player.actorId != fromId) peer.Send(player.connection, data, true);
+        }
+
         public void SendDown(int attackerId, int weaponIndex)
         {
             if (!IsClient || peer.Connections.Count == 0) return;
@@ -1063,6 +1087,16 @@ namespace Swat
                     match.OnRemoteDown(actor, attacker == NoId ? -1 : attacker, weapon == NoId ? -1 : weapon);
                     break;
                 }
+                case Msg.Ping:
+                {
+                    r.Byte(); // the sender's own idea of its id; the connection says who it is
+                    bool enemy = r.Bool();
+                    Vector3 point = Pos(r);
+                    if (r.Failed || actor == null || match == null || !VersusMatch.Active || !Sane(point)) break;
+                    match.AddPing(point, enemy, actor.NetId, actor.Side, actor.Side == match.MySide);
+                    SendPing(actor.NetId, actor.Side, enemy, point);
+                    break;
+                }
             }
         }
 
@@ -1260,6 +1294,14 @@ namespace Swat
                     if (!r.Failed && mirroring) match.RemoveRemote(FindRemote(match, id), false);
                     break;
                 }
+                case Msg.Ping:
+                {
+                    int from = r.Byte();
+                    bool enemy = r.Bool();
+                    Vector3 point = Pos(r);
+                    if (!r.Failed && mirroring && Sane(point)) match.AddPing(point, enemy, from == NoId ? -1 : from, match.MySide, true);
+                    break;
+                }
             }
         }
 
@@ -1274,6 +1316,9 @@ namespace Swat
             float zone = r.Short() / 1000f;
             int owner = r.Byte() - 1;
             int inBlue = r.Byte(), inRed = r.Byte();
+            int round = r.Byte();
+            bool roundOver = r.Bool();
+            float roundStart = r.Float();
             var flagPosition = new Vector3[2];
             var flagCarrier = new int[2];
             var flagDropped = new float[2];
@@ -1291,6 +1336,7 @@ namespace Swat
             if (r.Failed) return;
             lastSnapshotSeq = seq;
             match.ApplyState(elapsed, blue, red, zone, owner, inBlue, inRed);
+            match.ApplyRound(round, roundOver, roundStart);
             for (int i = 0; i < count; i++)
             {
                 int id = r.Byte();
@@ -1335,7 +1381,7 @@ namespace Swat
         {
             return new VersusOptions
             {
-                mode = Mathf.Clamp(r.Byte(), 1, 3), mapId = r.String(), teamSize = Mathf.Clamp(r.Byte(), 1, VersusMatch.MaxTeamSize),
+                mode = Mathf.Clamp(r.Byte(), 1, VersusMatch.LastMode), mapId = r.String(), teamSize = Mathf.Clamp(r.Byte(), 1, VersusMatch.MaxTeamSize),
                 scoreIndex = Mathf.Clamp(r.Byte(), 0, 2), timeIndex = Mathf.Clamp(r.Byte(), 0, 2), botSkill = Mathf.Clamp(r.Byte(), 0, 2), timeOfDay = Mathf.Clamp(r.Byte(), 0, 2),
             };
         }

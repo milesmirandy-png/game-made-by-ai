@@ -18,6 +18,8 @@ namespace Swat
         [SerializeField] float maxLookAhead = 4f;
 
         public Camera Cam { get; private set; }
+        // Game modes: while you're out, the view follows a teammate instead of you.
+        public Transform SpectateTarget { get; set; }
         public int Preset { get; private set; }
 
         // Pixel art: how far (in game pixels) the true camera position is from the
@@ -195,7 +197,7 @@ namespace Swat
             }
             distance = Mathf.Lerp(distance, targetDistance, 1f - Mathf.Exp(-10f * dt));
 
-            Vector3 desired = player.Position;
+            Vector3 desired = SpectateTarget != null ? SpectateTarget.position : player.Position;
             if (live && player.IsAlive)
             {
                 Vector3 ahead = player.AimPoint - player.Position;

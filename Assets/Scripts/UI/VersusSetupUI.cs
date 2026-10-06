@@ -3,8 +3,8 @@ using UnityEngine;
 
 namespace Swat
 {
-    // The Game Modes screen: pick Team Deathmatch, Capture the Flag or Zone
-    // Control, a map, team size, score and time limits, bot skill and time of
+    // The Game Modes screen: pick Team Deathmatch, Capture the Flag, Zone
+    // Control, Gun Game or Elimination, a map, team size, score and time limits, bot skill and time of
     // day; check your team, then go to the squad or loadout screens or start.
     // The online panel hosts or joins a game with friends; once you have
     // joined someone else's game this screen shows their lobby instead.
@@ -25,7 +25,7 @@ namespace Swat
             bool hosting = NetSession.IsHost;
             float w = UITheme.Width, h = UITheme.Height;
             var o = SaveManager.Progress.versus;
-            o.mode = Mathf.Clamp(o.mode, 1, 3);
+            o.mode = Mathf.Clamp(o.mode, 1, VersusMatch.LastMode);
             if (System.Array.IndexOf(VersusMatch.MapIds, o.mapId) < 0) o.mapId = VersusMatch.MapIds[0];
             var mode = (GameMode)o.mode;
             bool changed = false;
@@ -35,15 +35,15 @@ namespace Swat
 
             // Modes.
             float x = 60f, y = 120f, cw = 520f;
-            for (int i = 1; i <= 3; i++)
+            for (int i = 1; i <= VersusMatch.LastMode; i++)
             {
-                var rect = new Rect(x, y, cw, 118f);
+                var rect = new Rect(x, y, cw, 76f);
                 bool selected = o.mode == i;
                 if (UITheme.Button(rect, string.Empty, true, selected)) { o.mode = i; changed = true; }
                 UITheme.Fill(new Rect(rect.x, rect.y, 5f, rect.height), ModeColor((GameMode)i));
-                UITheme.Text(new Rect(rect.x + 22f, rect.y + 12f, cw - 40f, 30f), VersusMatch.ModeNames[i].ToUpperInvariant(), 22, selected ? Color.white : UITheme.TextColor, TextAnchor.UpperLeft, true);
-                UITheme.Text(new Rect(rect.x + 22f, rect.y + 46f, cw - 40f, 64f), VersusMatch.ModeGoals[i], 15, UITheme.Dim);
-                y += 128f;
+                UITheme.Text(new Rect(rect.x + 22f, rect.y + 6f, cw - 40f, 26f), VersusMatch.ModeNames[i].ToUpperInvariant(), 19, selected ? Color.white : UITheme.TextColor, TextAnchor.UpperLeft, true);
+                UITheme.Text(new Rect(rect.x + 22f, rect.y + 32f, cw - 40f, 42f), VersusMatch.ModeGoals[i], 14, UITheme.Dim);
+                y += 84f;
             }
 
             // Options.
@@ -56,7 +56,7 @@ namespace Swat
             y += 40f;
             var scores = new string[3];
             for (int i = 0; i < 3; i++) scores[i] = VersusMatch.ScoreLimitFor(mode, i) + " " + VersusMatch.ScoreUnit(mode);
-            int score = UITheme.Stepper(new Rect(x, y, cw, 34f), "Score limit", Mathf.Clamp(o.scoreIndex, 0, 2), scores);
+            int score = UITheme.Stepper(new Rect(x, y, cw, 34f), mode == GameMode.GunGame ? "Ladder" : mode == GameMode.Elimination ? "Rounds to win" : "Score limit", Mathf.Clamp(o.scoreIndex, 0, 2), scores);
             if (score != o.scoreIndex) { o.scoreIndex = score; changed = true; }
             y += 40f;
             var times = new string[3];
@@ -155,7 +155,14 @@ namespace Swat
 
         public static Color ModeColor(GameMode mode)
         {
-            return mode == GameMode.TeamDeathmatch ? new Color(0.95f, 0.35f, 0.3f) : mode == GameMode.CaptureTheFlag ? new Color(0.36f, 0.62f, 0.95f) : new Color(0.4f, 0.85f, 0.55f);
+            switch (mode)
+            {
+                case GameMode.TeamDeathmatch: return new Color(0.95f, 0.35f, 0.3f);
+                case GameMode.CaptureTheFlag: return new Color(0.36f, 0.62f, 0.95f);
+                case GameMode.GunGame: return new Color(1f, 0.66f, 0.22f);
+                case GameMode.Elimination: return new Color(0.72f, 0.5f, 1f);
+                default: return new Color(0.4f, 0.85f, 0.55f);
+            }
         }
     }
 }
