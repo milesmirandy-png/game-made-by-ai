@@ -31,13 +31,55 @@ namespace Swat
             return Gate(officer.unlockAfterMissions);
         }
 
-        public static readonly string[] UniformNames = { "Navy", "Black", "Urban Gray", "Olive", "Midnight Blue", "Charcoal" };
+        // Uniforms are whole kits: shirt, trousers, plate carrier, pouches, helmet and gloves/boots
+        // (the blocky figures use the shirt colour; the soldier model wears the whole kit).
+        public static readonly string[] UniformNames = { "Navy", "Black", "Urban Gray", "Olive", "Midnight Blue", "Charcoal", "Ranger Green", "Desert Tan", "Woodland", "Gray & Coyote" };
         public static readonly float[,] UniformColors =
         {
             { 0.12f, 0.16f, 0.26f }, { 0.07f, 0.07f, 0.08f }, { 0.32f, 0.34f, 0.36f },
             { 0.22f, 0.26f, 0.17f }, { 0.08f, 0.11f, 0.22f }, { 0.18f, 0.18f, 0.2f },
+            { 0.2f, 0.27f, 0.15f }, { 0.62f, 0.5f, 0.34f }, { 0.27f, 0.33f, 0.18f }, { 0.4f, 0.41f, 0.43f },
         };
-        public static readonly int[] UniformUnlocks = { 0, 0, 1, 2, 3, 4 };
+        public static readonly int[] UniformUnlocks = { 0, 0, 1, 2, 3, 4, 0, 1, 2, 3 };
+
+        public struct UniformKit
+        {
+            public UnityEngine.Color shirt, pants, vest, pouches, helmet, gear;
+        }
+
+        static UnityEngine.Color C(float r, float g, float b) { return new UnityEngine.Color(r, g, b); }
+
+        public static UniformKit Kit(int index)
+        {
+            index = UnityEngine.Mathf.Clamp(index, 0, UniformNames.Length - 1);
+            var shirt = Uniform(index);
+            var kit = new UniformKit { shirt = shirt, pants = Shapes.Shade(shirt, 0.82f), vest = C(0.1f, 0.11f, 0.13f), pouches = C(0.15f, 0.16f, 0.18f), helmet = C(0.08f, 0.09f, 0.11f), gear = C(0.07f, 0.075f, 0.085f) };
+            switch (UniformNames[index])
+            {
+                case "Black":
+                    kit.pants = C(0.08f, 0.08f, 0.09f); kit.vest = C(0.11f, 0.11f, 0.12f); kit.pouches = C(0.15f, 0.15f, 0.16f); kit.helmet = C(0.09f, 0.09f, 0.1f);
+                    break;
+                case "Urban Gray":
+                    kit.pants = C(0.27f, 0.28f, 0.3f); kit.vest = C(0.2f, 0.21f, 0.23f); kit.pouches = C(0.26f, 0.27f, 0.29f); kit.helmet = C(0.22f, 0.23f, 0.25f);
+                    break;
+                case "Olive":
+                    kit.pants = C(0.19f, 0.22f, 0.14f); kit.vest = C(0.25f, 0.28f, 0.18f); kit.pouches = C(0.3f, 0.33f, 0.21f); kit.helmet = C(0.21f, 0.24f, 0.15f); kit.gear = C(0.17f, 0.14f, 0.1f);
+                    break;
+                case "Ranger Green":
+                    kit.pants = C(0.18f, 0.24f, 0.13f); kit.vest = C(0.24f, 0.31f, 0.18f); kit.pouches = C(0.29f, 0.36f, 0.21f); kit.helmet = C(0.2f, 0.27f, 0.15f); kit.gear = C(0.2f, 0.16f, 0.11f);
+                    break;
+                case "Desert Tan":
+                    kit.pants = C(0.57f, 0.46f, 0.31f); kit.vest = C(0.49f, 0.36f, 0.21f); kit.pouches = C(0.56f, 0.42f, 0.26f); kit.helmet = C(0.47f, 0.35f, 0.21f); kit.gear = C(0.38f, 0.27f, 0.16f);
+                    break;
+                case "Woodland":
+                    kit.pants = C(0.42f, 0.4f, 0.28f); kit.vest = C(0.45f, 0.35f, 0.22f); kit.pouches = C(0.51f, 0.4f, 0.26f); kit.helmet = C(0.26f, 0.31f, 0.17f); kit.gear = C(0.27f, 0.2f, 0.12f);
+                    break;
+                case "Gray & Coyote":
+                    kit.pants = C(0.24f, 0.28f, 0.17f); kit.vest = C(0.5f, 0.38f, 0.24f); kit.pouches = C(0.56f, 0.43f, 0.27f); kit.helmet = C(0.46f, 0.36f, 0.23f); kit.gear = C(0.3f, 0.22f, 0.14f);
+                    break;
+            }
+            return kit;
+        }
         public static bool UniformAvailable(int index) { return index >= 0 && index < UniformUnlocks.Length && Gate(UniformUnlocks[index]); }
 
         public static UnityEngine.Color Uniform(int index)

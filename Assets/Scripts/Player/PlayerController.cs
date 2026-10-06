@@ -126,16 +126,19 @@ namespace Swat
         public static Appearance OfficerAppearance(OfficerData officer, OfficerLoadout loadout, bool isPlayer)
         {
             var armor = GameData.Armor(loadout.armorId);
-            var uniform = Progression.Uniform(loadout.uniformIndex);
+            // The uniform is a whole kit (black, greens, tans...): the soldier model wears all of it.
+            var kit = Progression.Kit(loadout.uniformIndex);
             return new Appearance
             {
-                shirt = uniform,
-                pants = Shapes.Shade(uniform, 0.8f),
+                shirt = kit.shirt,
+                pants = kit.pants,
                 skin = CharacterFactory.Skin(officer.skinTone + officer.id.Length),
-                headwear = armor != null && armor.helmet ? new Color(0.08f, 0.09f, 0.12f) : new Color(0.1f, 0.1f, 0.12f),
+                headwear = armor != null && armor.helmet ? kit.helmet : new Color(0.1f, 0.1f, 0.12f),
                 head = armor != null && armor.helmet ? HeadStyle.Helmet : HeadStyle.Cap,
                 vestOn = armor != null,
-                vest = armor != null ? armor.color : Color.black,
+                vest = armor != null ? kit.vest : Color.black,
+                pouches = kit.pouches,
+                gear = kit.gear,
                 shield = loadout.useShield,
                 ring = isPlayer ? new Color(0.3f, 0.8f, 1f) : new Color(0.2f, 0.45f, 1f),
                 armed = true,

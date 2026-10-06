@@ -55,6 +55,8 @@ namespace Swat
         public float cameraSmoothing = 0.12f;
         public bool edgeScrolling;
         public int cameraShake = 1;        // 0 off, 1 low, 2 medium
+        public int cameraView;             // 0 top-down, 1 first person (body cam); applies from the next mission
+        public float fieldOfView = 90f;    // first person
         public float mouseSensitivity = 1f;
         public float aimSmoothing;         // 0 = off (direct)
         public float controllerSensitivity = 1f;

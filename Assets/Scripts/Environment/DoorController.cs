@@ -18,7 +18,8 @@ namespace Swat
     // is never rebuilt.
     public class DoorController : MonoBehaviour, IInteractable
     {
-        const float VisualHeight = 1.4f;
+        // Drawn low for the top-down view, full height in first person (the collider is full height either way).
+        static float VisualHeight { get { return ViewMode.FirstPerson ? ViewMode.FirstPersonDoorHeight - 0.03f : 1.4f; } }
         const float SolidHeight = 2.4f;
         const float SwingSpeed = 420f;
 
@@ -119,8 +120,10 @@ namespace Swat
             Shapes.Box("Handle", door.leaf.transform, new Vector3(0.4f, -0.05f, 0.9f), new Vector3(0.08f, 0.03f, 0.9f), handle, false);
             Shapes.Box("Handle", door.leaf.transform, new Vector3(0.4f, -0.05f, -0.9f), new Vector3(0.08f, 0.03f, 0.9f), handle, false);
             var frame = new Color(0.2f, 0.21f, 0.23f);
-            Shapes.Box("Frame", go.transform, new Vector3(-width * 0.5f, 0.73f, 0f), new Vector3(0.08f, 1.46f, 0.24f), frame, false);
-            Shapes.Box("Frame", go.transform, new Vector3(width * 0.5f, 0.73f, 0f), new Vector3(0.08f, 1.46f, 0.24f), frame, false);
+            float frameHeight = VisualHeight + 0.06f;
+            Shapes.Box("Frame", go.transform, new Vector3(-width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
+            Shapes.Box("Frame", go.transform, new Vector3(width * 0.5f, frameHeight * 0.5f, 0f), new Vector3(0.08f, frameHeight, 0.24f), frame, false);
+            if (ViewMode.FirstPerson) Shapes.Box("Frame Top", go.transform, new Vector3(0f, frameHeight, 0f), new Vector3(width + 0.08f, 0.08f, 0.24f), frame, false);
             Shapes.Box("Threshold", go.transform, new Vector3(0f, 0.035f, 0f), new Vector3(width, 0.012f, 0.24f), frame, false);
             var box = door.leaf.GetComponent<BoxCollider>();
             box.size = new Vector3(1f, SolidHeight / VisualHeight, 1f);

@@ -25,6 +25,7 @@ namespace Swat
         public int glasses;           // 0 none, 1 glasses, 2 sunglasses
         public Color shoes, bag;      // shoe and backpack colour
         public bool soldier;          // built from the imported soldier model (unless Classic characters is on)
+        public Color pouches, gear;   // soldier model: pouches, and gloves/boots (zero = from the vest / dark)
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -363,13 +364,13 @@ namespace Swat
                 switch (slot)
                 {
                     case "Vest": return vest;
-                    case "Pouches": case "Bag": return Shapes.Shade(vest, 1.35f);
+                    case "Pouches": case "Bag": return look.pouches.a > 0f ? look.pouches : Shapes.Shade(vest, 1.35f);
                     case "Shirt": return look.shirt;
                     case "Pants": return look.pants;
                     case "Helmet": return look.headwear;
                     case "Skin": return look.skin;
-                    case "Gloves": case "Shoes": return Gear;
-                    case "Belt": case "Pads": return Shapes.Shade(Gear, 1.5f);
+                    case "Gloves": case "Shoes": return look.gear.a > 0f ? look.gear : Gear;
+                    case "Belt": case "Pads": return Shapes.Shade(look.gear.a > 0f ? look.gear : Gear, 1.5f);
                     case "Mask": return Shapes.Shade(look.headwear, 0.85f);
                     case "Scarf": return Shapes.Shade(look.shirt, 0.7f);
                     default: return original; // headset, goggles, watch, torch: their own colours

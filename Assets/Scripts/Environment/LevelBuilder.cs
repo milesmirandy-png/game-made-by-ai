@@ -25,7 +25,9 @@ namespace Swat
     // mounts. Each map is one static Build method in its own file.
     public class LevelBuilder
     {
-        const float WallVisualHeight = 1.4f;
+        // Walls are drawn low for the top-down view (you see into rooms from above) and full height in
+        // first person; their colliders are full height either way.
+        static float WallVisualHeight { get { return ViewMode.FirstPerson ? ViewMode.FirstPersonWallHeight : 1.4f; } }
         const float WallSolidHeight = 2.6f;
         const float WallThickness = 0.2f;
 
@@ -104,6 +106,7 @@ namespace Swat
             {
                 room.Fixture = Shapes.PointLight(room.transform, new Vector3(0f, 2.6f, 0f), new Color(1f, 0.93f, 0.8f), 1.6f, Mathf.Max(x1 - x0, z1 - z0) * 0.9f + 2f);
                 room.Fixture.enabled = false;
+                if (ViewMode.FirstPerson) Ceiling(x0, z0, x1, z1);
             }
             Layout.rooms.Add(room);
             return room;
@@ -135,6 +138,7 @@ namespace Swat
                 Vector3 gapCenter = a + direction * (gap.center - startCoord);
                 WallPiece(cursor, gapCenter - direction * gap.width * 0.5f, color, exterior);
                 cursor = gapCenter + direction * gap.width * 0.5f;
+                if (ViewMode.FirstPerson) Header(gapCenter, direction, gap.width, color, exterior);
                 if (gap.kind == DoorKind.Opening) continue;
 
                 DoorState state = gap.kind == DoorKind.Door ? DoorState.Closed : gap.kind == DoorKind.Sealed ? DoorState.Disabled : DoorState.Locked;
@@ -163,6 +167,27 @@ namespace Swat
             box.center = new Vector3(0f, box.size.y * 0.5f - 0.5f, 0f);
             Shapes.Box("Wall Top", wall.transform, new Vector3(0f, 0.5f, 0f), new Vector3(1.05f, 0.02f, 1f), Shapes.Shade(color, 0.55f), false);
             Layout.walls.Add(new WallSegment { a = new Vector2(from.x, from.z), b = new Vector2(to.x, to.z), area = CurrentArea, exterior = exterior });
+        }
+
+        // First person: the wall above a doorway or opening, up to the ceiling (visual only).
+        void Header(Vector3 center, Vector3 direction, float width, Color color, bool exterior)
+        {
+            float bottom = ViewMode.FirstPersonDoorHeight, top = WallVisualHeight;
+            var header = Shapes.Box("Door Header", Geometry, center + Vector3.up * (bottom + top) * 0.5f, new Vector3(WallThickness, top - bottom, width + 0.02f), color, false);
+            header.transform.localRotation = Quaternion.LookRotation(direction);
+            header.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            Shapes.ApplySurface(header, color, exterior ? ExteriorWall : SurfaceKind.PaintedWall);
+        }
+
+        // First person: a plain ceiling over an indoor room. It doesn't block the sun (rooms would be
+        // pitch dark), it has no collider (so it's not part of the NavMesh) and it hides nothing from
+        // the top-down view because it only exists in first person.
+        void Ceiling(float x0, float z0, float x1, float z1)
+        {
+            var ceiling = Shapes.Box("Ceiling", Geometry, new Vector3((x0 + x1) * 0.5f, WallVisualHeight + 0.03f, (z0 + z1) * 0.5f), new Vector3(x1 - x0 + 0.2f, 0.06f, z1 - z0 + 0.2f), new Color(0.82f, 0.81f, 0.78f), false);
+            var renderer = ceiling.GetComponent<Renderer>();
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            Shapes.ApplySurface(ceiling, new Color(0.82f, 0.81f, 0.78f), SurfaceKind.PaintedWall);
         }
 
         // ---- Props ----
