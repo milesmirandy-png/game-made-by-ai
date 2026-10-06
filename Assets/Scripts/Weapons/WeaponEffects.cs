@@ -9,6 +9,10 @@ namespace Swat
     {
         // Where the last Shoot or Trace ended (online play shows the same tracer on other screens).
         public static Vector3 LastEnd { get; private set; }
+        // The nearest door a shot hit since ClearDoorHit (shotgun breaching).
+        public static DoorController DoorHit { get; private set; }
+        public static float DoorHitDistance { get; private set; }
+        public static void ClearDoorHit() { DoorHit = null; DoorHitDistance = float.MaxValue; }
         static int lastThudFrame = -1;
 
         // Returns the damageable that was hit (or null).
@@ -43,14 +47,20 @@ namespace Swat
                 {
                     victim = null;
                     // Doors swing, so they get sparks or splinters but no lasting mark.
-                    bool door = hit.collider.GetComponentInParent<DoorController>() != null;
-                    EffectsManager.Instance.Impact(hit.point, hit.normal, SurfaceTag.Of(hit.collider), !door);
+                    var door = hit.collider.GetComponentInParent<DoorController>();
+                    if (door != null && hit.distance < DoorHitDistance)
+                    {
+                        DoorHit = door;
+                        DoorHitDistance = hit.distance;
+                    }
+                    EffectsManager.Instance.Impact(hit.point, hit.normal, SurfaceTag.Of(hit.collider), door == null);
                 }
             }
             float width = damage.weapon != null ? damage.weapon.tracerWidth : 0.04f;
             EffectsManager.Instance.SpawnTracer(muzzle, end, tracer, width, 0.06f);
             LastEnd = end;
             if (damage.attacker != Team.Police) NearMiss(origin, end, victim);
+            else if (AIManager.Instance != null) AIManager.Instance.Suppress(origin, end, victim as Object);
             return victim;
         }
 

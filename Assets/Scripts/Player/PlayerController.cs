@@ -11,18 +11,22 @@ namespace Swat
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour, ICombatTarget
     {
-        [SerializeField] float walkSpeed = 4.3f;
-        [SerializeField] float sprintSpeed = 6.8f;
-        [SerializeField] float crouchMultiplier = 0.55f;
-        [SerializeField] float steadyAimMultiplier = 0.6f;
+        // A loaded-up officer: deliberate walking pace, a short sprint, and momentum both ways.
+        [SerializeField] float walkSpeed = 3.3f;
+        [SerializeField] float sprintSpeed = 5.3f;
+        [SerializeField] float crouchMultiplier = 0.5f;
+        [SerializeField] float steadyAimMultiplier = 0.55f;
+        [SerializeField] float acceleration = 9f;      // m/s per second speeding up
+        [SerializeField] float deceleration = 13f;     // and slowing down
         [SerializeField] float aimHeight = 1.1f;
         [SerializeField] float maxStamina = 100f;
-        [SerializeField] float staminaDrain = 16f;
-        [SerializeField] float staminaRegen = 14f;
+        [SerializeField] float staminaDrain = 22f;
+        [SerializeField] float staminaRegen = 10f;
         public const float LeanReach = 0.55f;           // how far your upper body moves out when you peek
         [SerializeField] float leanDistance = LeanReach;
-        [SerializeField] float slideSpeed = 9.5f;
-        [SerializeField] float slideTime = 0.6f;
+        [SerializeField] float slideSpeed = 8f;
+        [SerializeField] float slideTime = 0.55f;
+        const float SlideStamina = 22f;
 
         public OfficerData Officer { get; private set; }
         public OfficerLoadout Loadout { get; private set; }
@@ -64,8 +68,10 @@ namespace Swat
         float leanMeters;
         int leanSide;               // the side chosen while the peek key is held (-1 left, +1 right)
         float slideStart, slideReadyAt, nextSlideDust;
-        Vector3 slideVelocity;
+        Vector3 slideVelocity, moveVelocity;
         CapsuleCollider leanBox;
+        float meleeReadyAt;
+        static readonly Collider[] meleeHits = new Collider[16];
 
         public static PlayerController Spawn(Transform parent, Vector3 position, float yaw, OfficerData officer, OfficerLoadout loadout, System.Collections.Generic.List<EquipmentCount> bonus, int versusSide = 0)
         {
@@ -152,10 +158,11 @@ namespace Swat
                 // Crouch while sprinting slides; otherwise it toggles crouching.
                 if (GameInput.Down(InputAction.Crouch) && !Weapons.WheelOpen && !IsSliding)
                 {
-                    if (IsSprinting && IsMoving && Time.time >= slideReadyAt && Stamina >= 12f) StartSlide();
+                    if (IsSprinting && IsMoving && Time.time >= slideReadyAt && Stamina >= SlideStamina) StartSlide();
                     else SetCrouch(!IsCrouched);
                 }
                 Move(dt);
+                if (GameInput.Down(InputAction.Melee) && !Weapons.WheelOpen && !IsSliding) Melee();
                 if (GameInput.Down(InputAction.Flashlight)) Flashlight.Toggle();
                 if (GameInput.Down(InputAction.Ability)) UseAbility();
             }
@@ -180,6 +187,7 @@ namespace Swat
         {
             if (IsSliding) EndSlide();
             leanMeters = 0f;
+            moveVelocity = Vector3.zero;
             controller.enabled = false;
             transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
             controller.enabled = true;
@@ -230,7 +238,10 @@ namespace Swat
             flat.y = 0f;
             if (flat.sqrMagnitude > 0.04f)
             {
-                AimDirection = flat.normalized;
+                // Heavy handling: the gun swings toward the cursor at a speed set by its weight
+                // (the aim laser shows where it really points). Off: it snaps to the cursor.
+                Vector3 wanted = flat.normalized;
+                AimDirection = settings.heavyHandling ? Vector3.RotateTowards(AimDirection, wanted, TurnRate * Mathf.Deg2Rad * dt, 0f) : wanted;
                 transform.rotation = Quaternion.LookRotation(AimDirection);
             }
             if (GameInput.UsingGamepad)
@@ -238,6 +249,22 @@ namespace Swat
                 // Lets the crosshair, radial menus and camera follow the stick aim.
                 Vector3 viewportAim = cam.WorldToViewportPoint(AimPoint);
                 GameInput.SetGamepadPointer(QualityManager.ViewportToScreen(new Vector2(viewportAim.x, viewportAim.y)));
+            }
+        }
+
+        // How fast you can swing the gun around (degrees a second): light guns quick, heavy ones slow,
+        // slower still while aiming down the sights, sprinting or carrying a shield.
+        public float TurnRate
+        {
+            get
+            {
+                var data = Weapons != null && Weapons.Current != null ? Weapons.Current.Data : null;
+                float weight = data != null ? Mathf.InverseLerp(0.75f, 1f, data.moveSpeedMultiplier) : 1f;
+                float rate = Mathf.Lerp(260f, 560f, weight);
+                if (IsSteadyAiming) rate *= 0.7f;
+                if (IsSprinting) rate *= 0.6f;
+                if (Health.HasShield) rate *= 0.65f;
+                return rate;
             }
         }
 
@@ -321,7 +348,15 @@ namespace Swat
 
             if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
             verticalVelocity += Physics.gravity.y * dt;
-            controller.Move(new Vector3(input.x * speed, verticalVelocity, input.y * speed) * dt);
+            // Momentum: it takes a moment to get going and to stop (instant with heavy handling off).
+            Vector3 desired = new Vector3(input.x, 0f, input.y) * speed;
+            float rate = !SaveManager.Settings.heavyHandling ? 60f : desired.sqrMagnitude > moveVelocity.sqrMagnitude ? acceleration : deceleration;
+            moveVelocity = Vector3.MoveTowards(moveVelocity, desired, rate * dt);
+            controller.Move((moveVelocity + Vector3.up * verticalVelocity) * dt);
+            Vector3 actual = controller.velocity;
+            actual.y = 0f;
+            if (actual.sqrMagnitude < moveVelocity.sqrMagnitude * 0.25f) moveVelocity = actual; // ran into something
+            IsMoving = IsMoving || moveVelocity.sqrMagnitude > 0.36f;
 
             if (!IsMoving) return;
             MissionManager.Instance.Report(ObjectiveType.TrainingMove, 1);
@@ -358,7 +393,7 @@ namespace Swat
             nextSlideDust = 0f;
             IsSliding = true;
             IsSprinting = false;
-            Stamina = Mathf.Max(0f, Stamina - 12f);
+            Stamina = Mathf.Max(0f, Stamina - SlideStamina);
             SetCrouch(true);
             Animator.SetSlide(true);
             AudioManager.Play(Sound.SlideScrape, transform.position, 0.55f, Random.Range(0.92f, 1.08f));
@@ -401,8 +436,73 @@ namespace Swat
         void EndSlide()
         {
             IsSliding = false;
-            slideReadyAt = Time.time + 0.5f;
+            slideReadyAt = Time.time + 1.2f;
+            moveVelocity = slideVelocity * 0.3f;
             Animator.SetSlide(false);
+        }
+
+        // ---- Melee ----
+
+        // A shove with the gun, or a bash with the shield (longer reach, longer daze): staggers whoever
+        // is right in front. Suspects and civilians are dazed, not hurt; in the game modes it's a light hit.
+        void Melee()
+        {
+            if (Time.time < meleeReadyAt) return;
+            bool shield = Health.HasShield;
+            meleeReadyAt = Time.time + (shield ? 0.8f : 1.1f);
+            float reach = shield ? 1.4f : 1.05f;
+            float daze = shield ? 3f : 2f;
+            Vector3 center = Position + Vector3.up + AimDirection * (reach * 0.55f);
+            Animator.Fire(1.4f);
+            moveVelocity += AimDirection * 1.5f;
+            GameManager.Instance.CameraRig.Kick(-AimDirection, 0.08f);
+            bool landed = false;
+            int count = Physics.OverlapSphereNonAlloc(center, reach * 0.65f, meleeHits, 1 << Layers.Characters, QueryTriggerInteraction.Ignore);
+            var struck = new System.Collections.Generic.HashSet<Object>();
+            for (int i = 0; i < count; i++)
+            {
+                var collider = meleeHits[i];
+                if (collider == null || collider.transform.IsChildOf(transform)) continue;
+                Vector3 to = collider.transform.position - Position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 0.01f && Vector3.Angle(AimDirection, to) > 75f) continue;
+                var enemy = collider.GetComponentInParent<EnemyAI>();
+                if (enemy != null)
+                {
+                    if (struck.Add(enemy) && !enemy.IsNeutralized && enemy.State != EnemyState.Surrendering)
+                    {
+                        enemy.Shoved(AimDirection, daze);
+                        landed = true;
+                    }
+                    continue;
+                }
+                var civilian = collider.GetComponentInParent<CivilianAI>();
+                if (civilian != null)
+                {
+                    if (struck.Add(civilian))
+                    {
+                        civilian.Stun(1.2f);
+                        civilian.HearShout();
+                        landed = true;
+                    }
+                    continue;
+                }
+                if (!VersusMatch.Active) continue;
+                var target = collider.GetComponentInParent<IDamageable>();
+                var member = target as IVersusMember;
+                if (target == null || member == null || !target.IsAlive || member.Side == VersusMatch.Instance.MySide || !struck.Add((Object)target)) continue;
+                target.TakeDamage(new DamageInfo { amount = shield ? 25f : 15f, attacker = Team.Police, byPlayer = true, shooter = this, direction = AimDirection, point = center });
+                var bot = target as ArenaBot;
+                if (bot != null) bot.Stun(shield ? 1.5f : 0.8f);
+                landed = true;
+            }
+            if (landed)
+            {
+                AudioManager.Play(Sound.Kick, center, 0.6f, shield ? 0.75f : 1.15f);
+                GameManager.Instance.CameraRig.Shake(shield ? 0.18f : 0.1f);
+                Noise.Emit(Position, 4f, NoiseKind.Footstep);
+            }
+            else AudioManager.Play(Sound.Equip, Position, 0.4f, 1.3f);
         }
 
         // ---- Peek / lean ----

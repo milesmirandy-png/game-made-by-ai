@@ -6,7 +6,7 @@ namespace Swat
     public enum EnemyState
     {
         Idle, Patrol, Suspicious, Investigating, Alert, Chasing, Attacking, TakingCover, Searching,
-        Fleeing, Hiding, Stunned, Surrendering, Restrained, Dead,
+        Fleeing, Hiding, Stunned, Surrendering, Restrained, Dead, Holding,
     }
 
     // A suspect's brain: a small finite state machine shared by every archetype.
@@ -21,6 +21,13 @@ namespace Swat
     // Flashbangs and less-lethal rounds cause Stunned. Shouting can cause
     // Surrendering; restraining a surrendered suspect makes them Restrained.
     // Think() runs a few times a second; FrameUpdate() only turns and shoots.
+    //
+    // Smarter behaviour on top: alerted suspects often Hold their room instead of
+    // charging (kneeling a few metres back with a clear view of the door the police
+    // will come through, and firing the moment someone appears); several chasing
+    // suspects spread out instead of filing in; rounds cracking past them keep their
+    // heads down (Suppress); and a few armed ones only pretend to surrender, then pull
+    // a weapon once nobody is covering them.
     public class EnemyAI : MonoBehaviour, IInteractable
     {
         public EnemyData Data { get; private set; }
@@ -52,6 +59,9 @@ namespace Swat
         int patrolIndex;
         float stateStart, idleUntil, reactionDone, lastSeenTime = -100f, stunUntil, coverWaitUntil, nextCoverCheck, searchDuration, nextShoutCheck, nextErratic, alarmCallAt = -1f;
         float reactionMultiplier = 1f;
+        float holdUntil, suppressedUntil, fakeAt = -1f;
+        int fakeTries;
+        Vector3 holdFacing;
         bool everAlerted;
         ICombatTarget target;
         Vector3 lastKnown, noisePosition, searchCenter, coverPoint, fleeTarget;
@@ -128,6 +138,9 @@ namespace Swat
         void SetState(EnemyState next)
         {
             if (State == EnemyState.Hiding && next != EnemyState.Hiding) body.SetHiding(false);
+            // Kneeling is for holding an angle, cover and shooting from it; on the move they stand.
+            bool low = next == EnemyState.Holding || next == EnemyState.TakingCover || next == EnemyState.Attacking || next == EnemyState.Hiding || next == EnemyState.Restrained;
+            if (!low && body != null && body.IsCrouched) body.SetCrouched(false);
             State = next;
             stateStart = Time.time;
         }
@@ -146,6 +159,9 @@ namespace Swat
                     break;
                 case EnemyState.Alert:
                     mover.Face(lastKnown, 300f, dt);
+                    break;
+                case EnemyState.Holding:
+                    if (mover.HasArrived) mover.Face(holdFacing, 240f, dt);
                     break;
                 case EnemyState.Suspicious:
                     mover.Face(noisePosition, 200f, dt);
@@ -170,7 +186,12 @@ namespace Swat
 
         public void Think()
         {
-            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            if (IsNeutralized) return;
+            if (State == EnemyState.Surrendering)
+            {
+                if (fakeAt > 0f && Time.time >= fakeAt) TryFakeOut();
+                return;
+            }
             mover.TrackProgress();
             if (mover.IsStuck) mover.Stop();
 
@@ -276,9 +297,20 @@ namespace Swat
                     }
                     break;
 
+                case EnemyState.Holding:
+                    // Kneel once in position; give up the angle after a while and go looking.
+                    if (mover.HasArrived && !body.IsCrouched) body.SetCrouched(true);
+                    if (Time.time > holdUntil)
+                    {
+                        if (Random.value < 0.5f) StartChase();
+                        else BeginSearch(lastKnown, 8f);
+                    }
+                    break;
+
                 case EnemyState.TakingCover:
                     if (mover.HasArrived)
                     {
+                        if (!body.IsCrouched) body.SetCrouched(true);
                         if (coverWaitUntil <= 0f) coverWaitUntil = Time.time + Random.Range(1.5f, 3f);
                         if (seen != null) StartAttack();
                         else if (Time.time > coverWaitUntil) StartChase();
@@ -369,8 +401,9 @@ namespace Swat
                 }
                 everAlerted = true;
             }
-            else if (State == EnemyState.Chasing && Data.armed)
+            else if ((State == EnemyState.Chasing || State == EnemyState.Holding) && Data.armed)
             {
+                // Someone holding an angle is already aimed in: no reaction time.
                 StartAttack();
             }
         }
@@ -396,7 +429,65 @@ namespace Swat
                 return;
             }
             SetState(EnemyState.Chasing);
-            mover.MoveTo(lastKnown, true);
+            // Spread out a little so several suspects don't come through in single file.
+            Vector2 offset = Random.insideUnitCircle * 2.5f;
+            Vector3 goal;
+            if (!mover.RandomPointNear(lastKnown + new Vector3(offset.x, 0f, offset.y), 1.5f, out goal)) goal = lastKnown;
+            mover.MoveTo(goal, true);
+        }
+
+        // How likely each kind of suspect is to dig in and hold the room rather than charge.
+        bool WantsToHold()
+        {
+            switch (Data.archetype)
+            {
+                case EnemyArchetype.Leader: return Random.value < 0.7f;
+                case EnemyArchetype.Guard: return Random.value < 0.6f;
+                case EnemyArchetype.Armored: return Random.value < 0.5f;
+                case EnemyArchetype.Hostile: return Random.value < 0.45f;
+                case EnemyArchetype.Nervous: return Random.value < 0.15f;
+                default: return false;
+            }
+        }
+
+        // Kneel a few metres back from the door the threat will most likely come through,
+        // somewhere with a clear view of it, and wait.
+        bool BeginHold(Vector3 threat)
+        {
+            var level = GameManager.Instance.Level;
+            var room = level != null ? level.RoomAt(Position) : null;
+            if (room == null || !room.Indoor) return false;
+            DoorController entry = null;
+            float best = float.MaxValue;
+            foreach (var door in level.doors)
+            {
+                if (door == null || (door.RoomFront != room && door.RoomBack != room)) continue;
+                float d = (door.transform.position - threat).sqrMagnitude;
+                if (d < best) { best = d; entry = door; }
+            }
+            Vector3 watch = entry != null ? entry.transform.position : threat;
+            Vector3 inward = room.Bounds.center - watch;
+            inward.y = 0f;
+            if (inward.sqrMagnitude < 0.01f) inward = Position - watch;
+            inward.y = 0f;
+            if (inward.sqrMagnitude < 0.01f) inward = transform.forward;
+            inward.Normalize();
+            Vector3 aimAt = watch + inward * 0.4f + Vector3.up * 1.1f;
+            Vector3 spot = Position;
+            for (int i = 0; i < 6; i++)
+            {
+                Vector3 candidate = watch + inward * Random.Range(3f, 5.5f) + new Vector3(Random.Range(-2f, 2f), 0f, Random.Range(-2f, 2f));
+                Vector3 point;
+                if (!mover.RandomPointNear(candidate, 1f, out point) || !room.Contains(point)) continue;
+                if (Physics.Linecast(point + Vector3.up * 1.1f, aimAt, Layers.WorldMask, QueryTriggerInteraction.Ignore)) continue;
+                spot = point;
+                break;
+            }
+            holdFacing = watch;
+            holdUntil = Time.time + Random.Range(25f, 45f);
+            SetState(EnemyState.Holding);
+            mover.MoveTo(spot, true);
+            return true;
         }
 
         void BeginSearch(Vector3 center, float duration)
@@ -474,6 +565,12 @@ namespace Swat
 
         public void HearNoise(Vector3 position, NoiseKind kind)
         {
+            // Holding an angle: a door or footsteps close by draw their aim, nothing else moves them.
+            if (State == EnemyState.Holding)
+            {
+                if ((kind == NoiseKind.Door || kind == NoiseKind.Footstep) && (position - Position).sqrMagnitude < 100f) holdFacing = position;
+                return;
+            }
             if (IsNeutralized || State == EnemyState.Surrendering || State == EnemyState.Stunned || State == EnemyState.Attacking
                 || State == EnemyState.Alert || State == EnemyState.Fleeing || State == EnemyState.Hiding) return;
 
@@ -487,7 +584,7 @@ namespace Swat
                 if (!everAlerted) body.ShowAlert(1f);
                 everAlerted = true;
                 if (!Data.armed && kind != NoiseKind.Alarm) BeginFlee(position);
-                else StartChase();
+                else if (!(IsCalm && WantsToHold() && BeginHold(position))) StartChase();
             }
             else if (IsCalm && State != EnemyState.Investigating)
             {
@@ -513,6 +610,20 @@ namespace Swat
             body.SetStunned(true, Data.armed);
         }
 
+        // A shove or a shield bash: knocked back and dazed for a moment, no harm done.
+        // A dazed suspect is much more likely to give up when shouted at.
+        public void Shoved(Vector3 direction, float seconds)
+        {
+            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            body.Animator.Hit(direction);
+            mover.Nudge(direction * 0.6f);
+            if (Data.armed) weapon.Stagger(seconds);
+            var player = GameManager.Instance.Player;
+            if (player != null) lastKnown = player.Position;
+            everAlerted = true;
+            Stun(seconds);
+        }
+
         // An officer shouted "Police! Show me your hands!"
         public void HearShout(Vector3 from, bool byPlayer)
         {
@@ -526,6 +637,7 @@ namespace Swat
             if (health.Fraction < 0.5f) chance += 0.25f;
             if (State == EnemyState.Attacking && health.Fraction > 0.7f) chance -= 0.15f;
             if (AIManager.Instance.PoliceNear(Position, 6f) >= 2) chance += 0.1f; // outnumbered
+            if (Time.time < suppressedUntil) chance += 0.2f; // pinned down
 
             if (Random.value < chance)
             {
@@ -538,11 +650,74 @@ namespace Swat
 
         void Surrender()
         {
+            // A few armed suspects only pretend: they wait for a moment when nobody has them covered.
+            fakeAt = -1f;
+            fakeTries = 0;
+            float fake = Data.archetype == EnemyArchetype.Leader ? 0.25f : Data.archetype == EnemyArchetype.Hostile ? 0.15f : 0f;
+            if (Data.armed && Random.value < fake) fakeAt = Time.time + Random.Range(4f, 9f);
             SetState(EnemyState.Surrendering);
             mover.Stop();
             body.SetSurrendered();
             UIManager.Notify(Data.displayName + " surrendered. Restrain them (E).");
             MissionManager.Instance.Report(ObjectiveType.TrainingRestrain, 0);
+        }
+
+        // A fake surrender ends: if an officer close by is watching them they keep waiting
+        // (and after a few tries give up for real); otherwise the gun comes out.
+        void TryFakeOut()
+        {
+            if (CoveredByPolice())
+            {
+                if (++fakeTries > 3) fakeAt = -1f;
+                else fakeAt = Time.time + Random.Range(3f, 6f);
+                return;
+            }
+            fakeAt = -1f;
+            body.SetArmedAgain();
+            ICombatTarget nearest = null;
+            float best = float.MaxValue;
+            foreach (var police in AIManager.Instance.PoliceTargets)
+            {
+                if (!police.IsAlive) continue;
+                float d = (police.Position - Position).sqrMagnitude;
+                if (d < best) { best = d; nearest = police; }
+            }
+            if (nearest != null) lastKnown = nearest.Position;
+            SetState(EnemyState.Alert);
+            mover.Stop();
+            reactionDone = Time.time + 0.35f;
+            UIManager.Notify(Data.displayName + " pulled a hidden weapon!", true);
+        }
+
+        bool CoveredByPolice()
+        {
+            foreach (var police in AIManager.Instance.PoliceTargets)
+            {
+                if (!police.IsAlive) continue;
+                Vector3 to = Position - police.Position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 64f) continue;
+                if (to.sqrMagnitude < 2.25f) return true; // someone right on top of them
+                if (Vector3.Angle(police.Transform.forward, to) > 30f) continue;
+                if (!Physics.Linecast(police.ChestPosition, Head, Layers.WorldMask, QueryTriggerInteraction.Ignore)) return true;
+            }
+            return false;
+        }
+
+        // Rounds cracking past: heads down. Worse aim for a moment, maybe a dash for cover,
+        // and more likely to give up when shouted at.
+        public void Suppress(Vector3 from)
+        {
+            if (IsNeutralized || State == EnemyState.Surrendering || State == EnemyState.Stunned || Data.archetype == EnemyArchetype.TrainingDummy) return;
+            suppressedUntil = Time.time + 2f;
+            if (Data.armed) weapon.Stagger(1f);
+            if (State == EnemyState.Attacking && Random.value < 0.35f && CoverPoint.Find(Position, from, 8f, out coverPoint))
+            {
+                SetState(EnemyState.TakingCover);
+                coverWaitUntil = 0f;
+                mover.MoveTo(coverPoint, true);
+            }
+            else if (IsCalm) HearNoise(from, NoiseKind.Gunshot);
         }
 
         public float InteractDuration(PlayerController player) { return 1f; }

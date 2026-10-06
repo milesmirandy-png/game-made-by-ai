@@ -222,7 +222,8 @@ namespace Swat
                 case SquadOrder.Wait: text = "Standing by."; break;
                 case SquadOrder.Stack:
                     text = action == DoorAction.Breach ? "Stacking up for breach." : action == DoorAction.Flash ? "Stacking up, flash and clear."
-                        : action == DoorAction.Open ? "Stacking up, open and clear." : "Stacking up on the door.";
+                        : action == DoorAction.Open ? "Stacking up, open and clear." : action == DoorAction.Mirror ? "Copy, checking under the door."
+                        : action == DoorAction.Shotgun ? "Stacking up, shotgun breach." : "Stacking up on the door.";
                     break;
                 default: text = "Copy."; break;
             }
@@ -243,7 +244,8 @@ namespace Swat
         static string PlayerLine(SquadOrder order, DoorAction action)
         {
             if (order == SquadOrder.Stack)
-                return action == DoorAction.Breach ? "Breach and clear." : action == DoorAction.Flash ? "Flash and clear." : action == DoorAction.Open ? "Open and clear." : "Stack up.";
+                return action == DoorAction.Breach ? "Breach and clear." : action == DoorAction.Flash ? "Flash and clear." : action == DoorAction.Open ? "Open and clear."
+                    : action == DoorAction.Mirror ? "Mirror the door." : action == DoorAction.Shotgun ? "Shotgun the lock, then clear." : "Stack up.";
             switch (order)
             {
                 case SquadOrder.Follow: return "On me.";
@@ -291,6 +293,8 @@ namespace Swat
                     case DoorAction.Open: return "Open & clear";
                     case DoorAction.Breach: return "Breach & clear";
                     case DoorAction.Flash: return "Flash & clear";
+                    case DoorAction.Mirror: return "Mirror door";
+                    case DoorAction.Shotgun: return "Shotgun & clear";
                     default: return "Stack up";
                 }
             }
@@ -405,6 +409,18 @@ namespace Swat
         public SquadAI FlashCarrier(DoorController door)
         {
             return Carrier(door, EquipmentKind.Flashbang, OfficerRole.Tactical);
+        }
+
+        // Someone stacked on this door with a shotgun as their main weapon (a Breacher first).
+        public SquadAI ShotgunCarrier(DoorController door)
+        {
+            SquadAI best = null;
+            foreach (var officer in Squad)
+            {
+                if (!officer.IsAlive || officer.StackDoor != door || officer.Inventory.Primary == null || !WeaponController.IsShotgun(officer.Inventory.Primary.Data)) continue;
+                if (best == null || (officer.Data.role == OfficerRole.Breacher && best.Data.role != OfficerRole.Breacher)) best = officer;
+            }
+            return best;
         }
 
         SquadAI Carrier(DoorController door, EquipmentKind kind, OfficerRole preferred)
@@ -537,6 +553,13 @@ namespace Swat
                 bool breachable = door.Breachable && (door.State == DoorState.Locked || door.State == DoorState.Closed || door.State == DoorState.Wedged);
                 Add(SquadOrder.Stack, DoorAction.Breach, breachable && charge, !breachable ? "This door can't be breached" : "Nobody selected has a charge");
                 Add(SquadOrder.Stack, DoorAction.Flash, flash && door.State != DoorState.Wedged, !flash ? "Nobody selected has a flashbang" : "Remove the wedge first");
+                bool shut = door.State == DoorState.Closed || door.State == DoorState.Locked || door.State == DoorState.Wedged;
+                Add(SquadOrder.Stack, DoorAction.Mirror, shut, "The door is already open");
+                bool shotgun = false;
+                foreach (var officer in targets)
+                    if (officer.Inventory.Primary != null && WeaponController.IsShotgun(officer.Inventory.Primary.Data)) shotgun = true;
+                bool blowable = !door.Electronic && (door.State == DoorState.Locked || door.State == DoorState.Closed);
+                Add(SquadOrder.Stack, DoorAction.Shotgun, shotgun && blowable, !blowable ? "A shotgun won't open this door" : "Nobody selected has a shotgun");
                 Add(SquadOrder.MoveTo, DoorAction.None, true, null);
                 Add(SquadOrder.Cover, DoorAction.None, true, null);
                 Add(SquadOrder.Hold, DoorAction.None, true, null);

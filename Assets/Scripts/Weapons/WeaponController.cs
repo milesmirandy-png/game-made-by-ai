@@ -48,7 +48,8 @@ namespace Swat
 
         PlayerController player;
         Transform laser;
-        float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f;
+        float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f, raisedAt;
+        bool wasSprinting;
         int burstLeft;
         bool reloadFromEmpty;
         float spin; // rotary guns: 0 = still, 1 = up to speed
@@ -257,14 +258,22 @@ namespace Swat
         {
             var weapon = Current;
             var data = weapon.Data;
-            // Peeking braces you against the corner or frame; shooting mid-slide is wild.
+            // Coming out of a sprint (or a slide) the gun has to come back up before it can fire,
+            // longer for heavier guns, and it's unsteady for a moment after.
+            bool sprinting = player.IsSprinting || player.IsSliding;
+            if (sprinting) raisedAt = Time.time + data.switchTime * 0.9f;
+            if (wasSprinting && !sprinting) bloom = Mathf.Max(bloom, weapon.Spread * 1.5f + 1.5f);
+            wasSprinting = sprinting;
+            // Peeking braces you against the corner or frame.
             float stance = (player.IsCrouched ? data.crouchSpread : 1f) * (player.IsSteadyAiming ? 0.6f : 1f) * (player.Peeking ? 0.85f : 1f);
             // The first shot after a pause is the most accurate.
             float rested = Time.time - lastShotTime > 0.4f && bloom < 0.01f ? 0.65f : 1f;
-            Spread = (weapon.Spread * rested + bloom) * stance + (player.IsMoving ? weapon.Spread * 0.5f : 0f) + (player.IsSprinting ? 6f : 0f) + (player.IsSliding ? 2.5f : 0f);
+            // Shooting on the move is a lot less accurate than standing (crouch-walking or aiming helps).
+            float moving = player.IsMoving ? weapon.Spread * (player.IsCrouched || player.IsSteadyAiming ? 0.5f : 1f) + (player.IsCrouched ? 0.4f : 1.2f) : 0f;
+            Spread = (weapon.Spread * rested + bloom) * stance + moving + (sprinting ? 6f : 0f);
 
             if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
-            bool blocked = IsReloading || IsSwitching || player.IsSprinting;
+            bool blocked = IsReloading || IsSwitching || sprinting || Time.time < raisedAt;
 
             // Burst: one pull fires a short string of shots on its own.
             if (burstLeft > 0)
@@ -363,6 +372,7 @@ namespace Swat
 
             var ends = NetSession.ShotEnds;
             ends.Clear();
+            WeaponEffects.ClearDoorHit();
             if (data.blastRadius > 0f)
             {
                 // Marking grenade: flies to the first thing it meets and bursts there.
@@ -384,6 +394,9 @@ namespace Swat
                 if (!victim.IsAlive) tookDown = true;
             }
             if (data.lessLethal && Overcharged) Overcharged = false;
+            // A shotgun at a door's lock from up close is a breaching round (not online, where doors stay put).
+            if (IsShotgun(data) && WeaponEffects.DoorHit != null && WeaponEffects.DoorHitDistance < 3f && !NetSession.Online)
+                WeaponEffects.DoorHit.ShotgunBreach(player.Position, true);
             lastShotTime = Time.time;
             // Online, everyone else sees the shot.
             if (NetSession.Online && VersusMatch.Active) NetSession.Instance.SendShot(VersusMatch.Instance.MyId, data, muzzle, ends);
@@ -413,6 +426,11 @@ namespace Swat
                 TakedownPunch();
             }
             else if (SaveManager.Settings.hitMarker) AudioManager.Play2D(Sound.Hit, 0.35f, 1f, SoundCategory.Interface);
+        }
+
+        public static bool IsShotgun(WeaponData data)
+        {
+            return data != null && (data.category == WeaponCategory.Shotgun || data.category == WeaponCategory.AutoShotgun || data.category == WeaponCategory.DrumShotgun);
         }
 
         // Low-ammo cue, automatic reload when the magazine runs dry, optional switch to the sidearm.

@@ -6,11 +6,16 @@ namespace Swat
     public enum DoorState { Closed, Open, Locked, Wedged, Breached, Disabled }
 
     // An interactive door. Closed doors open with E (AI opens them too).
-    // Locked doors can be breached (if marked with yellow stripes), have their
-    // lock picked (if allowed), or be unlocked from a security console (if
-    // electronic). Wedged doors can't be opened until the wedge is removed.
-    // Disabled doors are sealed. Blocked doors carve the NavMesh through a
-    // NavMeshObstacle, so the navigation mesh is never rebuilt.
+    // Locked doors can have their lock picked (if allowed), be kicked in
+    // (anyone can try; a Breacher never fails), have the lock blown with a
+    // shotgun from up close, take a breaching charge (G, yellow stripes), or be
+    // unlocked from a security console (electronic doors only take the console
+    // or a charge). Wedged doors can't be opened until the wedge is removed.
+    // Disabled doors are sealed. Some doors are trapped on the far side: a
+    // flash device goes off when police open them, unless someone spotted it
+    // first (recon camera or a squadmate's mirror) and disarmed it. Blocked
+    // doors carve the NavMesh through a NavMeshObstacle, so the navigation mesh
+    // is never rebuilt.
     public class DoorController : MonoBehaviour, IInteractable
     {
         const float VisualHeight = 1.4f;
@@ -26,13 +31,16 @@ namespace Swat
         public bool ChargePlaced { get { return detonateAt > 0f; } }
         public bool IsPassable { get { return State == DoorState.Open || State == DoorState.Breached; } }
         public bool Blocks { get { return State == DoorState.Locked || State == DoorState.Wedged || State == DoorState.Disabled; } }
+        public bool Trapped { get; private set; }
+        public bool TrapKnown { get; private set; }
         public RoomController RoomFront { get; set; }
         public RoomController RoomBack { get; set; }
         public int Area { get; set; }
         public event System.Action<DoorController> Opened;
 
         Transform hinge;
-        GameObject leaf, charge, wedge;
+        GameObject leaf, charge, wedge, trapMarker, trapWire;
+        int trapSide;   // which face the device is on: +1 the forward side, -1 the back
         NavMeshObstacle obstacle;
         float angle, targetAngle, detonateAt;
         bool chargeByPlayer;
@@ -46,12 +54,13 @@ namespace Swat
                 var player = GameManager.Instance.Player;
                 switch (State)
                 {
-                    case DoorState.Closed: return "[E] Open Door";
+                    case DoorState.Closed: return TrapKnown ? "[E] Disarm Trap (hold)" : "[E] Open Door";
                     case DoorState.Open: return "[E] Close Door";
                     case DoorState.Wedged: return "[E] Remove Wedge (hold)";
                     case DoorState.Locked:
-                        if (Breachable && player != null && player.Weapons.Inventory.CountOf(EquipmentKind.BreachingCharge) > 0) return "[E] Place Breaching Charge (hold)";
+                        if (TrapKnown) return "[E] Disarm Trap (hold)";
                         if (Pickable) return "[E] Pick Lock (hold)";
+                        if (!Electronic) return "[E] Kick Door (hold)";
                         return "[E] Try Door";
                     default: return string.Empty;
                 }
@@ -64,14 +73,15 @@ namespace Swat
         {
             get
             {
+                if (TrapKnown && (State == DoorState.Closed || State == DoorState.Locked)) return "TRAPPED: a flash device on the far side - disarm it first";
                 switch (State)
                 {
                     case DoorState.Locked:
-                        if (Electronic) return "Electronic lock: use a security console or a breaching charge";
-                        if (Breachable && Pickable) return "Locked: breachable (yellow stripes), lock can be picked";
-                        if (Breachable) return "Locked: needs a breaching charge or a Breacher's kick";
-                        if (Pickable) return "Locked: the lock can be picked";
-                        return "Locked";
+                        if (Electronic) return "Electronic lock: use a security console or a breaching charge (G)";
+                        if (Breachable && Pickable) return "Locked: pick it, kick it, shotgun the lock or charge it (G)";
+                        if (Breachable) return "Locked: kick it, shotgun the lock or charge it (G)";
+                        if (Pickable) return "Locked: pick it, kick it or shotgun the lock";
+                        return "Locked: kick it or shotgun the lock";
                     case DoorState.Wedged: return "Wedged shut";
                     case DoorState.Disabled: return "Sealed shut";
                     case DoorState.Breached: return "Breached";
@@ -148,13 +158,14 @@ namespace Swat
 
         public float InteractDuration(PlayerController player)
         {
+            bool breacher = player.Officer.role == OfficerRole.Breacher;
+            if (TrapKnown && (State == DoorState.Closed || State == DoorState.Locked)) return breacher ? 1.2f : 2.5f;
             switch (State)
             {
                 case DoorState.Wedged: return 1f;
                 case DoorState.Locked:
-                    if (Breachable && player.Weapons.Inventory.CountOf(EquipmentKind.BreachingCharge) > 0)
-                        return player.Officer.role == OfficerRole.Breacher ? 0.4f : 1.5f;
-                    return Pickable ? (player.Officer.role == OfficerRole.Breacher ? 1.5f : 3f) : 0f;
+                    if (Pickable) return breacher ? 1.5f : 3f;
+                    return Electronic ? 0f : 0.6f; // winding up a kick
                 default: return 0f;
             }
         }
@@ -168,14 +179,19 @@ namespace Swat
 
         public void Interact(PlayerController player)
         {
+            if (TrapKnown && (State == DoorState.Closed || State == DoorState.Locked))
+            {
+                DisarmTrap();
+                return;
+            }
             switch (State)
             {
                 case DoorState.Closed: Open(player.Position); break;
                 case DoorState.Open: Close(); break;
                 case DoorState.Wedged: RemoveWedge(); break;
                 case DoorState.Locked:
-                    if (Breachable && player.Weapons.Inventory.Consume(EquipmentKind.BreachingCharge)) PlaceCharge(player.Position, true);
-                    else if (Pickable) PickLock(player.Position);
+                    if (Pickable) PickLock(player.Position);
+                    else if (!Electronic) TryKick(player.Position, player.Officer.role == OfficerRole.Breacher ? 1f : 0.4f, true);
                     else
                     {
                         AudioManager.Play(Sound.DoorHandle, transform.position, 0.8f);
@@ -186,10 +202,115 @@ namespace Swat
             }
         }
 
+        // ---- Kicks, shotgun breaching and traps ----
+
+        // A kick at a locked door: it may hold (loud either way, so the room knows you're coming).
+        public bool TryKick(Vector3 from, float chance, bool byPlayer)
+        {
+            if (State != DoorState.Locked || Electronic) return false;
+            if (Random.value >= chance)
+            {
+                AudioManager.Play(Sound.Kick, transform.position, 0.9f, Random.Range(0.85f, 0.95f));
+                Noise.Emit(transform.position, 14f, NoiseKind.Explosion);
+                if (byPlayer)
+                {
+                    GameManager.Instance.CameraRig.Shake(0.15f);
+                    UIManager.Notify("The door holds. Kick again, or try another way.");
+                }
+                return false;
+            }
+            Kick(from);
+            return true;
+        }
+
+        // A breaching round at the lock from up close blows it out and the door swings in.
+        public bool ShotgunBreach(Vector3 from, bool byPlayer)
+        {
+            if (Electronic || (State != DoorState.Locked && State != DoorState.Closed))
+            {
+                if (byPlayer && State == DoorState.Wedged) UIManager.Notify("The wedge holds the door shut");
+                return false;
+            }
+            SetState(DoorState.Closed);
+            Vector3 lockPoint = transform.position + transform.right * (Width * 0.25f) + Vector3.up;
+            Vector3 toward = from - transform.position;
+            toward.y = 0f;
+            EffectsManager.Instance.Burst(lockPoint, toward.sqrMagnitude > 0.01f ? toward.normalized : transform.forward, new Color(0.45f, 0.32f, 0.2f), 10, 4f, 0.08f);
+            AudioManager.Play(Sound.Kick, transform.position, 0.8f, 1.2f);
+            Noise.Emit(transform.position, 12f, NoiseKind.Explosion);
+            StunBehind(from, 1.2f);
+            if (byPlayer) UIManager.Notify("Lock blown");
+            Open(from);
+            MissionManager.Instance.ReportBreach(this, byPlayer);
+            return true;
+        }
+
+        // Whoever stands right behind a door that's forced open gets knocked off balance by it.
+        void StunBehind(Vector3 from, float seconds)
+        {
+            Vector3 away = transform.position - from;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.01f) return;
+            AIManager.Instance.Stun(transform.position + away.normalized * 0.9f + Vector3.up * 1.4f, 1.4f, seconds, false);
+        }
+
+        // Mission setup: a flash device on one face of a closed door.
+        public void SetTrap(int side)
+        {
+            if (Electronic || (State != DoorState.Closed && State != DoorState.Locked)) return;
+            Trapped = true;
+            trapSide = side >= 0 ? 1 : -1;
+        }
+
+        // Spotted with a recon camera or a mirror: shown on the door from now on.
+        public bool RevealTrap()
+        {
+            if (!Trapped || TrapKnown) return false;
+            TrapKnown = true;
+            trapMarker = Shapes.Box("Door Trap", transform, new Vector3(Width * 0.3f, 0.35f, 0.09f * trapSide), new Vector3(0.18f, 0.12f, 0.05f), new Color(0.95f, 0.2f, 0.15f), false, 2f);
+            trapWire = Shapes.Box("Trap Wire", transform, new Vector3(0f, 0.35f, 0.09f * trapSide), new Vector3(Width * 0.6f, 0.015f, 0.015f), new Color(0.9f, 0.85f, 0.3f), false, 1.5f);
+            return true;
+        }
+
+        void ClearTrap()
+        {
+            Trapped = TrapKnown = false;
+            if (trapMarker != null) Destroy(trapMarker);
+            if (trapWire != null) Destroy(trapWire);
+        }
+
+        public void DisarmTrap()
+        {
+            if (!Trapped) return;
+            ClearTrap();
+            AudioManager.Play(Sound.Click, transform.position, 0.8f, 0.8f);
+            UIManager.Notify("Trap disarmed");
+        }
+
+        // Opened from the side without the device: it goes off in the opener's face.
+        void SpringTrap(Vector3 from)
+        {
+            ClearTrap();
+            Vector3 toward = from - transform.position;
+            toward.y = 0f;
+            Vector3 at = transform.position + (toward.sqrMagnitude > 0.01f ? toward.normalized : transform.forward) * 0.7f;
+            var flash = GameData.Equipment("flashbang");
+            if (flash != null) Flashbang.Detonate(at, flash, 1f, false);
+            Noise.Emit(transform.position, 25f, NoiseKind.Alarm);
+            UIManager.Notify("The door was trapped! Mirror doors before you open them.", true);
+        }
+
+        bool TrapFacesAway(Vector3 from)
+        {
+            float side = Vector3.Dot(from - transform.position, transform.forward) >= 0f ? 1f : -1f;
+            return side != trapSide;
+        }
+
         // Swings away from whoever opened it.
         public void Open(Vector3 from)
         {
             if (State != DoorState.Closed) return;
+            if (Trapped && TrapFacesAway(from)) SpringTrap(from);
             SetState(DoorState.Open);
             float side = Vector3.Dot(from - transform.position, transform.forward) > 0f ? 1f : -1f;
             targetAngle = 95f * side;
@@ -277,6 +398,7 @@ namespace Swat
             SetState(DoorState.Closed);
             AudioManager.Play(Sound.Kick, transform.position, 1f);
             Noise.Emit(transform.position, 15f, NoiseKind.Explosion);
+            StunBehind(from, 1.5f);
             Open(from);
             return true;
         }
@@ -311,6 +433,7 @@ namespace Swat
         void Detonate()
         {
             detonateAt = 0f;
+            ClearTrap(); // the blast wrecks any trap along with the door
             SetState(DoorState.Breached);
             Destroy(charge);
             if (wedge != null) Destroy(wedge);

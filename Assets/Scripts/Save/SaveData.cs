@@ -68,6 +68,7 @@ namespace Swat
         public bool autoSwitchWhenEmpty;
         public bool autoFlashlight;
         public bool hitStop = true;        // brief freeze when the player takes someone down
+        public bool heavyHandling = true;  // weapons turn at a speed set by their weight; off = the gun snaps to the cursor
         public bool minimap = true;
         public float minimapScale = 1f;
         public float minimapOpacity = 0.85f;

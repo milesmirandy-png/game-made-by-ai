@@ -247,6 +247,23 @@ namespace Swat
             return false;
         }
 
+        // Police rounds passing within a metre and a bit of a suspect (who wasn't hit) suppress them.
+        public void Suppress(Vector3 from, Vector3 to, Object victim)
+        {
+            Vector3 line = to - from;
+            float length = line.magnitude;
+            if (length < 0.5f) return;
+            line /= length;
+            foreach (var enemy in Enemies)
+            {
+                if (enemy == null || (victim != null && enemy.gameObject == ((Component)victim).gameObject)) continue;
+                Vector3 offset = enemy.Head - from;
+                float along = Vector3.Dot(offset, line);
+                if (along < 1f || along > length + 1f) continue;
+                if ((offset - line * along).sqrMagnitude < 1.7f) enemy.Suppress(from);
+            }
+        }
+
         public int PoliceNear(Vector3 position, float radius)
         {
             int count = 0;

@@ -67,8 +67,21 @@ namespace Swat
             float amount = info.amount;
             Vector3 incoming = -info.direction;
             incoming.y = 0f;
-            if (HasShield && incoming.sqrMagnitude > 0.01f && Vector3.Angle(transform.forward, incoming) < 60f)
-                amount *= Bracing ? 0.08f : 0.25f;
+            if (HasShield && incoming.sqrMagnitude > 0.01f)
+            {
+                // A braced shield stops rounds from the front outright; carried, it takes most of the hit.
+                float angle = Vector3.Angle(transform.forward, incoming);
+                if (Bracing && angle < 70f)
+                {
+                    ShieldClang(info);
+                    return;
+                }
+                if (angle < 60f)
+                {
+                    amount *= 0.2f;
+                    ShieldClang(info);
+                }
+            }
             amount *= 1f - ShieldCoverFor(this);
 
             if (Armor != null)
@@ -87,6 +100,13 @@ namespace Swat
                 healRemaining = 0f;
                 OnDowned();
             }
+        }
+
+        void ShieldClang(DamageInfo info)
+        {
+            Vector3 at = transform.position + transform.forward * 0.55f + Vector3.up * 1.1f;
+            EffectsManager.Instance.HitSpark(at, 0.45f);
+            AudioManager.Play(Sound.RicochetMetal, at, 0.55f, Random.Range(0.9f, 1.15f), SoundCategory.Weapons);
         }
 
         // Teammates within 3 m behind a braced shield take 25% less damage.

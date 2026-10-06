@@ -30,9 +30,17 @@ namespace Swat
                 return false;
             }
             readyAt = Time.time + 6f;
+            UIManager.ShowRecon(Look(door, player.Position));
+            AudioManager.Play(Sound.Click, door.transform.position, 0.5f, 1.4f);
+            return true;
+        }
 
-            var room = door.FarRoom(player.Position);
-            Vector3 normal = (door.transform.position - player.Position);
+        // A look under the door from one side: marks who can be seen, finds a trap on the
+        // door, and returns the report lines. Also what a squadmate's mirror does.
+        public static List<string> Look(DoorController door, Vector3 from)
+        {
+            var room = door.FarRoom(from);
+            Vector3 normal = (door.transform.position - from);
             normal.y = 0f;
             normal = Vector3.Dot(normal, door.transform.forward) >= 0f ? door.transform.forward : -door.transform.forward;
             Vector3 lens = door.transform.position + normal * 0.25f + Vector3.up * 0.15f;
@@ -60,10 +68,13 @@ namespace Swat
             if (unarmed > 0) lines.Add(unarmed + " unarmed person" + (unarmed > 1 ? "s" : "") + " (suspect)");
             if (civilians > 0) lines.Add(civilians + " civilian" + (civilians > 1 ? "s" : ""));
             if (room != null && room.IsDark) lines.Add("Room is dark - bring a light.");
+            if (door.Trapped)
+            {
+                door.RevealTrap();
+                lines.Add("DOOR IS TRAPPED: a flash device is wired to it. Disarm it (hold E) or breach with a charge.");
+            }
             lines.Add("Coverage is partial: corners and furniture block the view.");
-            UIManager.ShowRecon(lines);
-            AudioManager.Play(Sound.Click, door.transform.position, 0.5f, 1.4f);
-            return true;
+            return lines;
         }
 
         // A low, wide view from under the door: range, a 140 degree cone and walls.

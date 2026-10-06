@@ -15,6 +15,7 @@ namespace Swat
         public float accuracyMultiplier = 1f, reactionMultiplier = 1f;
         public int enemyCount, civilianCount;
         public int lockedDoors; // filled in when the level is populated
+        public int trappedDoors;
         public TimeOfDay timeOfDay;
     }
 
@@ -129,6 +130,32 @@ namespace Swat
                     if (spot == null) break;
                     var spawn = new EnemySpawnPoint { position = spot.position, yaw = spot.yaw, tag = spot.tag, patrol = RandomPatrol(spot, level, rng) };
                     AIManager.Instance.Register(EnemyAI.Spawn(actors, data, spawn, plan.accuracyMultiplier, plan.reactionMultiplier));
+                }
+            }
+
+            // Trapped doors: a few closed doors into rooms suspects hold, rigged on the suspects' side
+            // (more on harder difficulties). A recon camera or a squadmate's mirror finds them.
+            plan.trappedDoors = 0;
+            if (!mission.isTraining)
+            {
+                var doors = new List<DoorController>(level.doors);
+                Shuffle(doors, rng);
+                int maxTraps = 1 + Mathf.Clamp(plan.difficulty, 0, 2);
+                foreach (var door in doors)
+                {
+                    if (plan.trappedDoors >= maxTraps) break;
+                    if (door == null || door.Electronic || (door.State != DoorState.Closed && door.State != DoorState.Locked)) continue;
+                    if (door.RoomFront == null || door.RoomBack == null || !door.RoomFront.Indoor || !door.RoomBack.Indoor) continue;
+                    int side = 0;
+                    foreach (var enemy in AIManager.Instance.Enemies)
+                    {
+                        if (!enemy.Data.armed) continue;
+                        if (door.RoomFront.Contains(enemy.Position)) { side = 1; break; }
+                        if (door.RoomBack.Contains(enemy.Position)) { side = -1; break; }
+                    }
+                    if (side == 0 || rng.NextDouble() > 0.4) continue;
+                    door.SetTrap(side);
+                    plan.trappedDoors++;
                 }
             }
 

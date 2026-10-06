@@ -60,6 +60,21 @@ namespace Swat
             if (hiding) Animator.SetPose(Pose.Cower);
         }
 
+        // Kneeling behind cover or holding an angle (still aiming, unlike hiding).
+        public void SetCrouched(bool crouch)
+        {
+            crouched = crouch;
+            Animator.SetCrouch(crouch);
+        }
+
+        // A fake surrender ends: the gun comes back out.
+        public void SetArmedAgain()
+        {
+            Animator.SetPose(Pose.Aim);
+            Parts.ShowWeapon(true);
+            Parts.SetRingColor(HostileRing);
+        }
+
         public void SetDead()
         {
             dead = true;

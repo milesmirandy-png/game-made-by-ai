@@ -77,6 +77,17 @@ namespace Swat
                 if (action == DoorAction.Breach) UITheme.Dot(c, t * 1.3f, UITheme.Warn);
                 else if (action == DoorAction.Flash) UITheme.Dot(c, t * 1.3f, Color.white);
                 else if (action == DoorAction.Open) UITheme.LineTo(c + new Vector2(-r * 0.35f, r), c + new Vector2(r * 0.5f, r * 0.3f), color, t * 0.7f);
+                else if (action == DoorAction.Mirror)
+                {
+                    // A little mirror on a stick, slid under the door.
+                    UITheme.LineTo(c + new Vector2(-r * 0.9f, r * 0.9f), c + new Vector2(0f, r * 0.9f), color, t * 0.5f);
+                    UITheme.Ring(c + new Vector2(r * 0.2f, r * 0.9f), t * 1.1f, color, t * 0.5f);
+                }
+                else if (action == DoorAction.Shotgun)
+                {
+                    UITheme.Dot(c + new Vector2(r * 0.15f, -r * 0.15f), t * 0.9f, new Color(1f, 0.6f, 0.2f));
+                    UITheme.Dot(c + new Vector2(r * 0.15f, r * 0.25f), t * 0.9f, new Color(1f, 0.6f, 0.2f));
+                }
                 return;
             }
             switch (order)

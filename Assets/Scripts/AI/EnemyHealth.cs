@@ -22,7 +22,8 @@ namespace Swat
         {
             // Suspects don't shoot each other.
             if (!IsAlive || info.attacker == Team.Suspect || info.attacker == Team.Civilian) return;
-            float amount = info.amount * (1f - reduction);
+            // Missions are lethal: a few solid hits put a suspect down (see Lethality).
+            float amount = info.amount * (1f - reduction) * Lethality.ToSuspects;
             // Less-lethal rounds hurt but never take someone down on their own.
             if (info.lessLethal) amount = Mathf.Min(amount, current - 1f);
             current = Mathf.Max(0f, current - amount);

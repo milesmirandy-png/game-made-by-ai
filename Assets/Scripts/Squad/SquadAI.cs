@@ -5,7 +5,7 @@ using UnityEngine.AI;
 namespace Swat
 {
     public enum SquadOrder { Follow, Hold, Regroup, MoveTo, Cover, Stack, StayBehind, ReturnToPlayer, AssistCivilians, Wait, Clear }
-    public enum DoorAction { None, Open, Breach, Flash }
+    public enum DoorAction { None, Open, Breach, Flash, Mirror, Shotgun }
 
     // One AI squadmate: a lightweight state machine driven by orders.
     // Combat runs on top of any order: officers shout compliance at suspects
@@ -588,8 +588,31 @@ namespace Swat
             var door = stackDoor;
             var action = doorAction;
             doorAction = DoorAction.None;
+            // A trap someone has spotted gets disarmed first; that takes a moment.
+            if (door.TrapKnown && action != DoorAction.Breach && action != DoorAction.Mirror)
+            {
+                door.DisarmTrap();
+                SquadCommandManager.Instance.Radio(this, "Trap disarmed.");
+                doorAction = action;
+                doorActionAt = Time.time + 2f;
+                return;
+            }
             switch (action)
             {
+                case DoorAction.Mirror:
+                {
+                    // A look under the door: who's inside and whether the door is rigged. Then hold.
+                    var lines = ReconCamera.Look(door, transform.position);
+                    UIManager.ShowRecon(lines);
+                    SquadCommandManager.Instance.Radio(this, MirrorReport(lines, door));
+                    break;
+                }
+                case DoorAction.Shotgun:
+                {
+                    var gunner = SquadCommandManager.Instance.ShotgunCarrier(door) ?? this;
+                    if (!gunner.FireBreachingRound(door)) SquadCommandManager.Instance.Radio(this, door.State == DoorState.Wedged ? "It's wedged, the lock won't do it." : "Can't shotgun this one.");
+                    break;
+                }
                 case DoorAction.Open:
                     if (door.State == DoorState.Closed) door.Open(transform.position);
                     else if (door.State == DoorState.Locked && door.Pickable) door.PickLock(transform.position);
@@ -633,6 +656,32 @@ namespace Swat
                     MissionManager.Instance.ReportEquipment(EquipmentKind.Flashbang);
                     break;
             }
+        }
+
+        // The mirror report in a sentence: counts from the look, plus a warning for a trap.
+        static string MirrorReport(System.Collections.Generic.List<string> lines, DoorController door)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            for (int i = 1; i < lines.Count; i++)
+            {
+                string line = lines[i];
+                if (line.StartsWith("Coverage") || line.StartsWith("DOOR IS TRAPPED")) continue;
+                parts.Add(line.TrimEnd('.'));
+            }
+            string report = "Mirror: " + (parts.Count > 0 ? string.Join(", ", parts.ToArray()) : "nothing visible") + ".";
+            if (door.TrapKnown) report += " The door's trapped!";
+            return report;
+        }
+
+        // Fires a breaching round into the door's lock with the shotgun this officer carries.
+        public bool FireBreachingRound(DoorController door)
+        {
+            var data = Inventory.Primary != null ? Inventory.Primary.Data : null;
+            if (!door.ShotgunBreach(transform.position, false)) return false;
+            body.Animator.Fire(1.2f);
+            if (data != null) WeaponEffects.Fired(body.Parts.muzzle, data, 0.7f, 20f, NoiseKind.Gunshot);
+            SquadCommandManager.Instance.Radio(this, "Breaching!");
+            return true;
         }
 
         void UpdateAssist()
