@@ -23,12 +23,82 @@ low-poly models (a soldier, a police riot shield and a weapon pack). See
 > tests run outside Unity. The owner has played built copies, LAN games with
 > friends included; that is the only play-testing so far. The peek / slide
 > update was played; everything since (Gun Game, Elimination, spectating and
-> pings; then the tactical overhaul, the new models and first person) has been
-> compiled but **not played yet**. No performance has been measured, and no
+> pings; then the tactical overhaul, the new models, first person, gear
+> customization, the Ready or Not-style procedure and the realism changes) has
+> been compiled but **not played yet**. No performance has been measured, and no
 > gameplay screenshots are in the repository yet. [Screenshots/README.md](Screenshots/README.md) explains how
 > to capture them (the screenshot tour does most of it).
 
-## What's new: tactical overhaul, first person (body cam) and new models
+## What's new: gear, better-looking officers, Ready or Not-style procedure and realism
+
+- **Gear customization** (loadout screen, now three pages: Weapons, Armor &
+  gear, Look).
+  - **Look tab:** headgear (helmet with NVG and goggles, helmet and goggles,
+    helmet, helmet with face shield, ops cap, beanie, boonie hat, bare head),
+    face (balaclava, bare, gas mask, shades), facial hair (stubble, beard,
+    moustache), six hair colours, long or rolled sleeves, and a shoulder
+    patch (nine designs, a flag among them, in eight colours). It's cosmetic,
+    with two exceptions: the gas mask keeps CS gas out and the helmet with NVG
+    gives night vision.
+  - **Armor sets the vest's look:** a light carrier is slick, the standard one
+    has pouches and a pack, heavy adds shoulder guards, a collar and a groin
+    protector. The new **No Armor** option is barebones: a belt and kneepads,
+    8% quicker, 2 more equipment capacity than the plate carrier, and nothing
+    to stop a round.
+  - **Six attachment slots** on every gun: light, optic, muzzle, stock,
+    underbarrel and magazine, 18 attachments in all. They include a mini
+    reflex, red dot, holographic sight and a 2.5x scope; a flash hider,
+    suppressor, compensator and muzzle brake; three stocks; a vertical grip,
+    angled grip and laser module; quick-pull and extended magazines. Each
+    shows on the 3D gun (fitted to the rail, muzzle and magazine well of each
+    model) and on the pixel-art icon. The stats are real: spread, recoil,
+    noise, flash size, aim speed, reload time, magazine size, and the scope's
+    zoom in first person. The laser puts a dot where you aim. Hover an
+    attachment in the loadout to see what it does. The drum magazine was
+    removed.
+- **Less blocky officers.** The soldier model is smoothed (each triangle
+  split into four, with pouch and box edges kept sharp): about 13,800
+  triangles instead of 3,460. The Potato and Low presets (or Texture quality
+  Low) keep the original. Caps, beanies, boonies, hair and beards are grown out of the
+  head's own surface, so they fit instead of floating. Faces have eyes and
+  brows. Officers wear long sleeves (with gloves and a watch) and a chest
+  radio. Four **camo kits** join the uniforms: Arid, Woodland, Urban and
+  Night. The pattern is coloured onto the low-poly triangles, so it stays in
+  the flat-shaded style.
+- **Ready or Not-style procedure.**
+  - **Report to TOC (H):** look at a restrained or downed suspect, a
+    civilian you have under control (or one who's hurt) or a downed officer
+    within 6 m and press **H** to call it in. TOC answers over the radio.
+    Squadmates report what they secure themselves. Each report is worth 10
+    points; anything left unreported at the end costs 15.
+  - **Secure weapons:** a suspect who surrenders or goes down drops their gun
+    (marked with an orange diamond). Hold **E** to secure it, or walk a
+    squadmate past it. Secured, it's +10; left on the floor, -20. A suspect
+    who only pretended to surrender can grab it again.
+  - **CS gas:** a new grenade. Suspects inside cough, stagger and give up
+    more easily, but anyone without a gas mask chokes too: no sprinting,
+    slower, a shakier aim. New squad door order: **Gas & clear**.
+  - **Night vision (N)** with the helmet-and-NVG headgear: a green,
+    amplified view with a tube vignette that lets you see suspects in dark
+    rooms.
+  - **Chem lights:** throw glow sticks to mark cleared rooms. They stay lit
+    and show on the tactical map.
+- **More realistic play.**
+  - **Magazines:** spare ammo is carried as separate magazines. A reload
+    swaps in the fullest one and the magazine coming out goes back in the
+    pouch with whatever is left in it, so a tactical reload keeps the
+    rounds but you end up with half-empty magazines. Shotguns, revolvers and
+    launchers still load round by round.
+  - **Realistic ammo** (Settings -> Gameplay, on by default; missions only):
+    the HUD shows how full the magazine feels (Full, Heavy, Half, Light,
+    Empty) and the spare magazines as pips, not an exact count.
+  - **Limb wounds** (missions only): a leg hit means limping (slower, no
+    sprinting), an arm hit a shakier aim and slower turning, until a medical
+    kit or a revive treats it. The HUD shows the wound. Squadmates limp too.
+  - **Suppression:** rounds cracking past you shake your aim and darken the
+    edges of the view for a couple of seconds.
+
+## Earlier: tactical overhaul, first person (body cam) and new models
 
 Slower, heavier and deadlier: closer to Ready or Not and SWAT 4 than to a
 run-and-gun shooter.
@@ -417,6 +487,8 @@ All keys can be remapped in **Settings -> Controls**.
 | **Esc** | Pause menu |
 | **Z (hold)** | Squad command wheel: point at a spot or a door, release on an order (or press 1-0) |
 | **X** | Shout "Police! Show me your hands!" (suspects may surrender, civilians get down) |
+| **H** | Report to TOC: call in the restrained or downed suspect, controlled civilian or downed officer you're looking at |
+| **N** | Night vision on / off (helmet with NVG headgear) |
 | **T** | Role ability |
 | **B** | Toggle fire mode: automatic or burst to semi-automatic and back (weapons that support it) |
 | **F1 / F2 / F3** | Select squadmate 1 / 2 / 3 for the next order (toggle) |
@@ -445,8 +517,8 @@ keyboard and mouse only. Layout (Xbox names):
 
 In menus the left stick moves the cursor and **A** clicks; the d-pad adjusts
 sliders and **B** closes the settings window. **B** while sprinting slides.
-Planning mode, fire mode, zoom presets, peeking and selecting individual
-officers remain keyboard-only.
+Planning mode, fire mode, zoom presets, peeking, reporting to TOC, night
+vision and selecting individual officers remain keyboard-only.
 
 ## How to play
 

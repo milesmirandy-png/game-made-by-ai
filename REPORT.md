@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has ten parts: **the tactical overhaul,
-new models and first person** (newest, first), **Gun Game, Elimination,
+and what is still unverified. It has eleven parts: **gear, better-looking
+officers, Ready or Not-style procedure and realism** (newest, first), **the
+tactical overhaul, new models and first person**, **Gun Game, Elimination,
 spectating and pings**, **peek, slide, balance and
 punch**, **online multiplayer and
 the screenshot tour**, the **gun pack, NPC and arsenal
@@ -15,13 +16,164 @@ something).
 The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check. The
 owner has built the game and played it, including LAN matches with friends;
-that is the only play-testing, and it happened before the two newest parts,
-which have only been compiled. The newest part also adds models that were
-converted and checked outside Unity, and its first-person view-model layout
-was checked with an offline software render of the same model files (not a
-game screenshot). No profiling or performance measurements have been
+that is the only play-testing, and it happened before the three newest
+parts, which have only been compiled. The two newest parts also add models
+that were converted and checked outside Unity, and their first-person view
+and character looks were checked with offline software renders of the same
+model files (not game screenshots). No profiling or performance measurements have been
 made, and no screenshots are in the repository. Treat everything below as
 "implemented in code" unless it says otherwise.
+
+# Part 0h: Gear, better-looking officers, Ready or Not-style procedure and realism
+
+## What was added
+
+- **Gear customization** (`GearCatalog`, `OfficerLoadout`, `LoadoutUI`,
+  `CharacterFactory`).
+  - The loadout screen has three pages: Weapons, Armor & gear, Look.
+  - Look tab: 8 headgear options, 4 faces, 4 facial hair options, 6 hair
+    colours, long or rolled sleeves, 9 patch designs and 8 patch colours.
+    All are stored per officer and clamped when a save is loaded.
+  - The vest's look comes from the armor tier (`GearCatalog.StyleFor`):
+    none, light (slick), standard (pouches and pack) and heavy (adds
+    shoulder guards, collar and groin protector).
+  - New `armor_none` ("No Armor"): tier 0, speed x1.08, +2 equipment
+    capacity, no protection.
+  - Two looks do something: the gas mask face blocks CS gas, and the
+    helmet-with-NVG headgear enables night vision. The rest is cosmetic.
+- **Attachments** (`AttachmentData`, `DefaultContent`, `Weapon`,
+  `WeaponModels`, `WeaponSpritePack`).
+  - Six slots: light, optic, muzzle, stock, underbarrel and magazine.
+    There are 18 attachments.
+  - New stats: magazine size, reload time, aim speed, zoom, look-ahead,
+    flash size and laser. `Weapon` applies them.
+  - `WeaponModels` measures each gun mesh by slicing its triangles with
+    planes. That finds the top rail, muzzle, handguard underside and
+    magazine well, and the attachment visuals are placed there.
+  - The pixel-art icons get matching overlays.
+  - The drum magazine was removed at the owner's request.
+- **Smoother soldier** (`Tools/ModelConverter/subdivide.py`, `convert.py`).
+  - One step of Loop subdivision with creases: open edges, colour-slot
+    borders and edges sharper than 45 degrees stay sharp.
+  - `soldier.bytes` is about 13,840 triangles. `soldier_low.bytes` keeps the
+    original 3,460, and `CharacterFactory.SoldierModel()` uses it when the
+    texture quality is Low (the Potato and Low presets).
+- **Headgear and faces that fit** (`MeshKit`).
+  - Caps, beanies, boonies, hair, beards and the gas mask are shells. A
+    shell copies triangles of the head, splits each into four with the new
+    points pushed out, and offsets the result along welded normals, so it
+    follows the head.
+  - Brims and the face shield are generated fans and arcs.
+  - Eyes, brows and patches are placed by measuring the model at run time
+    (`FrontZ`, `OuterX`), so they sit on the surface of either soldier
+    model.
+- **Camo kits** (`ModelLibrary.Camo`, `Progression`).
+  - Four kits: Arid, Woodland, Urban and Night. The uniform's triangles are
+    split into four and each piece is coloured by 3D value noise in model
+    space.
+  - It's geometry colour, not a texture, because the toon shader has no
+    texture slot. Variant meshes are built once and cached.
+- **Ready or Not-style procedure.**
+  - Reports to TOC (`TocReports`, key **H**): restrained or dead suspects,
+    controlled, injured or dead civilians, and downed officers within 6 m,
+    under 70 degrees off the view and in sight. Squadmates report what they
+    restrain. Scoring is +10 per report and -15 per person left unreported.
+  - Dropped weapons (`DroppedWeapon`): a suspect drops their gun on
+    surrender or death. The player secures it by holding E (0.8 s), and
+    squadmates pick up loose guns within 1.8 m. Scoring is +10 secured and
+    -20 left. A suspect faking a surrender grabs their gun back if it's
+    still on the floor within 2.5 m. Otherwise, 6 times in 10 they give up
+    for real, and the rest have a backup gun.
+  - CS gas (`SmokeCloud` gas mode, `EquipmentKind.CSGas`): suspects are
+    stunned, staggered and have a 12% chance per half-second tick to
+    surrender (4% for leaders). Officers, the player and civilians without a mask choke. The
+    player can't sprint and gets slower and less accurate. The new squad
+    door order is Gas & clear.
+  - Night vision (key **N**): a post-effect mode, green and amplified with a
+    tube vignette. The line-of-sight system treats the player's eyes as
+    seeing in the dark while it's on. Without the post pass it falls back to
+    a HUD tint.
+  - Chem lights (`ChemLight`): thrown glow sticks with a small light, shown
+    on the tactical map.
+- **Realism.**
+  - Magazines (`Weapon`): magazine-fed guns keep a list of spare magazines.
+    `FinishReload` takes the fullest spare that holds more than the current
+    magazine and puts the current one back if it isn't empty. Shotguns,
+    revolvers, less-lethal launchers, grenade launchers and pepperball guns
+    keep loose rounds. Setting `Reserve` (van resupply) rebuilds full
+    magazines.
+  - Realistic ammo (setting, on by default, missions only): the HUD shows
+    Full, Heavy, Half, Light or Empty, plus spare magazines as pips filled
+    by how full each one is. The squad list and weapon wheel show
+    magazines left.
+  - Limb wounds (`OperatorHealth`, missions only): a hit of 6 damage or more
+    below 0.85 m (local height) is a leg wound. Below 1.45 m and more than
+    0.17 m off centre, it's an arm wound.
+    - Leg: no sprinting and 80% speed, for the player and squadmates.
+    - Arm: 1.3x spread and 85% turn rate.
+    - A medical kit, a revive or a full restore treats both.
+  - Suppression (`PlayerController.Suppression`): a suspect's round passing
+    within 1.3 m adds 0.12-0.35 (closer adds more), and it decays at 0.45
+    per second. It multiplies spread by up to 1.6 and darkens the top and
+    bottom of the screen. Missions only.
+
+## Limitations
+
+- **Gear and looks:**
+  - Shells are offset copies of the head, so a cap or beard follows the
+    skull exactly; a hat can't sit loose or tilt.
+  - The patch is a few flat quads, not a decal.
+  - The camo is per small triangle, so at close range the blotches have
+    angular edges.
+- **Attachments:**
+  - Placement is measured automatically. A gun with an unusual shape could
+    put a grip or light slightly off.
+  - Stats are first guesses.
+- **Smoother soldier:** about 4x the triangles of the old model. It's still
+  low-poly, but with a full squad, suspects and the game-mode teams on
+  screen that adds up. Nothing has been measured.
+- **Ready or Not-style procedure:**
+  - TOC replies are a few fixed lines.
+  - Weapons dropped by suspects aren't physical objects (no throwing or
+    sliding).
+  - CS gas is a sphere, so it doesn't fill a room's shape or seep under
+    doors.
+- **Realism:**
+  - With magazines, picking up partial magazines from the van merges them
+    into full ones.
+  - Wounds are located from the hit point's height on the body, so the
+    locations are approximate.
+  - The game modes are left as they were (no wounds, no suppression, exact
+    ammo count).
+- **Not tuned:** none of these numbers (scoring, gas, wound penalties,
+  suppression) has been tuned by playing.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings at
+  warning level 4).
+- The shaders pass the same syntax check as before. That includes the new
+  night-vision code in the post effect (glslangValidator, with `_Time`
+  added to the stub).
+- The online transport tests still pass (`Tests/`, both ALL PASSED).
+- Model pipeline:
+  - Re-running the converter reproduces all 20 committed model files byte
+    for byte, including `soldier.bytes` (smoothed) and `soldier_low.bytes`.
+- Offline renders (the converter's software rasteriser, not game
+  screenshots):
+  - The new looks were checked with a Python port of the shell, brim and
+    camo steps on the same model files. That covered every headgear, face
+    and facial hair, the camo kits, and the smoothed soldier next to the
+    original.
+  - Attachment placement was rendered on each gun model.
+  - The first-person view was rendered again with the scope and laser.
+- The icon overlays were drawn by the real `WeaponSpritePack` code, run
+  under Mono with a small harness.
+- **Not done:** any play-testing. Not run in Unity:
+  - the Look tab and the gear on characters in the game;
+  - attachments in play;
+  - TOC reports, dropped weapons, CS gas, night vision and chem lights;
+  - magazines, the realistic ammo HUD, wounds and suppression.
 
 # Part 0g: Tactical overhaul, new models and first person (body cam)
 
