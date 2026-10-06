@@ -21,6 +21,13 @@ namespace Swat
             float w = UITheme.Width, h = UITheme.Height;
             var settings = SaveManager.Settings;
 
+            // Night vision without the post-processing pass (URP or very old GPUs): a green wash at least.
+            if (player.NightVision && !PostEffects.Active) UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.2f, 0.9f, 0.3f, 0.18f));
+            // Looking out through a gas mask in first person: a dark rim round the view.
+            if (player.FirstPerson && player.HasGasMask && player.IsAlive && !FirstPersonRig.Scoped) DrawMaskRim();
+            // Choking on CS gas: watery, yellowed edges.
+            if (player.GasExposure > 0.01f) DrawGas(player.GasExposure);
+
             // First person: the scope picture when aiming a scoped rifle, and the body cam overlay.
             if (FirstPersonRig.Scoped && player.IsAlive) DrawScope();
             if (player.FirstPerson && settings.bodyCamLook) DrawBodyCam(game, player);
@@ -285,6 +292,13 @@ namespace Swat
                 var door = InspectDoor(game, player);
                 if (door != null) UITheme.ShadowText(new Rect(w * 0.5f - 300f, h - 246f, 600f, 24f), door.StatusText, 16, UITheme.Dim, TextAnchor.MiddleCenter);
             }
+            // Someone to call in to TOC.
+            if (player.ReportTarget != null && !TocReports.IsReported(player.ReportTarget))
+            {
+                string status = TocReports.Status(player.ReportTarget);
+                if (status != null)
+                    UITheme.ShadowText(new Rect(w * 0.5f - 300f, h - 196f, 600f, 22f), GameInput.PromptKey(InputAction.Report) + ": report to TOC (" + status + ")", 15, UITheme.Accent, TextAnchor.MiddleCenter, true);
+            }
             // Extraction zone status when close.
             var extraction = game.Level.extraction;
             if (extraction != null && !VersusMatch.Active && (extraction.Bounds.center - player.Position).sqrMagnitude < 144f)
@@ -540,6 +554,30 @@ namespace Swat
             UITheme.Fill(new Rect(c.x + r * 0.45f, c.y - 2.5f, r * 0.55f, 5f), line);
             UITheme.Fill(new Rect(c.x - 2.5f, c.y + r * 0.45f, 5f, r * 0.55f), line);
             UITheme.Dot(c, 1.6f, new Color(0.9f, 0.15f, 0.1f, 0.9f));
+        }
+
+        static void DrawMaskRim()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (scopeMask == null) scopeMask = MakeScopeMask(256);
+            float w = UITheme.Width, h = UITheme.Height;
+            // Wider than the screen: only the soft dark edge of the circle shows, mostly in the corners.
+            float d = Mathf.Max(w, h) * 1.25f;
+            var previous = GUI.color;
+            GUI.color = new Color(0.01f, 0.01f, 0.012f, 0.85f);
+            GUI.DrawTexture(new Rect((w - d) * 0.5f, (h - d) * 0.5f, d, d), scopeMask);
+            GUI.color = previous;
+        }
+
+        static void DrawGas(float amount)
+        {
+            float w = UITheme.Width, h = UITheme.Height;
+            var tint = new Color(0.75f, 0.7f, 0.25f, Mathf.Clamp01(amount) * 0.32f);
+            float edge = Mathf.Min(w, h) * 0.3f;
+            UITheme.Shade(new Rect(0f, 0f, w, edge), tint, true);
+            UITheme.Shade(new Rect(0f, h - edge, w, edge), tint, false);
+            UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.85f, 0.82f, 0.6f, amount * 0.12f));
+            if (amount > 0.5f) UITheme.ShadowText(new Rect(0f, h * 0.3f, w, 30f), "CS GAS - no mask", 18, new Color(1f, 0.9f, 0.4f, amount), TextAnchor.MiddleCenter, true);
         }
 
         static Texture2D MakeScopeMask(int size)

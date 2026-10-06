@@ -456,6 +456,7 @@ namespace Swat
             EffectsManager.Instance.ClearAll();
             SmokeCloud.ClearAll();
             ThrownGrenade.ClearAll();
+            ChemLight.Clear();
             AIManager.Instance.Clear();
             SecurityCamera.All.Clear();
             Player = null;

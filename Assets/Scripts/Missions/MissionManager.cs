@@ -62,7 +62,12 @@ namespace Swat
             nextTick = 0f;
 
             foreach (var enemy in AIManager.Instance.Enemies)
-                if (enemy.Data.archetype != EnemyArchetype.TrainingDummy) Stats.suspectsTotal++;
+                if (enemy.Data.archetype != EnemyArchetype.TrainingDummy)
+                {
+                    Stats.suspectsTotal++;
+                    if (enemy.Data.armed) Stats.armedSuspects++;
+                }
+            TocReports.Begin();
             foreach (var civilian in AIManager.Instance.Civilians)
             {
                 Stats.civilians.total++;
@@ -170,6 +175,11 @@ namespace Swat
             foreach (var cam in SecurityCamera.All) if (cam != null && cam.Active) return;
             Stats.camerasDisabled = true;
         }
+
+        public void OnWeaponDropped() { if (Running) Stats.weaponsDropped++; }
+        public void OnWeaponTaken() { if (Running) Stats.weaponsDropped = System.Math.Max(0, Stats.weaponsDropped - 1); }
+        public void OnWeaponSecured() { if (Running) Stats.weaponsSecured++; }
+        public void OnReportedToToc() { if (Running) Stats.tocReports++; }
 
         public void ReportEvidence()
         {

@@ -76,6 +76,7 @@ namespace Swat
                 UITheme.Dot(c + new Vector2(-r * 0.75f, r * 0.3f), t, color);
                 if (action == DoorAction.Breach) UITheme.Dot(c, t * 1.3f, UITheme.Warn);
                 else if (action == DoorAction.Flash) UITheme.Dot(c, t * 1.3f, Color.white);
+                else if (action == DoorAction.Gas) UITheme.Dot(c, t * 1.3f, new Color(0.85f, 0.8f, 0.3f));
                 else if (action == DoorAction.Open) UITheme.LineTo(c + new Vector2(-r * 0.35f, r), c + new Vector2(r * 0.5f, r * 0.3f), color, t * 0.7f);
                 else if (action == DoorAction.Mirror)
                 {
@@ -170,6 +171,16 @@ namespace Swat
                 case EquipmentKind.PortableLight:
                     UITheme.Fill(new Rect(c.x - r * 0.4f, c.y - r * 0.1f, r * 0.8f, r * 0.9f), color);
                     UITheme.Dot(c + new Vector2(0f, -r * 0.35f), r * 0.45f, color);
+                    break;
+                case EquipmentKind.CSGas:
+                    // A canister with a cloud.
+                    UITheme.Fill(new Rect(c.x - r * 0.35f, c.y - r * 0.2f, r * 0.7f, r * 1.1f), color);
+                    UITheme.Dot(c + new Vector2(-r * 0.35f, -r * 0.45f), r * 0.35f, new Color(color.r, color.g, color.b * 0.5f, color.a * 0.8f));
+                    UITheme.Dot(c + new Vector2(r * 0.3f, -r * 0.55f), r * 0.4f, new Color(color.r, color.g, color.b * 0.5f, color.a * 0.8f));
+                    break;
+                case EquipmentKind.ChemLight:
+                    UITheme.LineTo(c + new Vector2(-r * 0.6f, r * 0.6f), c + new Vector2(r * 0.6f, -r * 0.6f), color, r * 0.35f);
+                    UITheme.Dot(c, r * 0.6f, new Color(ChemLight.Glow.r, ChemLight.Glow.g, ChemLight.Glow.b, color.a * 0.35f));
                     break;
                 default: // recon camera
                     UITheme.Fill(new Rect(c.x - r, c.y - r * 0.1f, r * 1.4f, r * 0.2f), color);

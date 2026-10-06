@@ -8,7 +8,8 @@
 // 2x2 ordered dither, so 3D models read like sprites. In the first-person
 // body cam view it adds the look of a small wide-angle camera: barrel
 // distortion, a touch of colour fringing at the edges, grain and a heavier
-// vignette (Settings -> Camera -> Body cam look).
+// vignette (Settings -> Camera -> Body cam look). Night vision (the helmet
+// with NVG, key N) turns the picture into amplified green monochrome.
 Shader "Hidden/SWAT/PostFX"
 {
     Properties
@@ -41,6 +42,7 @@ Shader "Hidden/SWAT/PostFX"
     float _Barrel;
     float _Aberration;
     float _Grain;
+    float _NightVision;
 
     struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -137,6 +139,16 @@ Shader "Hidden/SWAT/PostFX"
         float2 centered = i.uv - 0.5;
         float vignette = 1.0 - _VignetteStrength * smoothstep(_VignetteSize, 1.0, length(centered) * 1.414);
         c *= vignette;
+
+        if (_NightVision > 0.5)
+        {
+            // Night vision: amplified light in green, with heavy grain and a dark tube edge.
+            float l = pow(saturate(Luma(c) * 3.4 + 0.035), 0.8);
+            float2 cellNV = floor(i.uv * abs(_MainTex_TexelSize.zw)) + frac(_Time.y * 11.7) * 61.0;
+            l += (frac(sin(dot(cellNV, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.12;
+            float tube = 1.0 - smoothstep(0.62, 0.95, length(centered) * 1.414);
+            c = float3(0.28, 1.0, 0.38) * saturate(l) * tube;
+        }
 
         if (_BodyCam > 0.5)
         {

@@ -16,6 +16,8 @@ namespace Swat
         public int suspectsTotal, suspectsEncountered, suspectsArrested, suspectsKilled, suspectsEscaped;
         public int officersDowned, unauthorizedForce, doorsBreached, ordersGiven, evidenceSecured, evidenceTotal;
         public int shotsFired, shotsHit;
+        // Ready or Not-style paperwork: suspects' guns left on the floor and secured, and reports to TOC.
+        public int armedSuspects, weaponsDropped, weaponsSecured, tocReports;
         public bool alarmTriggered, camerasDisabled, footageReviewed, leaderEscaped, playerDowned;
         public readonly Dictionary<EquipmentKind, int> equipmentUsed = new Dictionary<EquipmentKind, int>();
         public readonly CivilianRescueTracker civilians = new CivilianRescueTracker();

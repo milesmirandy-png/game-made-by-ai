@@ -28,6 +28,10 @@ namespace Swat
         public const int OfficerDownPenalty = -75;
         public const int MaxHealthBonus = 100;
         public const int MaxTimeBonus = 200;
+        public const int ReportPoints = 10;
+        public const int UnreportedPenalty = -15;
+        public const int WeaponSecuredPoints = 10;
+        public const int WeaponLeftPenalty = -20;
         static readonly float[] DifficultyMultiplier = { 0.8f, 1f, 1.25f };
 
         public static List<ScoreLine> Calculate(MissionManager mission, bool success, float playerHealth, out int total, out string rating)
@@ -50,6 +54,12 @@ namespace Swat
             if (stats.civilians.killed > 0) lines.Add(new ScoreLine("Civilian casualties (" + stats.civilians.killed + ")", stats.civilians.killed * CivilianKilledPenalty));
             if (stats.unauthorizedForce > 0) lines.Add(new ScoreLine("Unauthorized use of force (" + stats.unauthorizedForce + ")", stats.unauthorizedForce * UnauthorizedForcePenalty));
             if (stats.officersDowned > 0) lines.Add(new ScoreLine("Officers downed (" + stats.officersDowned + ")", stats.officersDowned * OfficerDownPenalty));
+            if (stats.tocReports > 0) lines.Add(new ScoreLine("Reports to TOC (" + stats.tocReports + ")", stats.tocReports * ReportPoints));
+            int unreported = TocReports.Unreported();
+            if (unreported > 0) lines.Add(new ScoreLine("Not reported to TOC (" + unreported + ")", unreported * UnreportedPenalty));
+            if (stats.weaponsSecured > 0) lines.Add(new ScoreLine("Weapons secured (" + stats.weaponsSecured + ")", stats.weaponsSecured * WeaponSecuredPoints));
+            int left = Mathf.Max(0, stats.weaponsDropped - stats.weaponsSecured);
+            if (left > 0) lines.Add(new ScoreLine("Weapons left behind (" + left + ")", left * WeaponLeftPenalty));
             lines.Add(new ScoreLine("Team leader health", Mathf.RoundToInt(Mathf.Clamp01(playerHealth) * MaxHealthBonus)));
             float par = Mathf.Max(60f, mission.Mission.parTime);
             int timeBonus = success && mission.Elapsed < par ? Mathf.RoundToInt((par - mission.Elapsed) / par * MaxTimeBonus) : 0;
@@ -75,6 +85,8 @@ namespace Swat
             foreach (var objective in mission.Objectives) max += objective.Points;
             max += mission.Stats.suspectsTotal * ArrestPoints;
             max += mission.Stats.civilians.total * EvacuatedPoints;
+            max += (mission.Stats.suspectsTotal + mission.Stats.civilians.total) * ReportPoints;
+            max += mission.Stats.armedSuspects * WeaponSecuredPoints;
             return max;
         }
 

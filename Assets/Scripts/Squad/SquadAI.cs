@@ -5,7 +5,7 @@ using UnityEngine.AI;
 namespace Swat
 {
     public enum SquadOrder { Follow, Hold, Regroup, MoveTo, Cover, Stack, StayBehind, ReturnToPlayer, AssistCivilians, Wait, Clear }
-    public enum DoorAction { None, Open, Breach, Flash, Mirror, Shotgun }
+    public enum DoorAction { None, Open, Breach, Flash, Mirror, Shotgun, Gas }
 
     // One AI squadmate: a lightweight state machine driven by orders.
     // Combat runs on top of any order: officers shout compliance at suspects
@@ -244,6 +244,14 @@ namespace Swat
             if (Time.time < orderReadyAt) return;
 
             RoleUpkeep();
+            if (gassedUntil > 0f && Time.time > gassedUntil)
+            {
+                gassedUntil = 0f;
+                mover.SetSpeedMultiplier(1f);
+            }
+            // A loose weapon right next to them gets picked up on the way past.
+            var loose = DroppedWeapon.Nearest(transform.position, 1.8f);
+            if (loose != null) loose.Secure(this);
             if (DoSideTasks()) return;
 
             switch (Order)
@@ -523,6 +531,20 @@ namespace Swat
         }
 
         float lastHeal = -100f;
+        float gassedUntil, gasRadioAt;
+
+        // CS gas: without a gas mask they choke and slow down (and say so).
+        public void Gassed()
+        {
+            if (Loadout != null && Loadout.faceIndex == (int)GearCatalog.Face.GasMask) return;
+            if (Time.time > gassedUntil) mover.SetSpeedMultiplier(0.65f);
+            gassedUntil = Time.time + 2f;
+            if (Time.time >= gasRadioAt)
+            {
+                gasRadioAt = Time.time + 12f;
+                SquadCommandManager.Instance.Radio(this, "Gas! I've got no mask!");
+            }
+        }
         float NextThinkInterval { get { return QualityManager.Current.aiThinkInterval * ThinkScale; } }
 
         void CompleteTask()
@@ -537,7 +559,10 @@ namespace Swat
             else if (restrainTarget != null)
             {
                 restrainTarget.Restrain(false);
-                SquadCommandManager.Instance.Radio(this, "Suspect secured.");
+                // Calls it in to TOC and picks up the suspect's gun if it's lying close by.
+                TocReports.Report(restrainTarget, this);
+                var gun = DroppedWeapon.ForOwner(restrainTarget);
+                if (gun != null && (gun.transform.position - transform.position).sqrMagnitude < 9f) gun.Secure(this);
                 restrainTarget = null;
             }
             else if (escort != null && escort.State == CivilianState.Injured)
@@ -655,6 +680,33 @@ namespace Swat
                     SquadCommandManager.Instance.DelayClear(door, 1.8f);
                     MissionManager.Instance.ReportEquipment(EquipmentKind.Flashbang);
                     break;
+                case DoorAction.Gas:
+                {
+                    // Like a flash, but CS gas, and a longer wait for it to spread before going in.
+                    var gasser = SquadCommandManager.Instance.GasCarrier(door);
+                    if (gasser == null)
+                    {
+                        SquadCommandManager.Instance.Radio(this, "We're out of gas.");
+                        if (door.State == DoorState.Closed) door.Open(transform.position);
+                        break;
+                    }
+                    if (door.State == DoorState.Closed) door.Open(transform.position);
+                    else if (door.State == DoorState.Locked && door.Pickable) door.PickLock(transform.position);
+                    if (!door.IsPassable)
+                    {
+                        SquadCommandManager.Instance.Radio(this, "Door's locked, can't get gas in.");
+                        break;
+                    }
+                    gasser.Inventory.Consume(EquipmentKind.CSGas);
+                    var gasRoom = door.FarRoom(transform.position);
+                    Vector3 gasInto = gasRoom != null ? gasRoom.Bounds.center : door.transform.position - door.transform.forward * stackSide * 3f;
+                    gasInto.y = 0.1f;
+                    ThrownGrenade.Throw(GameData.Equipment("cs_gas"), gasser.ChestPosition, gasInto, false);
+                    SquadCommandManager.Instance.Radio(gasser, "Gas out!");
+                    SquadCommandManager.Instance.DelayClear(door, 3f);
+                    MissionManager.Instance.ReportEquipment(EquipmentKind.CSGas);
+                    break;
+                }
             }
         }
 

@@ -39,8 +39,10 @@ namespace Swat
                 grenade = go.AddComponent<ThrownGrenade>();
                 grenade.body = go.GetComponent<Renderer>();
             }
-            var color = data.kind == EquipmentKind.Smoke ? new Color(0.6f, 0.6f, 0.62f) : new Color(0.2f, 0.3f, 0.2f);
-            grenade.body.sharedMaterial = Shapes.Mat(color);
+            var color = data.kind == EquipmentKind.Smoke ? new Color(0.6f, 0.6f, 0.62f) : data.kind == EquipmentKind.CSGas ? new Color(0.62f, 0.58f, 0.2f)
+                : data.kind == EquipmentKind.ChemLight ? ChemLight.Glow : new Color(0.2f, 0.3f, 0.2f);
+            grenade.body.sharedMaterial = Shapes.Mat(color, data.kind == EquipmentKind.ChemLight ? 2f : 0f);
+            grenade.transform.localScale = data.kind == EquipmentKind.ChemLight ? new Vector3(0.04f, 0.08f, 0.04f) : new Vector3(0.14f, 0.09f, 0.14f);
             grenade.data = data;
             grenade.start = from;
             grenade.target = to;
@@ -97,8 +99,13 @@ namespace Swat
         {
             Vector3 position = transform.position;
             position.y = 0.1f;
-            if (data.kind == EquipmentKind.Smoke) SmokeGrenade.Detonate(position, data);
-            else Flashbang.Detonate(position, data, power, byPlayer);
+            switch (data.kind)
+            {
+                case EquipmentKind.Smoke: SmokeGrenade.Detonate(position, data); break;
+                case EquipmentKind.CSGas: SmokeCloud.Spawn(position, data.radius, data.effectDuration, true); break;
+                case EquipmentKind.ChemLight: ChemLight.Place(transform.position); break;
+                default: Flashbang.Detonate(position, data, power, byPlayer); break;
+            }
             Release();
         }
 

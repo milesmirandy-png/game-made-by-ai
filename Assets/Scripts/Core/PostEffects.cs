@@ -93,7 +93,9 @@ namespace Swat
             bool post = QualityManager.PostProcessingOn;
             bool pixel = QualityManager.PixelArt;
             bool bodyCam = FirstPersonRig.Active && SaveManager.Settings.bodyCamLook;
-            if (material == null || (!post && !pixel && !bodyCam))
+            var game = GameManager.Instance;
+            bool nightVision = game != null && game.Player != null && game.Player.NightVision && (game.State == GameState.Playing || game.State == GameState.Paused);
+            if (material == null || (!post && !pixel && !bodyCam && !nightVision))
             {
                 Graphics.Blit(source, destination);
                 return;
@@ -135,6 +137,8 @@ namespace Swat
             material.SetFloat("_Barrel", 0.24f * lens);
             material.SetFloat("_Aberration", 0.012f * lens);
             material.SetFloat("_Grain", bodyCam ? (pixel ? 0.025f : 0.045f) : 0f);
+            // Night vision: bright green monochrome with its own grain.
+            material.SetFloat("_NightVision", nightVision ? 1f : 0f);
             material.SetFloat("_Exposure", g.exposure);
             material.SetFloat("_Contrast", g.contrast);
             material.SetFloat("_Saturation", g.saturation * (pixel ? 1.12f : 1f));

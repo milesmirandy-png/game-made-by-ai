@@ -104,6 +104,20 @@ namespace Swat
                 best = candidate;
                 bestScore = score;
             }
+            // Weapons on the floor have no collider (nothing to trip over), so they're checked directly.
+            foreach (var weapon in DroppedWeapon.All)
+            {
+                if (weapon == null || weapon.Secured) continue;
+                Vector3 to = weapon.InteractPosition - player.Position;
+                to.y = 0f;
+                float distance = to.magnitude;
+                if (distance > range) continue;
+                float facing = distance > 0.01f ? Vector3.Dot(player.AimDirection, to / distance) : 1f;
+                float score = distance - facing * 0.8f;
+                if (score >= bestScore || !InReach(chest, weapon)) continue;
+                best = weapon;
+                bestScore = score;
+            }
             return best;
         }
 

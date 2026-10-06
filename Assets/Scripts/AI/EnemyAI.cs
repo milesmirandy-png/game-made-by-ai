@@ -52,6 +52,9 @@ namespace Swat
         EnemyWeapon weapon;
         EnemyController body;
         Collider bodyCollider;
+        WeaponData gunData;          // the gun they carry (dropped when they give up or go down)
+        string gunVariant;
+        bool gunDropped;
 
         Vector3 post;
         float postYaw;
@@ -59,7 +62,7 @@ namespace Swat
         int patrolIndex;
         float stateStart, idleUntil, reactionDone, lastSeenTime = -100f, stunUntil, coverWaitUntil, nextCoverCheck, searchDuration, nextShoutCheck, nextErratic, alarmCallAt = -1f;
         float reactionMultiplier = 1f;
-        float holdUntil, suppressedUntil, fakeAt = -1f;
+        float holdUntil, suppressedUntil, fakeAt = -1f, gassedUntil, nextCough;
         int fakeTries;
         Vector3 holdFacing;
         bool everAlerted;
@@ -106,6 +109,8 @@ namespace Swat
                 // Some carry the pack's double-barrel shotgun or snub-nosed revolver instead (looks only).
                 string variant = gun.id == "shotgun_ts8" && Random.value < 0.5f ? "gun_double" : gun.id == "revolver_r6" && Random.value < 0.5f ? "gun_snub" : null;
                 CharacterFactory.SetWeapon(parts, gun, null, variant);
+                ai.gunData = gun;
+                ai.gunVariant = variant;
             }
             ai.body = go.AddComponent<EnemyController>();
             ai.body.Init(parts, ai.mover, data.armed);
@@ -612,6 +617,23 @@ namespace Swat
             body.SetStunned(true, Data.armed);
         }
 
+        // In a cloud of CS gas (twice a second): coughing and dazed, aim all over the place, and
+        // some give up on the spot (the leader holds out longer).
+        public void Gassed()
+        {
+            if (IsNeutralized || State == EnemyState.Surrendering || Data.archetype == EnemyArchetype.TrainingDummy) return;
+            gassedUntil = Time.time + 4f;
+            everAlerted = true;
+            if (Data.armed) weapon.Stagger(0.8f);
+            if (State != EnemyState.Stunned || stunUntil < Time.time + 0.6f) Stun(1.6f);
+            if (Time.time >= nextCough)
+            {
+                nextCough = Time.time + Random.Range(1.2f, 2.2f);
+                AudioManager.Play(Sound.Gasp, Position, 0.5f, Random.Range(0.8f, 1f));
+            }
+            if (Random.value < (IsLeader ? 0.04f : 0.12f)) Surrender();
+        }
+
         // A shove or a shield bash: knocked back and dazed for a moment, no harm done.
         // A dazed suspect is much more likely to give up when shouted at.
         public void Shoved(Vector3 direction, float seconds)
@@ -640,6 +662,7 @@ namespace Swat
             if (State == EnemyState.Attacking && health.Fraction > 0.7f) chance -= 0.15f;
             if (AIManager.Instance.PoliceNear(Position, 6f) >= 2) chance += 0.1f; // outnumbered
             if (Time.time < suppressedUntil) chance += 0.2f; // pinned down
+            if (Time.time < gassedUntil) chance += 0.25f;   // choking on CS gas
 
             if (Random.value < chance)
             {
@@ -660,6 +683,7 @@ namespace Swat
             SetState(EnemyState.Surrendering);
             mover.Stop();
             body.SetSurrendered();
+            DropGun();
             UIManager.Notify(Data.displayName + " surrendered. Restrain them (E).");
             MissionManager.Instance.Report(ObjectiveType.TrainingRestrain, 0);
         }
@@ -675,6 +699,12 @@ namespace Swat
                 return;
             }
             fakeAt = -1f;
+            // The gun they dropped, if nobody picked it up; otherwise most give up for real, a few have a backup.
+            var floorGun = DroppedWeapon.ForOwner(this);
+            bool grab = floorGun != null && (floorGun.transform.position - Position).sqrMagnitude < 6.25f;
+            if (!grab && Random.value < 0.6f) return;
+            if (grab) floorGun.Take();
+            gunDropped = false;
             body.SetArmedAgain();
             ICombatTarget nearest = null;
             float best = float.MaxValue;
@@ -688,7 +718,7 @@ namespace Swat
             SetState(EnemyState.Alert);
             mover.Stop();
             reactionDone = Time.time + 0.35f;
-            UIManager.Notify(Data.displayName + " pulled a hidden weapon!", true);
+            UIManager.Notify(Data.displayName + (grab ? " grabbed their gun off the floor!" : " pulled a hidden backup gun!"), true);
         }
 
         bool CoveredByPolice()
@@ -734,6 +764,8 @@ namespace Swat
             body.SetRestrained();
             AudioManager.Play(Sound.Click, Position, 0.8f);
             MissionManager.Instance.OnSuspectRestrained(this);
+            if (byPlayer && Data.archetype != EnemyArchetype.TrainingDummy && !VersusMatch.Active)
+                UIManager.Notify("Suspect restrained. Report it to TOC (" + GameInput.PromptKey(InputAction.Report) + ")" + (DroppedWeapon.ForOwner(this) != null ? " and secure their weapon" : ""));
             if (!Data.armed && Data.archetype != EnemyArchetype.TrainingDummy)
             {
                 // Questioning an unarmed suspect reveals who else is nearby.
@@ -783,9 +815,18 @@ namespace Swat
             }
         }
 
+        // Their gun hits the floor (once): an officer has to secure it.
+        void DropGun()
+        {
+            if (gunDropped || !Data.armed || gunData == null || Data.archetype == EnemyArchetype.TrainingDummy) return;
+            gunDropped = true;
+            DroppedWeapon.Drop(this, gunData, gunVariant);
+        }
+
         void Die()
         {
             bool wasRestrained = State == EnemyState.Restrained;
+            if (!wasRestrained) DropGun();
             SetState(EnemyState.Dead);
             mover.Disable();
             bodyCollider.enabled = false;

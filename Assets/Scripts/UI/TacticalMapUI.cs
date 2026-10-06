@@ -459,6 +459,13 @@ namespace Swat
                 Box(new Rect(p.x - 1f, p.y - 12f, 2f, 24f), UITheme.Warn);
                 Box(new Rect(p.x - 12f, p.y - 1f, 24f, 2f), UITheme.Warn);
             }
+            // Chem lights marking cleared rooms.
+            foreach (var light in ChemLight.Placed)
+            {
+                if (GameManager.Instance.Level.AreaAt(light) != viewArea) continue;
+                Vector2 p = ToMap(light);
+                Box(new Rect(p.x - 3f, p.y - 3f, 6f, 6f), ChemLight.Glow);
+            }
         }
 
         void DrawLegend(Rect rect)

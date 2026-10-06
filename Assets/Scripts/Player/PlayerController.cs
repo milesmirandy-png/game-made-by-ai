@@ -65,6 +65,26 @@ namespace Swat
         public float AbilityReadyIn { get { return Mathf.Max(0f, abilityReadyAt - Time.time); } }
         public float LastMeleeTime { get; private set; } = -10f;
         public int VersusSide { get; private set; }       // the game modes: 0 blue, 1 red
+        // Someone in front of you to report to TOC (checked a few times a second for the HUD hint).
+        public Object ReportTarget { get; private set; }
+        float nextReportScan;
+        // Gear that matters: a gas mask keeps CS gas out, the helmet with NVG gives night vision (N).
+        public bool HasGasMask { get { return Loadout != null && Loadout.faceIndex == (int)GearCatalog.Face.GasMask; } }
+        public bool HasNightVision { get { return Loadout != null && Loadout.headgearIndex == (int)GearCatalog.Headgear.HelmetFull; } }
+        public bool NightVision { get; private set; }
+        public float GasExposure { get; private set; }   // 0..1: choking on CS gas (lingers a few seconds)
+        float nextCough;
+
+        public void Gassed()
+        {
+            if (HasGasMask || !IsAlive) return;
+            GasExposure = 1f;
+            if (Time.time >= nextCough)
+            {
+                nextCough = Time.time + Random.Range(1.4f, 2.4f);
+                AudioManager.Play2D(Sound.Gasp, 0.45f, Random.Range(0.9f, 1.05f));
+            }
+        }
 
         // ICombatTarget
         public Transform Transform { get { return transform; } }
@@ -197,7 +217,27 @@ namespace Swat
                 }
                 Move(dt);
                 if (GameInput.Down(InputAction.Melee) && !Weapons.WheelOpen && !IsSliding) Melee();
+                if (GameInput.Down(InputAction.Report) && !VersusMatch.Active)
+                {
+                    TocReports.TryReport(this);
+                    nextReportScan = 0f;
+                }
+                if (Time.time >= nextReportScan && !VersusMatch.Active)
+                {
+                    nextReportScan = Time.time + 0.25f;
+                    ReportTarget = TocReports.Candidate(this);
+                }
                 if (GameInput.Down(InputAction.Flashlight)) Flashlight.Toggle();
+                if (GameInput.Down(InputAction.NightVision))
+                {
+                    if (HasNightVision)
+                    {
+                        NightVision = !NightVision;
+                        AudioManager.Play2D(Sound.FlashlightClick, 0.5f, NightVision ? 1.3f : 1.1f);
+                        UIManager.Notify(NightVision ? "Night vision on" : "Night vision off");
+                    }
+                    else UIManager.Notify("No night vision: pick the helmet with NVG (Loadout, Look tab)");
+                }
                 if (GameInput.Down(InputAction.Ability)) UseAbility();
             }
             else
@@ -205,6 +245,8 @@ namespace Swat
                 IsMoving = IsSprinting = IsSteadyAiming = false;
                 if (IsSliding) EndSlide();
             }
+            GasExposure = Mathf.MoveTowards(GasExposure, 0f, dt * 0.35f);
+            if (!IsAlive) NightVision = false;
             UpdateLean(dt, active);
             Weapons.Tick(dt, active);
             Interaction.Tick(active);
@@ -414,7 +456,8 @@ namespace Swat
             bool sprintInput = sprintLatch || GameInput.KeyHeld(GameInput.Binding(InputAction.Sprint));
             // Sprinting from a crouch (or after a slide) stands you up.
             if (sprintInput && IsMoving && IsCrouched && !IsSteadyAiming && !Health.Bracing && Stamina > maxStamina * 0.25f) SetCrouch(false);
-            bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing;
+            // Choking on gas: no sprinting.
+            bool wantsSprint = sprintInput && IsMoving && !IsCrouched && !IsSteadyAiming && !Health.Bracing && GasExposure < 0.3f;
             if (Stamina <= 0f) exhausted = true;
             if (exhausted && Stamina > maxStamina * 0.25f) exhausted = false;
             IsSprinting = wantsSprint && !exhausted;
@@ -425,6 +468,7 @@ namespace Swat
             if (IsCrouched) speed *= crouchMultiplier;
             if (IsSteadyAiming) speed *= steadyAimMultiplier;
             if (Health.HasShield) speed *= Health.Bracing ? 0.35f : 0.9f;
+            speed *= 1f - 0.3f * GasExposure;
 
             if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
             verticalVelocity += Physics.gravity.y * dt;

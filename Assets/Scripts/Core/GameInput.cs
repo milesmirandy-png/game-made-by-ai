@@ -12,7 +12,7 @@ namespace Swat
         SwitchWeapon, Flashlight, UseEquipment, TacticalMap, PlanningMode, ZoomPreset,
         Slot1, Slot2, Slot3, Slot4, Objectives, Pause, CommandWheel, Shout, Ability, FireMode,
         SelectOfficer1, SelectOfficer2, SelectOfficer3, SelectAllOfficers, ToggleFps, Screenshot,
-        Peek, Ping, Melee,
+        Peek, Ping, Melee, Report, NightVision,
     }
 
     // Gamepad buttons (Xbox-style names; read only when the Input System package is installed).
@@ -32,7 +32,7 @@ namespace Swat
             KeyCode.Q, KeyCode.F, KeyCode.G, KeyCode.Tab, KeyCode.Space, KeyCode.V,
             KeyCode.Alpha1, KeyCode.Alpha2, KeyCode.Alpha3, KeyCode.Alpha4, KeyCode.M, KeyCode.Escape, KeyCode.Z, KeyCode.X, KeyCode.T, KeyCode.B,
             KeyCode.F1, KeyCode.F2, KeyCode.F3, KeyCode.F4, KeyCode.F10, KeyCode.F12,
-            KeyCode.LeftControl, KeyCode.Mouse2, KeyCode.LeftAlt,
+            KeyCode.LeftControl, KeyCode.Mouse2, KeyCode.LeftAlt, KeyCode.H, KeyCode.N,
         };
 
         static readonly string[] Names =
@@ -41,7 +41,7 @@ namespace Swat
             "Switch weapon", "Flashlight", "Use equipment", "Tactical map", "Planning mode", "Camera zoom preset",
             "Primary weapon", "Sidearm", "Previous equipment", "Next equipment", "Objectives", "Pause", "Command wheel (hold)", "Shout compliance", "Role ability", "Fire mode",
             "Select officer 1", "Select officer 2", "Select officer 3", "Select whole squad", "Show FPS", "Screenshot",
-            "Peek / lean (hold)", "Ping a spot for your team (game modes)", "Melee shove / shield bash",
+            "Peek / lean (hold)", "Ping a spot for your team (game modes)", "Melee shove / shield bash", "Report to TOC", "Night vision (helmet with NVG)",
         };
 
         static KeyCode[] bindings = (KeyCode[])Defaults.Clone();
@@ -53,7 +53,7 @@ namespace Swat
             PadButton.North, PadButton.DpadUp, PadButton.RightShoulder, PadButton.Select, PadButton.None, PadButton.None,
             PadButton.None, PadButton.None, PadButton.DpadLeft, PadButton.DpadRight, PadButton.None, PadButton.Start, PadButton.LeftShoulder, PadButton.RightStick, PadButton.DpadDown, PadButton.None,
             PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
-            PadButton.None, PadButton.None, PadButton.None,
+            PadButton.None, PadButton.None, PadButton.None, PadButton.None, PadButton.None,
         };
 
         static readonly string[] PadNames = { "", "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "L3", "R3", "Start", "View", "D-pad Up", "D-pad Down", "D-pad Left", "D-pad Right" };

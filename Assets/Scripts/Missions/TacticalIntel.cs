@@ -163,6 +163,7 @@ namespace Swat
             facings.Clear();
             fovs.Clear();
             var player = game.Player;
+            playerSeesInDark = player.IsAlive && player.NightVision;
             if (player.IsAlive)
             {
                 eyes.Add(player.EyePosition);
@@ -178,12 +179,15 @@ namespace Swat
             }
         }
 
+        // Night vision: the team leader (the first eye) sees in the dark as if it were lit.
+        bool playerSeesInDark;
+
         bool Observed(Vector3 target)
         {
             bool lit = AIVisibility.IsLit(target);
             for (int i = 0; i < eyes.Count; i++)
             {
-                float range = lit ? SightRange : DarkSightRange;
+                float range = lit || (i == 0 && playerSeesInDark) ? SightRange : DarkSightRange;
                 if (AIVisibility.CanSee(eyes[i], facings[i], fovs[i], range, target, 1f)) return true;
             }
             return false;

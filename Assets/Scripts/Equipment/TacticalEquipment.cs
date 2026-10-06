@@ -20,6 +20,8 @@ namespace Swat
             {
                 case EquipmentKind.Flashbang:
                 case EquipmentKind.Smoke:
+                case EquipmentKind.CSGas:
+                case EquipmentKind.ChemLight:
                     used = ThrowFrom(player, data);
                     break;
                 case EquipmentKind.BreachingCharge:

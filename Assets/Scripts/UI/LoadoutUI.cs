@@ -341,7 +341,7 @@ namespace Swat
             }
             UITheme.Text(new Rect(x, y, cw, 40f), vest + " The vest follows the armor you pick under Armor & gear.", 14, UITheme.Dim);
             y += 44f;
-            UITheme.Text(new Rect(x, y, cw, 60f), "Looks only: headgear, face and patches don't change protection, which comes from the armor. The right shoulder keeps the officer's role colour so the squad stays easy to tell apart.", 13, UITheme.Faint);
+            UITheme.Text(new Rect(x, y, cw, 60f), "Mostly looks: protection comes from the armor. Two pieces do more: the gas mask keeps CS gas out, and the helmet with NVG gives night vision (N). The right shoulder keeps the officer's role colour so the squad stays easy to tell apart.", 13, UITheme.Faint);
             return changed;
         }
 

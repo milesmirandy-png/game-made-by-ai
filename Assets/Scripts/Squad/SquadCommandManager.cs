@@ -223,7 +223,7 @@ namespace Swat
                 case SquadOrder.Stack:
                     text = action == DoorAction.Breach ? "Stacking up for breach." : action == DoorAction.Flash ? "Stacking up, flash and clear."
                         : action == DoorAction.Open ? "Stacking up, open and clear." : action == DoorAction.Mirror ? "Copy, checking under the door."
-                        : action == DoorAction.Shotgun ? "Stacking up, shotgun breach." : "Stacking up on the door.";
+                        : action == DoorAction.Shotgun ? "Stacking up, shotgun breach." : action == DoorAction.Gas ? "Stacking up, gas and clear." : "Stacking up on the door.";
                     break;
                 default: text = "Copy."; break;
             }
@@ -245,7 +245,7 @@ namespace Swat
         {
             if (order == SquadOrder.Stack)
                 return action == DoorAction.Breach ? "Breach and clear." : action == DoorAction.Flash ? "Flash and clear." : action == DoorAction.Open ? "Open and clear."
-                    : action == DoorAction.Mirror ? "Mirror the door." : action == DoorAction.Shotgun ? "Shotgun the lock, then clear." : "Stack up.";
+                    : action == DoorAction.Mirror ? "Mirror the door." : action == DoorAction.Shotgun ? "Shotgun the lock, then clear." : action == DoorAction.Gas ? "Gas and clear." : "Stack up.";
             switch (order)
             {
                 case SquadOrder.Follow: return "On me.";
@@ -295,6 +295,7 @@ namespace Swat
                     case DoorAction.Flash: return "Flash & clear";
                     case DoorAction.Mirror: return "Mirror door";
                     case DoorAction.Shotgun: return "Shotgun & clear";
+                    case DoorAction.Gas: return "Gas & clear";
                     default: return "Stack up";
                 }
             }
@@ -316,6 +317,23 @@ namespace Swat
         // ---- Radio ----
 
         public void Radio(SquadAI officer, string text) { Say(officer, text, true); }
+
+        // The team leader on the radio (TOC reports).
+        public void PlayerRadio(string text)
+        {
+            var player = GameManager.Instance != null ? GameManager.Instance.Player : null;
+            AddLine(player != null ? player.Officer.callsign : "Lead", text, 5);
+        }
+
+        // TOC answers a moment later.
+        public void TocReply(string text)
+        {
+            tocReply = text;
+            tocReplyAt = Time.unscaledTime + 0.9f;
+        }
+
+        string tocReply;
+        float tocReplyAt;
         public void Radio(SquadAI officer, string text, bool chirp) { Say(officer, text, chirp); }
 
         void Say(SquadAI officer, string text, bool chirp)
@@ -411,6 +429,11 @@ namespace Swat
             return Carrier(door, EquipmentKind.Flashbang, OfficerRole.Tactical);
         }
 
+        public SquadAI GasCarrier(DoorController door)
+        {
+            return Carrier(door, EquipmentKind.CSGas, OfficerRole.Tactical);
+        }
+
         // Someone stacked on this door with a shotgun as their main weapon (a Breacher first).
         public SquadAI ShotgunCarrier(DoorController door)
         {
@@ -445,6 +468,11 @@ namespace Swat
 
         void Update()
         {
+            if (tocReply != null && Time.unscaledTime >= tocReplyAt)
+            {
+                Say(null, tocReply, true);
+                tocReply = null;
+            }
             var game = GameManager.Instance;
             if (game == null || !game.IsPlaying || game.Player == null)
             {
@@ -541,11 +569,12 @@ namespace Swat
         {
             Options.Clear();
             var targets = Targets();
-            bool charge = false, flash = false;
+            bool charge = false, flash = false, gas = false;
             foreach (var officer in targets)
             {
                 if (officer.Inventory.CountOf(EquipmentKind.BreachingCharge) > 0) charge = true;
                 if (officer.Inventory.CountOf(EquipmentKind.Flashbang) > 0) flash = true;
+                if (officer.Inventory.CountOf(EquipmentKind.CSGas) > 0) gas = true;
             }
             var door = WheelDoor;
             if (door != null)
@@ -555,6 +584,7 @@ namespace Swat
                 bool breachable = door.Breachable && (door.State == DoorState.Locked || door.State == DoorState.Closed || door.State == DoorState.Wedged);
                 Add(SquadOrder.Stack, DoorAction.Breach, breachable && charge, !breachable ? "This door can't be breached" : "Nobody selected has a charge");
                 Add(SquadOrder.Stack, DoorAction.Flash, flash && door.State != DoorState.Wedged, !flash ? "Nobody selected has a flashbang" : "Remove the wedge first");
+                Add(SquadOrder.Stack, DoorAction.Gas, gas && door.State != DoorState.Wedged, !gas ? "Nobody selected has CS gas" : "Remove the wedge first");
                 bool shut = door.State == DoorState.Closed || door.State == DoorState.Locked || door.State == DoorState.Wedged;
                 Add(SquadOrder.Stack, DoorAction.Mirror, shut, "The door is already open");
                 bool shotgun = false;

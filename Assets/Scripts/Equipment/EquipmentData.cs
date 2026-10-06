@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Swat
 {
-    public enum EquipmentKind { Flashbang, Smoke, BreachingCharge, DoorWedge, MedicalKit, PortableLight, ReconCamera }
+    public enum EquipmentKind { Flashbang, Smoke, BreachingCharge, DoorWedge, MedicalKit, PortableLight, ReconCamera, CSGas, ChemLight }
 
     // One type of tactical equipment. Each officer carries a limited amount,
     // limited by equipment capacity (capacityCost per item).

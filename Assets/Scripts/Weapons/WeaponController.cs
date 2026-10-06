@@ -270,7 +270,7 @@ namespace Swat
             float rested = Time.time - lastShotTime > 0.4f && bloom < 0.01f ? 0.65f : 1f;
             // Shooting on the move is a lot less accurate than standing (crouch-walking or aiming helps).
             float moving = player.IsMoving ? weapon.Spread * (player.IsCrouched || player.IsSteadyAiming ? 0.5f : 1f) + (player.IsCrouched ? 0.4f : 1.2f) : 0f;
-            Spread = (weapon.Spread * rested + bloom) * stance + moving + (sprinting ? 6f : 0f);
+            Spread = ((weapon.Spread * rested + bloom) * stance + moving + (sprinting ? 6f : 0f)) * (1f + player.GasExposure * 0.8f);
 
             if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
             bool blocked = IsReloading || IsSwitching || sprinting || Time.time < raisedAt;

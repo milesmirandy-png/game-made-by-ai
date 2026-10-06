@@ -216,6 +216,12 @@ namespace Swat
             if (State == CivilianState.Panic || State == CivilianState.Flee || State == CivilianState.Wander) Hide();
         }
 
+        // CS gas: they double over coughing.
+        public void Gassed()
+        {
+            Stun(1.4f);
+        }
+
         public void Stun(float duration)
         {
             if (!IsAlive || IsEvacuated || State == CivilianState.Stunned) return;

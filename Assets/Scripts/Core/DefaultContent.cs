@@ -296,6 +296,8 @@ namespace Swat
                 Item("medkit", "Medical Kit", EquipmentKind.MedicalKit, 2, 4, 0f, 0f, 0f, 0f, 0f, 40f, 2.5f, true, "Restores some health to you, a teammate or a civilian."),
                 Item("portable_light", "Portable Light", EquipmentKind.PortableLight, 1, 3, 9f, 0f, 180f, 4f, 0f, 0f, 0.5f, true, "Drop it to light up a dark room."),
                 Item("recon_camera", "Recon Camera", EquipmentKind.ReconCamera, 2, 1, 0f, 0f, 0f, 0f, 0f, 0f, 1f, false, "Peek under a closed door to count who is inside. Reusable."),
+                Item("cs_gas", "CS Gas", EquipmentKind.CSGas, 1, 3, 4.5f, 1.3f, 16f, 12f, 10f, 0f, 0f, true, "Choking gas: suspects inside cough, stagger and give up more easily. Anyone without a gas mask chokes too (Look tab: Face - Gas mask)."),
+                Item("chem_light", "Chem Lights", EquipmentKind.ChemLight, 0, 8, 2.5f, 0.7f, 0f, 8f, 0f, 0f, 0f, true, "Glow sticks to mark rooms you've cleared. They stay lit all mission and show on the map."),
             };
         }
 
