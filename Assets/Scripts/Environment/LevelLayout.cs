@@ -82,11 +82,22 @@ namespace Swat
         public readonly List<EvidenceItem> evidence = new List<EvidenceItem>();
         public AlarmSystem alarm;
 
+        // The room a point is in. A closet inside a corridor's rectangle is its own room, so the
+        // smallest room that contains the point wins.
         public RoomController RoomAt(Vector3 point)
         {
+            RoomController best = null;
+            float bestArea = float.MaxValue;
             for (int i = 0; i < rooms.Count; i++)
-                if (rooms[i].Contains(point)) return rooms[i];
-            return null;
+            {
+                if (!rooms[i].Contains(point)) continue;
+                var size = rooms[i].Bounds.size;
+                float area = size.x * size.z;
+                if (area >= bestArea) continue;
+                best = rooms[i];
+                bestArea = area;
+            }
+            return best;
         }
 
         public RoomController Room(string id)

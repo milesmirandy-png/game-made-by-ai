@@ -9,11 +9,15 @@ namespace Swat
     //  Ground floor                Second floor               Roof (z 38-54)
     //  +----+----+----------+     +----+----+-----------+
     //  | 1B | 1C |Maintenanc|     | 2D | 2E |Roof Access|--stairs up
-    //  +-D--+-D--+----L-----+     +-D--+-D--+-----D-----+
+    //  +-D-[T]-D-+----L-----+     +-D-[T]-D-+-----D-----+
     //  D        Corridor    |     |       Corridor      |
-    //  +-D--+--  -+--S-+-D--+     +-D--+-L--+-S--+--D---+
+    //  +-D--+--  -[M]S-+-D--+     +-D--+-L-[M]-S--+--D--+
     //  | 1A |Lobby|Stair|Lau|     | 2A | 2B |Stair| 2C  |
     //  +----+--D--+-----+-L-+     +----+----+-----+-----+
+    //
+    // Each apartment has a real plan: a living room and kitchen by the front door, a bedroom with its
+    // own door and a bathroom with another, so clearing one is a few rooms, not one box. The trash
+    // room [T] and the mail alcove [M] jut into the corridors so they don't run 30 m straight.
     public static class ApartmentMap
     {
         const float Floor2 = 50f;
@@ -53,6 +57,7 @@ namespace Swat
             b.Room("unit1b", "Apartment 1B", 0f, 11f, 10f, 20f, wood);
             b.Room("unit1c", "Apartment 1C", 10f, 11f, 20f, 20f, wood);
             b.Room("maintenance", "Maintenance Room", 20f, 11f, 30f, 20f, new Color(0.42f, 0.42f, 0.42f));
+            Recesses(b, 0f, inside);
 
             b.WallX(0f, 0f, 30f, brick, true, Gap.Door(15f, "main_entrance", false, 2f), Gap.Locked(27f, "laundry_back", true, true));
             b.WallX(20f, 0f, 30f, brick, true);
@@ -71,11 +76,11 @@ namespace Swat
             b.WallZ(10f, 11f, 20f, inside, false);
             b.WallZ(20f, 11f, 20f, inside, false);
 
-            Unit(b, 0f, 0f, 10f, 8f, true);
-            Unit(b, 0f, 11f, 10f, 20f, false);
-            Unit(b, 10f, 11f, 20f, 20f, false);
+            Unit(b, "unit1a", 0f, 0f, 10f, 8f, true, inside);
+            Unit(b, "unit1b", 0f, 11f, 10f, 20f, false, inside);
+            Unit(b, "unit1c", 10f, 11f, 20f, 20f, false, inside);
             b.Couch(new Vector3(17.5f, 0f, 1.2f), 180f, new Color(0.4f, 0.3f, 0.25f));
-            b.Prop("Mailboxes", new Vector3(10.4f, 0f, 4.5f), new Vector3(0.4f, 1.4f, 2f), new Color(0.6f, 0.55f, 0.4f), false);
+            b.Prop("Mailboxes", new Vector3(18.7f, 0f, 8.25f), new Vector3(2f, 1.4f, 0.4f), new Color(0.6f, 0.55f, 0.4f), false);
             b.Plant(new Vector3(19.2f, 0f, 7.2f));
             foreach (float z in new[] { 2f, 3.3f, 4.6f })
                 b.Prop("Washer", new Vector3(29.4f, 0f, z), new Vector3(0.9f, 1f, 1.1f), new Color(0.9f, 0.9f, 0.92f), true);
@@ -94,6 +99,7 @@ namespace Swat
             b.Room("unit2d", "Apartment 2D", Floor2, 11f, Floor2 + 10f, 20f, wood);
             b.Room("unit2e", "Apartment 2E", Floor2 + 10f, 11f, Floor2 + 20f, 20f, wood);
             b.Room("roofaccess", "Roof Access", Floor2 + 20f, 11f, Floor2 + 30f, 20f, new Color(0.42f, 0.42f, 0.42f));
+            Recesses(b, Floor2, inside);
 
             b.WallX(0f, Floor2, Floor2 + 30f, brick, true);
             b.WallX(20f, Floor2, Floor2 + 30f, brick, true);
@@ -112,10 +118,10 @@ namespace Swat
             b.WallZ(Floor2 + 10f, 11f, 20f, inside, false);
             b.WallZ(Floor2 + 20f, 11f, 20f, inside, false);
 
-            Unit(b, Floor2, 0f, Floor2 + 10f, 8f, true);
-            Unit(b, Floor2 + 10f, 0f, Floor2 + 20f, 8f, true);
-            Unit(b, Floor2, 11f, Floor2 + 10f, 20f, false);
-            Unit(b, Floor2 + 10f, 11f, Floor2 + 20f, 20f, false);
+            Unit(b, "unit2a", Floor2, 0f, Floor2 + 10f, 8f, true, inside);
+            Unit(b, "unit2b", Floor2 + 10f, 0f, Floor2 + 20f, 8f, true, inside);
+            Unit(b, "unit2d", Floor2, 11f, Floor2 + 10f, 20f, false, inside);
+            Unit(b, "unit2e", Floor2 + 10f, 11f, Floor2 + 20f, 20f, false, inside);
             b.Bed(new Vector3(Floor2 + 28.6f, 0f, 1.5f), 0f);
             b.Crate(new Vector3(Floor2 + 22f, 0f, 18.5f), 1f, true);
             b.Crate(new Vector3(Floor2 + 27f, 0f, 13f), 1f, false);
@@ -150,21 +156,21 @@ namespace Swat
             b.EnemySpot("ground", 13f, 3f, 90f);
             b.EnemySpot("ground", 3f, 9.5f, 90f, new Vector3(3f, 0f, 9.5f), new Vector3(28f, 0f, 9.5f));
             b.EnemySpot("ground", 6f, 14.2f, 180f);
-            b.EnemySpot("ground", 15f, 16f, 180f);
+            b.EnemySpot("ground", 13.5f, 16.5f, 180f);
             b.EnemySpot("ground", 24f, 17f, 180f);
             b.EnemySpot("ground", 26f, 4f, 270f);
-            b.EnemySpot("upper", Floor2 + 5f, 4f, 0f);
-            b.EnemySpot("upper", Floor2 + 15f, 4.5f, 0f);
+            b.EnemySpot("upper", Floor2 + 6.2f, 5.6f, 0f);
+            b.EnemySpot("upper", Floor2 + 16.2f, 5.4f, 0f);
             b.EnemySpot("upper", Floor2 + 17f, 6f, 270f);
             b.EnemySpot("upper", Floor2 + 2f, 9.5f, 90f, new Vector3(Floor2 + 2f, 0f, 9.5f), new Vector3(Floor2 + 28f, 0f, 9.5f));
             b.EnemySpot("upper", Floor2 + 6f, 16f, 180f);
-            b.EnemySpot("upper", Floor2 + 15f, 15f, 180f);
+            b.EnemySpot("upper", Floor2 + 13.5f, 16.2f, 180f);
             b.EnemySpot("upper", Floor2 + 25f, 15.5f, 180f);
             b.EnemySpot("upper", Floor2 + 10f, 45f, 90f);
             b.EnemySpot("upper", Floor2 + 22f, 51.5f, 180f);
 
             // Residents
-            b.CivilianSpot("ground", 2.5f, 6.5f, 45f);
+            b.CivilianSpot("ground", 4f, 6f, 45f);
             b.CivilianSpot("ground", 3f, 18f, 135f);
             b.CivilianSpot("ground", 13.2f, 18.6f, 135f);
             b.CivilianSpot("ground", 25f, 1.6f, 45f);
@@ -183,15 +189,40 @@ namespace Swat
             b.Stairs(x, z, label, destination, 0f, area);
         }
 
-        // Furnishes one apartment. South units have their door on the north wall, north units on the south wall.
-        static void Unit(LevelBuilder b, float x0, float z0, float x1, float z1, bool doorNorth)
+        // The trash room on the north side and the mail alcove on the south side of a floor's corridor
+        // (z 8-11), so it doesn't run straight from end to end.
+        static void Recesses(LevelBuilder b, float x, Color inside)
         {
-            float back = doorNorth ? z0 : z1;
-            float sign = doorNorth ? 1f : -1f;
-            b.Bed(new Vector3(x0 + 1.2f, 0f, back + sign * 1.3f), doorNorth ? 180f : 0f);
-            b.Couch(new Vector3(x1 - 1.6f, 0f, back + sign * 1.2f), doorNorth ? 180f : 0f, new Color(0.35f, 0.4f, 0.5f));
-            b.Table(new Vector3(x0 + 3.4f, 0f, back + sign * 4.2f), new Vector3(1.2f, 0.75f, 0.8f), new Color(0.55f, 0.42f, 0.3f));
-            b.Prop("Kitchen Counter", new Vector3(x1 - 0.4f, 0f, back + sign * 4.3f), new Vector3(0.6f, 0.95f, 2f), new Color(0.7f, 0.7f, 0.72f), true);
+            b.WallX(9.6f, x + 8.8f, x + 11.2f, inside, false);
+            b.WallZ(x + 8.8f, 9.6f, 11f, inside, false);
+            b.WallZ(x + 11.2f, 9.6f, 11f, inside, false);
+            b.WallX(9.4f, x + 17.4f, x + 20f, inside, false);
+            b.WallZ(x + 17.4f, 8f, 9.4f, inside, false);
+        }
+
+        // Builds and furnishes one 10 m apartment. 'u' runs along x from the unit's west wall, 'v' in from
+        // the front door's wall (the north wall for the south units, the south wall for the north ones).
+        //   front door at u 5; living room and kitchen across the front (v 0-3.6) and down the middle;
+        //   bedroom u 0-5, v 3.6 to the back, door at u 2.5; bathroom u 7.4-10, v 5.4 to the back, door at u 8.7.
+        static void Unit(LevelBuilder b, string id, float x0, float z0, float x1, float z1, bool doorNorth, Color inside)
+        {
+            float depth = z1 - z0;
+            System.Func<float, float> Z = v => doorNorth ? z1 - v : z0 + v;
+            System.Action<float, float, float, Gap[]> along = (v, u0, u1, gaps) => b.WallX(Z(v), x0 + u0, x0 + u1, inside, false, gaps);
+            System.Action<float, float, float> across = (u, v0, v1) => b.WallZ(x0 + u, Mathf.Min(Z(v0), Z(v1)), Mathf.Max(Z(v0), Z(v1)), inside, false);
+            along(3.6f, 0f, 5f, new[] { Gap.Door(x0 + 2.5f, id + "_bedroom", false, 1.2f) });
+            across(5f, 3.6f, depth);
+            along(5.4f, 7.4f, 10f, new[] { Gap.Door(x0 + 8.7f, id + "_bathroom", false, 1.2f) });
+            across(7.4f, 5.4f, depth);
+
+            float yaw = doorNorth ? 0f : 180f;
+            b.Bed(new Vector3(x0 + 1.4f, 0f, Z(depth - 1.25f)), yaw);
+            b.Prop("Wardrobe", new Vector3(x0 + 4.4f, 0f, Z(depth - 0.4f)), new Vector3(1f, 1.9f, 0.55f), new Color(0.4f, 0.3f, 0.22f), true);
+            b.Prop("Bathtub", new Vector3(x0 + 8.7f, 0f, Z(depth - 0.42f)), new Vector3(1.7f, 0.6f, 0.75f), new Color(0.92f, 0.92f, 0.9f), true);
+            b.Couch(new Vector3(x0 + 9.4f, 0f, Z(2f)), 90f, new Color(0.35f, 0.4f, 0.5f));
+            b.Table(new Vector3(x0 + 2.2f, 0f, Z(1.8f)), new Vector3(1.2f, 0.75f, 0.8f), new Color(0.55f, 0.42f, 0.3f));
+            b.Prop("Kitchen Counter", new Vector3(x0 + 6.2f, 0f, Z(depth - 0.35f)), new Vector3(2.2f, 0.95f, 0.6f), new Color(0.7f, 0.7f, 0.72f), true);
+            b.Prop("Fridge", new Vector3(x0 + 5.45f, 0f, Z(depth - 1.4f)), new Vector3(0.7f, 1.8f, 0.7f), new Color(0.85f, 0.85f, 0.86f), true);
         }
     }
 }

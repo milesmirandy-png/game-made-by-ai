@@ -15,6 +15,10 @@ namespace Swat
     //       |  Dock     |                           |  Room  |
     //   z=0 +--(roll door)-----+-----D--------------+--------+
     //      x=0         18     (front)              40       52
+    //
+    // Big industrial spaces, but nowhere to see 40 m: pallet stacks and the forklift split the dock,
+    // hoppers stand on the production conveyor, tall parts racks screen the wide openings into the
+    // assembly floor, the steel frames sit across its lanes and a column breaks up the upper corridor.
     public static class FactoryMap
     {
         public static LevelLayout Build(Transform parent)
@@ -71,19 +75,23 @@ namespace Swat
             b.WallZ(52f, 0f, 36f, outside, true, Gap.Door(15f, "corridor_east"));
             b.WallZ(18f, 0f, 12f, inside, false, Gap.Open(6f, 3f));
             b.WallZ(40f, 0f, 12f, inside, false, Gap.Door(6f, "locker_door", true));
-            b.WallX(12f, 0f, 52f, inside, false, Gap.Door(7f, "dock_tool", true), Gap.Open(16f, 3f), Gap.Open(26f, 4f), Gap.Door(37f, "prod_corr"), Gap.Door(46f, "locker_corr", true));
+            b.WallX(12f, 0f, 52f, inside, false, Gap.Door(4.5f, "dock_tool", true), Gap.Open(16f, 3f), Gap.Open(26f, 4f), Gap.Door(37f, "prod_corr"), Gap.Door(46f, "locker_corr", true));
             b.WallZ(14f, 12f, 36f, inside, false, Gap.Door(18f, "tool_assembly"), Gap.Door(30f, "boiler_assembly", true));
-            b.WallX(24f, 0f, 14f, inside, false, Gap.Door(7f, "tool_boiler", true));
+            b.WallX(24f, 0f, 14f, inside, false, Gap.Door(9.5f, "tool_boiler", true));
             b.WallZ(34f, 12f, 36f, inside, false, Gap.Door(15f, "assembly_corr"), Gap.Door(27f, "assembly_foreman", true));
             b.WallX(18f, 34f, 52f, inside, false, Gap.Door(38.5f, "foreman_door"), Gap.Electronic(47.5f, "control_door"));
             b.WallZ(43f, 18f, 36f, inside, false);
 
             // Loading dock
-            b.Crate(new Vector3(2.5f, 0f, 9.5f), 1.2f, true);
+            b.Crate(new Vector3(2.2f, 0f, 9.5f), 1.2f, true);
+            b.Prop("Pallet Stack", new Vector3(4.6f, 0f, 8.6f), new Vector3(2f, 1.8f, 1.2f), new Color(0.62f, 0.5f, 0.32f), true);
             b.Crate(new Vector3(15f, 0f, 9.5f), 1.2f, false);
             b.Crate(new Vector3(15.5f, 0f, 3f), 1.2f, true);
             b.Prop("Pallet", new Vector3(4f, 0f, 3.5f), new Vector3(1.2f, 0.3f, 1.2f), new Color(0.55f, 0.42f, 0.25f), false);
             b.Prop("Forklift", new Vector3(12f, 0f, 6f), new Vector3(1.2f, 1.8f, 2.2f), new Color(0.95f, 0.7f, 0.1f), true, 90f);
+            var pallets = new Color(0.62f, 0.5f, 0.32f);
+            b.Prop("Pallet Stack", new Vector3(6.5f, 0f, 4.6f), new Vector3(2f, 1.8f, 1.6f), pallets, true);
+            b.Prop("Pallet Stack", new Vector3(13.2f, 0f, 7.6f), new Vector3(2f, 1.8f, 1.6f), pallets, true);
 
             // Production floor: machines in two rows and a conveyor.
             foreach (float x in new[] { 22f, 28f, 34f })
@@ -92,6 +100,9 @@ namespace Swat
                 b.Prop("Press Machine", new Vector3(x, 0f, 9f), new Vector3(2f, 2.2f, 2f), new Color(0.35f, 0.38f, 0.42f), true);
             }
             b.Prop("Conveyor", new Vector3(28f, 0f, 6.25f), new Vector3(10f, 0.9f, 0.8f), new Color(0.25f, 0.26f, 0.28f), true);
+            b.Prop("Hopper", new Vector3(25f, 0f, 6.25f), new Vector3(1.8f, 2.6f, 1.4f), new Color(0.42f, 0.4f, 0.36f), true);
+            b.Prop("Hopper", new Vector3(31f, 0f, 6.25f), new Vector3(1.8f, 2.6f, 1.4f), new Color(0.42f, 0.4f, 0.36f), true);
+            b.Prop("Parts Bin", new Vector3(19.6f, 0f, 5f), new Vector3(1.2f, 1.6f, 1f), new Color(0.3f, 0.45f, 0.6f), true);
 
             // Locker room
             b.Prop("Lockers", new Vector3(51.4f, 0f, 5f), new Vector3(0.6f, 2f, 6f), new Color(0.4f, 0.45f, 0.5f), true);
@@ -109,18 +120,27 @@ namespace Swat
             b.Prop("Pipe Rack", new Vector3(12.8f, 0f, 27f), new Vector3(0.6f, 2f, 3f), new Color(0.5f, 0.5f, 0.52f), true);
 
             // Assembly floor: steel frames, crates and a parked crane cart.
-            b.Prop("Steel Frame", new Vector3(20f, 0f, 20f), new Vector3(4f, 1.6f, 1.2f), new Color(0.4f, 0.32f, 0.28f), true);
-            b.Prop("Steel Frame", new Vector3(28f, 0f, 20f), new Vector3(4f, 1.6f, 1.2f), new Color(0.4f, 0.32f, 0.28f), true);
+            b.Prop("Parts Rack", new Vector3(16.2f, 0f, 14.8f), new Vector3(2.6f, 2.4f, 0.8f), new Color(0.35f, 0.37f, 0.4f), true);
+            b.Prop("Parts Rack", new Vector3(26f, 0f, 15f), new Vector3(3.2f, 2.4f, 0.8f), new Color(0.35f, 0.37f, 0.4f), true);
+            b.Prop("Steel Frame", new Vector3(20f, 0f, 18.4f), new Vector3(4f, 1.6f, 1.2f), new Color(0.4f, 0.32f, 0.28f), true);
+            b.Prop("Steel Frame", new Vector3(29f, 0f, 20.6f), new Vector3(4f, 1.6f, 1.2f), new Color(0.4f, 0.32f, 0.28f), true);
             b.Prop("Steel Frame", new Vector3(24f, 0f, 28f), new Vector3(1.2f, 1.6f, 4f), new Color(0.4f, 0.32f, 0.28f), true);
             b.Crate(new Vector3(17f, 0f, 33f), 1.2f, true);
+            b.Prop("Steel Coils", new Vector3(22.8f, 0f, 24.6f), new Vector3(1.6f, 1.6f, 1.6f), new Color(0.45f, 0.45f, 0.48f), true);
+            b.Prop("Steel Coils", new Vector3(32.2f, 0f, 29.5f), new Vector3(1.6f, 1.6f, 1.6f), new Color(0.45f, 0.45f, 0.48f), true);
             b.Crate(new Vector3(31f, 0f, 33.5f), 1.2f, false);
             b.Crate(new Vector3(30.5f, 0f, 24f), 1f, true);
             b.Prop("Crane Cart", new Vector3(18f, 0f, 26f), new Vector3(1.6f, 1.4f, 2.4f), new Color(0.9f, 0.65f, 0.1f), true);
+
+            // Upper corridor
+            b.Pillar(43f, 15f, 0.8f);
 
             // Foreman's office and control room
             b.Desk(new Vector3(38.5f, 0f, 30f), 180f);
             b.Desk(new Vector3(37f, 0f, 22f), 0f);
             b.Shelf(new Vector3(42.4f, 0f, 26f), 90f, 2f);
+            b.Partition(34.2f, 26f, 40f, 26f, 1.8f);
+            b.Prop("Control Panels", new Vector3(46f, 0f, 26.5f), new Vector3(4f, 1.8f, 0.8f), new Color(0.3f, 0.32f, 0.36f), true);
             b.Console("foreman_terminal", "Foreman Terminal", 40.5f, 35.4f, 0f, true, false);
             b.Console("plant_console", "Plant Control Console", 47.5f, 35.4f, 0f, true, true);
             b.Prop("Server Rack", new Vector3(51.4f, 0f, 24f), new Vector3(0.8f, 2.2f, 0.8f), new Color(0.12f, 0.12f, 0.14f), true);
@@ -149,7 +169,7 @@ namespace Swat
 
             // Suspect spawn pool
             b.EnemySpot("dock", 5f, 6.5f, 90f, new Vector3(5f, 0f, 6.5f), new Vector3(9f, 0f, 9f), new Vector3(9f, 0f, 2f));
-            b.EnemySpot("dock", 14f, 7.5f, 270f);
+            b.EnemySpot("dock", 16f, 6.2f, 270f);
             b.EnemySpot("dock", 2.5f, 1.5f, 45f);
             b.EnemySpot("production", 20f, 6.25f, 90f, new Vector3(20f, 0f, 1.2f), new Vector3(37f, 0f, 1.2f), new Vector3(37f, 0f, 11f), new Vector3(20f, 0f, 11f));
             b.EnemySpot("production", 31f, 11f, 180f);

@@ -8,13 +8,18 @@ namespace Swat
     //  z=24 +-------+-------+--------+---------+
     //       | Vault |Safe   |Security|Manager's|
     //       |       |Deposit| Room   | Office  |
-    //  z=16 +---E---+---L---+---E----+----D----+
-    //       |           Staff Corridor         L (rear exit)
-    //  z=13 +---D---+-------L---------+----D----+
-    //       | Break D  Banking Hall   D  Loan   |
-    //  (side L)Room |  (teller line)  | Offices |
+    //  z=16 +----E--+---L---+--E-----+------D--+
+    //       | Staff Corridor  [M]  Staff Corridor L (rear exit)
+    //  z=13 +-D-----+-----------L-----+----D----+
+    //       | Break |  Banking Hall   D  Loan   |
+    //  (side L)Room D  (teller line)  | Offices |
     //   z=0 +-------+-------D---------+---------+
     //      x=0      8                24        34
+    //
+    // [M] is the mantrap: a security checkpoint across the staff corridor with two offset doors, so
+    // the corridor can't be seen down end to end and the secure rooms can't be rushed. Doors that
+    // used to line up across the corridor (break room / vault, teller line / security room) are
+    // staggered, columns break up the banking hall and partitions split the loan offices.
     public static class BankMap
     {
         public static LevelLayout Build(Transform parent)
@@ -57,6 +62,7 @@ namespace Swat
             b.Room("hall", "Banking Hall", 8f, 0f, 24f, 13f, marble);
             b.Room("loans", "Loan Offices", 24f, 0f, 34f, 13f, carpet);
             b.Room("corridor", "Staff Corridor", 0f, 13f, 34f, 16f, new Color(0.6f, 0.6f, 0.62f));
+            b.Room("checkpoint", "Security Checkpoint", 15f, 13f, 17f, 16f, new Color(0.5f, 0.52f, 0.55f));
             b.Room("vault", "Vault", 0f, 16f, 8f, 24f, new Color(0.45f, 0.47f, 0.5f));
             b.Room("deposit", "Safe Deposit Room", 8f, 16f, 16f, 24f, new Color(0.5f, 0.5f, 0.52f));
             b.Room("security", "Security Room", 16f, 16f, 24f, 24f, new Color(0.3f, 0.33f, 0.38f));
@@ -67,10 +73,13 @@ namespace Swat
             b.WallX(24f, 0f, 34f, stone, true);
             b.WallZ(0f, 0f, 24f, stone, true, Gap.Locked(6f, "break_side", true, true));
             b.WallZ(34f, 0f, 24f, stone, true, Gap.Locked(14.5f, "rear_exit", true, true));
-            b.WallZ(8f, 0f, 13f, inside, false, Gap.Door(10f, "break_hall", true));
-            b.WallZ(24f, 0f, 13f, inside, false, Gap.Door(10f, "hall_loans", true));
-            b.WallX(13f, 0f, 34f, inside, false, Gap.Door(4f, "break_corr"), Gap.Locked(20f, "teller_door", true, true), Gap.Door(29f, "loans_corr", true));
-            b.WallX(16f, 0f, 34f, inside, false, Gap.Electronic(4f, "vault_door"), Gap.Locked(12f, "deposit_door", true, true), Gap.Electronic(20f, "security_door"), Gap.Door(29f, "manager_door", true));
+            b.WallZ(8f, 0f, 13f, inside, false, Gap.Door(6.5f, "break_hall", true));
+            b.WallZ(24f, 0f, 13f, inside, false, Gap.Door(11.2f, "hall_loans", true));
+            b.WallX(13f, 0f, 34f, inside, false, Gap.Door(2.2f, "break_corr"), Gap.Locked(21.5f, "teller_door", true, true), Gap.Door(29f, "loans_corr", true));
+            b.WallX(16f, 0f, 34f, inside, false, Gap.Electronic(5.2f, "vault_door"), Gap.Locked(12f, "deposit_door", true, true), Gap.Electronic(18.6f, "security_door"), Gap.Door(31.4f, "manager_door", true));
+            // The mantrap: a door near the south wall on the west side, near the north wall on the east.
+            b.WallZ(15f, 13f, 16f, inside, false, Gap.Door(13.8f, "checkpoint_west", true, 1.2f));
+            b.WallZ(17f, 13f, 16f, inside, false, Gap.Door(15.2f, "checkpoint_east", true, 1.2f));
             b.WallZ(8f, 16f, 24f, inside, false);
             b.WallZ(16f, 16f, 24f, inside, false);
             b.WallZ(24f, 16f, 24f, inside, false);
@@ -84,18 +93,24 @@ namespace Swat
             b.Couch(new Vector3(21f, 0f, 1.3f), 0f, new Color(0.25f, 0.3f, 0.4f));
             b.Plant(new Vector3(8.6f, 0f, 0.6f));
             b.Plant(new Vector3(23.4f, 0f, 0.6f));
+            b.Pillar(11f, 6.5f, 0.7f);
+            b.Pillar(21f, 6.5f, 0.7f);
             b.Console("teller_terminal", "Teller Terminal", 11f, 12.4f, 0f, true, false);
 
             // Break room
             b.Table(new Vector3(4f, 0f, 5f), new Vector3(2.4f, 0.75f, 1.2f), new Color(0.75f, 0.72f, 0.66f));
             b.Prop("Vending Machine", new Vector3(7.4f, 0f, 1f), new Vector3(0.8f, 2f, 1f), new Color(0.2f, 0.4f, 0.7f), true);
-            b.Couch(new Vector3(1.2f, 0f, 11f), 90f, new Color(0.35f, 0.3f, 0.25f));
+            b.Couch(new Vector3(1.2f, 0f, 9.5f), 90f, new Color(0.35f, 0.3f, 0.25f));
 
-            // Loan offices
-            b.Desk(new Vector3(27f, 0f, 4f), 0f);
-            b.Desk(new Vector3(31f, 0f, 4f), 0f);
-            b.Desk(new Vector3(29f, 0f, 9.5f), 180f);
-            b.Shelf(new Vector3(33.6f, 0f, 6f), 90f, 2f);
+            // Loan offices: a partition splits the desks from the waiting side, with a gap by the hall door.
+            b.Desk(new Vector3(28f, 0f, 3.2f), 0f);
+            b.Desk(new Vector3(32f, 0f, 3.2f), 0f);
+            b.Desk(new Vector3(29.5f, 0f, 10.5f), 180f);
+            b.Partition(26.6f, 7f, 34f, 7f);
+            b.Partition(30f, 2f, 30f, 6.9f, 1.5f);
+            b.Partition(25.4f, 9.6f, 25.4f, 12.7f);
+            b.Shelf(new Vector3(33.6f, 0f, 9.5f), 90f, 2f);
+            b.Couch(new Vector3(27.4f, 0f, 8.6f), 0f, new Color(0.25f, 0.3f, 0.4f));
 
             // Vault and safe deposit
             b.Prop("Deposit Boxes", new Vector3(0.5f, 0f, 20f), new Vector3(0.8f, 2.2f, 6f), new Color(0.6f, 0.62f, 0.66f), true);
@@ -112,7 +127,7 @@ namespace Swat
 
             // Manager's office
             b.Desk(new Vector3(29f, 0f, 21f), 180f, 2f);
-            b.Couch(new Vector3(32.5f, 0f, 17f), 0f, new Color(0.35f, 0.2f, 0.15f));
+            b.Couch(new Vector3(32.5f, 0f, 19.5f), 0f, new Color(0.35f, 0.2f, 0.15f));
             b.Prop("Safe", new Vector3(33.4f, 0f, 23.2f), new Vector3(0.8f, 1f, 0.8f), new Color(0.25f, 0.25f, 0.27f), true);
 
             // Security
@@ -123,7 +138,7 @@ namespace Swat
             b.Camera(16f, -0.6f, 180f);
             b.AlarmPanel(8.25f, 6f, 90f);
             b.Beacon(16f, 6f);
-            b.Beacon(17f, 14.5f);
+            b.Beacon(19.5f, 14.5f);
             b.Beacon(4f, 20f);
 
             b.Evidence(3f, 20.5f);
@@ -136,14 +151,17 @@ namespace Swat
             // Suspect spawn pool
             b.EnemySpot("hall", 12f, 4f, 0f);
             b.EnemySpot("hall", 20.5f, 3.5f, 0f);
-            b.EnemySpot("hall", 16f, 7f, 180f, new Vector3(11f, 0f, 7f), new Vector3(21f, 0f, 7f));
+            b.EnemySpot("hall", 16f, 7f, 180f, new Vector3(12f, 0f, 7f), new Vector3(20f, 0f, 7f));
             b.EnemySpot("hall", 14.5f, 10.4f, 180f);
             b.EnemySpot("hall", 21.5f, 11.2f, 270f);
-            b.EnemySpot("loans", 26.5f, 6.5f, 90f);
+            b.EnemySpot("loans", 28f, 5.2f, 180f);
             b.EnemySpot("loans", 32f, 11.5f, 180f);
+            b.EnemySpot("loans", 25.5f, 6.2f, 90f);
             b.EnemySpot("breakroom", 3f, 3f, 0f);
             b.EnemySpot("breakroom", 6f, 11f, 180f);
-            b.EnemySpot("corridor", 6f, 14.5f, 90f, new Vector3(6f, 0f, 14.5f), new Vector3(30f, 0f, 14.5f));
+            b.EnemySpot("corridor", 6f, 14.5f, 90f, new Vector3(6f, 0f, 14.5f), new Vector3(14f, 0f, 14.5f));
+            b.EnemySpot("corridor", 30f, 14.5f, 270f, new Vector3(30f, 0f, 14.5f), new Vector3(18f, 0f, 14.5f));
+            b.EnemySpot("checkpoint", 16f, 14.5f, 0f);
             b.EnemySpot("vault", 3f, 21.5f, 90f);
             b.EnemySpot("vault", 6.5f, 17.5f, 0f);
             b.EnemySpot("deposit", 12f, 22.8f, 180f);
@@ -159,6 +177,7 @@ namespace Swat
             b.CivilianSpot("hall", 16.5f, 10.2f, 180f);
             b.CivilianSpot("hall", 19.5f, 10.2f, 180f);
             b.CivilianSpot("loans", 25.2f, 1.2f, 45f);
+            b.CivilianSpot("loans", 31.8f, 1.2f, 0f);
             b.CivilianSpot("loans", 32.8f, 12.2f, 225f);
             b.CivilianSpot("breakroom", 1.2f, 1.2f, 45f);
             b.CivilianSpot("vault", 7.2f, 22.4f, 225f);

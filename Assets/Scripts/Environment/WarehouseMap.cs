@@ -13,6 +13,10 @@ namespace Swat
     //       |        Loading Bays        E   Restricted     |
     //   z=0 +--bay1----bay2(L)---bay3----+-------E----------+
     //      x=0                          30                 48
+    //
+    // The shelving rows are staggered, so the cross aisles don't line up, and pallet stacks stand in
+    // the long aisles against alternate sides, so they zig-zag: nowhere in the aisles can you see
+    // the full 30 m. The loading bays have pallets and the forklift for cover.
     public static class WarehouseMap
     {
         public static LevelLayout Build(Transform parent)
@@ -59,7 +63,7 @@ namespace Swat
 
             b.WallX(10f, 0f, 30f, inside, false, Gap.Open(8f, 4f), Gap.Open(22f, 4f));
             b.WallZ(30f, 0f, 10f, inside, false, Gap.Electronic(5f, "restricted_door"));
-            b.WallZ(30f, 10f, 20f, inside, false, Gap.Door(15f, "aisles_break", true));
+            b.WallZ(30f, 10f, 20f, inside, false, Gap.Door(17.5f, "aisles_break", true));
             b.WallZ(30f, 20f, 32f, inside, false, Gap.Door(26f, "aisles_office", true));
             b.WallX(10f, 30f, 48f, inside, false);
             b.WallZ(39f, 10f, 20f, inside, false, Gap.Door(13f, "break_booth"));
@@ -68,16 +72,44 @@ namespace Swat
             b.WallZ(39f, 20f, 32f, inside, false, Gap.Door(29f, "office_manager"));
 
             // Loading bays
+            var pallet = new Color(0.62f, 0.5f, 0.32f);
             b.Crate(new Vector3(3.5f, 0f, 4f), 1.2f, true);
-            b.Crate(new Vector3(12f, 0f, 6.5f), 1.2f, false);
-            b.Crate(new Vector3(19f, 0f, 3f), 1.2f, false);
-            b.Crate(new Vector3(27f, 0f, 5f), 1.2f, true);
+            b.Prop("Pallet Stack", new Vector3(7.6f, 0f, 5.6f), new Vector3(2f, 1.8f, 1.4f), pallet, true);
+            b.Prop("Pallet Stack", new Vector3(11.4f, 0f, 1.8f), new Vector3(2f, 1.6f, 1.4f), pallet, true);
+            b.Prop("Pallet Stack", new Vector3(3f, 0f, 8.4f), new Vector3(2f, 1.6f, 1.2f), pallet, true);
+            b.Prop("Pallet Stack", new Vector3(25.2f, 0f, 8.6f), new Vector3(2f, 1.6f, 1.2f), pallet, true);
+            b.Prop("Pallet Stack", new Vector3(21.5f, 0f, 5.6f), new Vector3(1.4f, 1.8f, 2f), pallet, true);
+            b.Crate(new Vector3(19f, 0f, 3.2f), 1.2f, true);
+            b.Prop("Pallet Stack", new Vector3(20f, 0f, 1f), new Vector3(2f, 1.6f, 1.4f), pallet, true);
+            b.Crate(new Vector3(27f, 0f, 4.4f), 1.2f, true);
             b.Prop("Forklift", new Vector3(15f, 0f, 7.2f), new Vector3(1.2f, 1.8f, 2.2f), new Color(0.95f, 0.7f, 0.1f), true, 90f);
 
-            // Storage aisles: rows of tall shelving with cross aisles at x 9-11 and 19-21
-            foreach (float z in new[] { 14f, 18.5f, 23f, 27.5f })
-                foreach (float x in new[] { 5f, 15f, 25f })
-                    b.Shelf(new Vector3(x, 0f, z), 0f, 6f, 2.4f);
+            // Storage aisles: four rows of tall shelving, each broken in different places so the cross
+            // aisles don't line up from one row to the next.
+            var rows = new[]
+            {
+                new { z = 14f, runs = new[] { 1.5f, 8f, 11f, 18f, 21f, 28.5f } },
+                new { z = 18.5f, runs = new[] { 0.5f, 4f, 7f, 14f, 17f, 24f, 26.5f, 28.6f } },
+                new { z = 23f, runs = new[] { 1.5f, 10f, 13f, 20f, 23f, 28.5f } },
+                new { z = 27.5f, runs = new[] { 0.5f, 6f, 9f, 16f, 19f, 26f } },
+            };
+            foreach (var row in rows)
+                for (int i = 0; i + 1 < row.runs.Length; i += 2)
+                    b.Shelf(new Vector3((row.runs[i] + row.runs[i + 1]) * 0.5f, 0f, row.z), 0f, row.runs[i + 1] - row.runs[i], 2.4f);
+            // Pallet stacks in each aisle between the rows: three per aisle against alternate sides, each
+            // more than half the aisle deep, so the aisle zig-zags.
+            float[] laneSouth = { 10f, 14.25f, 18.75f, 23.25f, 27.75f };
+            float[] laneNorth = { 13.75f, 18.25f, 22.75f, 27.25f, 32f };
+            for (int lane = 0; lane < laneSouth.Length; lane++)
+            {
+                float[] xs = lane == 0 ? new[] { 3f, 15f, 27f } : new[] { 6f, 15f, 24f };
+                for (int k = 0; k < 3; k++)
+                {
+                    bool south = (k + lane) % 2 == 0;
+                    float z = south ? laneSouth[lane] + 1.1f : laneNorth[lane] - 1.1f;
+                    b.Prop("Pallet Stack", new Vector3(xs[k], 0f, z), new Vector3(2f, 1.9f, 2.2f), pallet, true);
+                }
+            }
 
             // Restricted storage
             b.Crate(new Vector3(34f, 0f, 4f), 1.2f, true);
@@ -128,10 +160,10 @@ namespace Swat
             b.EnemySpot("bays", 20f, 2.5f, 0f);
             b.EnemySpot("bays", 28f, 8.5f, 270f);
             b.EnemySpot("aisles", 10f, 16.2f, 0f, new Vector3(10f, 0f, 12f), new Vector3(10f, 0f, 30f), new Vector3(20f, 0f, 30f), new Vector3(20f, 0f, 12f));
-            b.EnemySpot("aisles", 5f, 20.8f, 90f);
-            b.EnemySpot("aisles", 25f, 25.2f, 270f);
-            b.EnemySpot("aisles", 15f, 29.8f, 180f);
-            b.EnemySpot("aisles", 27f, 12.2f, 270f);
+            b.EnemySpot("aisles", 3.5f, 21.8f, 90f);
+            b.EnemySpot("aisles", 26.5f, 24.4f, 270f);
+            b.EnemySpot("aisles", 11f, 30.6f, 180f);
+            b.EnemySpot("aisles", 27.5f, 13.1f, 270f);
             b.EnemySpot("restricted", 36f, 5.5f, 270f);
             b.EnemySpot("restricted", 42f, 8.5f, 180f);
             b.EnemySpot("breakroom", 34.5f, 12.4f, 0f);

@@ -113,6 +113,8 @@ namespace Swat
                 for (int iz = 0; iz < nz; iz++)
                 {
                     Vector3 p = new Vector3(b.min.x + stepX * (ix + 0.5f), 0f, b.min.z + stepZ * (iz + 0.5f));
+                    // Not through a wall, and not over a closet that juts in (it lights itself).
+                    if (OnWall(p, 0.45f) || level.RoomAt(p) != room) continue;
                     bool alongX = b.size.x >= b.size.z;
                     // Hung at wall-top height from above, just under the ceiling in first person.
                     var lamp = Shapes.Box("Ceiling Lamp", props, p + Vector3.up * 1.43f, alongX ? new Vector3(1f, 0.04f, 0.3f) : new Vector3(0.3f, 0.04f, 1f), Color.white, false);
@@ -163,6 +165,18 @@ namespace Swat
                     }
                 }
             }
+        }
+
+        bool OnWall(Vector3 p, float clearance)
+        {
+            var point = new Vector2(p.x, p.z);
+            foreach (var wall in level.walls)
+            {
+                Vector2 along = wall.b - wall.a;
+                float t = along.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(point - wall.a, along) / along.sqrMagnitude) : 0f;
+                if ((wall.a + along * t - point).sqrMagnitude < clearance * clearance) return true;
+            }
+            return false;
         }
 
         // ---- Exterior ----

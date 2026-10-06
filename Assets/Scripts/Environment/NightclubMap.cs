@@ -8,14 +8,19 @@ namespace Swat
     //  z=28 +-------+---L------+---------+---------+
     //       |Storage| Backstage D Manager | VIP     |
     //  (L)  |       |          | Office  | Lounge  |
-    //  z=20 +--D----+---  -----+---L-----+----D----+
-    //       |  Bar   (open)                        |
-    //       |        |         Dance Floor         |
+    //  z=20 +-----D-+-----D----+---L-----+----D----+
+    //       |  Bar   (open)          |  booths     |
+    //       |        |  Dance [BAR]  |             |
     //   z=6 +--------+---  ----+----D----+----D----+
     //       |Coat   D Entrance |Restrooms| Staff    D (staff exit)
     //       |Check  | Lobby    |         | Break    |
     //   z=0 +-------+----D-----+---------+----------+
     //      x=0      8         16        26         36
+    //
+    // The dance floor isn't one open box: an island bar with a tall bottle tower stands in the middle,
+    // booth partitions screen off the east side, and pillars and the DJ booth break it up further. A
+    // screen inside the entrance keeps the street from seeing in, and backstage has a real door, off
+    // line from the lobby opening.
     public static class NightclubMap
     {
         public static LevelLayout Build(Transform parent)
@@ -76,13 +81,14 @@ namespace Swat
             b.WallZ(16f, 0f, 6f, inside, false);
             b.WallZ(26f, 0f, 6f, inside, false);
             b.WallZ(8f, 6f, 20f, inside, false, Gap.Open(10f, 3f), Gap.Open(16f, 3f));
-            b.WallX(20f, 0f, 36f, inside, false, Gap.Door(4f, "storage_door", true), Gap.Open(13f, 3f), Gap.Locked(22f, "office_door", true, true), Gap.Door(31f, "vip_door", true));
+            b.WallX(20f, 0f, 36f, inside, false, Gap.Door(6.8f, "storage_door", true), Gap.Door(15.5f, "backstage_door", true, 1.8f), Gap.Locked(22f, "office_door", true, true), Gap.Door(33.5f, "vip_door", true));
             b.WallZ(8f, 20f, 28f, inside, false);
             b.WallZ(18f, 20f, 28f, inside, false, Gap.Door(24f, "backstage_office"));
             b.WallZ(26f, 20f, 28f, inside, false);
 
             // Entrance and coat check
-            b.Prop("Ticket Counter", new Vector3(15f, 0f, 2.5f), new Vector3(0.8f, 1.1f, 2.5f), new Color(0.3f, 0.2f, 0.25f), true);
+            b.Prop("Ticket Counter", new Vector3(15.2f, 0f, 3.6f), new Vector3(0.8f, 1.1f, 2.5f), new Color(0.3f, 0.2f, 0.25f), true);
+            b.Partition(9.8f, 2.6f, 13.2f, 2.6f, 2f, new Color(0.22f, 0.16f, 0.22f));
             b.Prop("Coat Rack", new Vector3(2f, 0f, 4.5f), new Vector3(3f, 1.8f, 0.5f), new Color(0.25f, 0.2f, 0.18f), false);
             b.Prop("Coat Counter", new Vector3(5f, 0f, 3f), new Vector3(0.6f, 1.05f, 3f), new Color(0.4f, 0.28f, 0.2f), true);
 
@@ -102,22 +108,36 @@ namespace Swat
 
             // Dance floor
             b.Decal(new Vector3(21f, 0.035f, 13f), new Vector3(12f, 0.01f, 8f), new Color(0.6f, 0.25f, 0.9f), 0.7f);
-            b.Prop("DJ Booth", new Vector3(17f, 0f, 18.6f), new Vector3(3f, 1.1f, 1f), new Color(0.12f, 0.12f, 0.14f), true);
-            b.Decal(new Vector3(17f, 1.12f, 18.6f), new Vector3(2.6f, 0.02f, 0.6f), new Color(0.2f, 0.9f, 1f), 1.5f);
+            b.Prop("DJ Booth", new Vector3(19.5f, 0f, 18.6f), new Vector3(3f, 1.1f, 1f), new Color(0.12f, 0.12f, 0.14f), true);
+            b.Decal(new Vector3(19.5f, 1.12f, 18.6f), new Vector3(2.6f, 0.02f, 0.6f), new Color(0.2f, 0.9f, 1f), 1.5f);
+            // The island bar: a counter all round (cover) and a bottle tower in the middle (blocks sight).
+            b.Prop("Island Bar", new Vector3(22f, 0f, 13f), new Vector3(4.4f, 1.1f, 4.4f), new Color(0.3f, 0.2f, 0.14f), true);
+            b.Prop("Bottle Tower", new Vector3(22f, 0f, 13f), new Vector3(1.4f, 2.4f, 3.6f), new Color(0.2f, 0.15f, 0.12f), false);
+            b.Decal(new Vector3(22f, 1.6f, 13f), new Vector3(1.45f, 0.3f, 3.65f), new Color(0.9f, 0.3f, 1f), 1.2f);
+            // Booths along the east side behind high-backed partitions, with a way through in the middle.
+            var booth = new Color(0.32f, 0.1f, 0.2f);
+            b.Partition(30f, 6.2f, 30f, 11.3f, 1.5f, booth);
+            b.Partition(30f, 14.7f, 30f, 19.8f, 1.5f, booth);
+            b.Couch(new Vector3(35.3f, 0f, 12.6f), 270f, booth);
             foreach (var p in new[] { new Vector3(14f, 0f, 9f), new Vector3(28f, 0f, 9f), new Vector3(14f, 0f, 17f), new Vector3(28f, 0f, 17f) })
                 b.Prop("Pillar", p, new Vector3(0.6f, 2.6f, 0.6f), new Color(0.25f, 0.22f, 0.28f), true);
+            // Wide columns just inside the two openings from the bar, so the bar doesn't see across the floor.
+            b.Pillar(13.5f, 10.5f, 1.2f);
+            b.Pillar(13.5f, 15.5f, 1.2f);
             b.Table(new Vector3(33f, 0f, 10f), new Vector3(1f, 0.75f, 1f), new Color(0.2f, 0.2f, 0.22f));
             b.Table(new Vector3(33f, 0f, 15f), new Vector3(1f, 0.75f, 1f), new Color(0.2f, 0.2f, 0.22f));
             b.Table(new Vector3(10.5f, 0f, 12.5f), new Vector3(1f, 0.75f, 1f), new Color(0.2f, 0.2f, 0.22f));
             b.Prop("Speaker", new Vector3(35.4f, 0f, 6.6f), new Vector3(0.8f, 1.6f, 0.8f), new Color(0.08f, 0.08f, 0.09f), true);
             b.Prop("Speaker", new Vector3(8.6f, 0f, 19.4f), new Vector3(0.8f, 1.6f, 0.8f), new Color(0.08f, 0.08f, 0.09f), true);
+            b.Prop("Speaker Stack", new Vector3(18f, 0f, 7.1f), new Vector3(1f, 1.8f, 1f), new Color(0.08f, 0.08f, 0.09f), true);
+            b.Prop("Speaker Stack", new Vector3(25.5f, 0f, 18.9f), new Vector3(1f, 1.8f, 1f), new Color(0.08f, 0.08f, 0.09f), true);
 
             // Storage and backstage
             b.Crate(new Vector3(2f, 0f, 26.5f), 1.2f, true);
             b.Crate(new Vector3(6f, 0f, 26.5f), 1f, false);
             b.Shelf(new Vector3(7.4f, 0f, 23f), 90f, 3f);
             b.Couch(new Vector3(9.5f, 0f, 25f), 90f, new Color(0.4f, 0.15f, 0.2f));
-            b.Prop("Mirror Table", new Vector3(16.5f, 0f, 21f), new Vector3(2f, 0.8f, 0.6f), new Color(0.6f, 0.55f, 0.5f), true);
+            b.Prop("Mirror Table", new Vector3(11.5f, 0f, 21f), new Vector3(2f, 0.8f, 0.6f), new Color(0.6f, 0.55f, 0.5f), true);
             b.Crate(new Vector3(15.5f, 0f, 26.8f), 1f, false);
 
             // Manager's office
@@ -138,7 +158,7 @@ namespace Swat
             b.Camera(12f, -0.6f, 180f);
             b.Camera(26.6f, 27.4f, 135f);
             b.AlarmPanel(35.75f, 5f, 270f);
-            b.Beacon(21f, 13f);
+            b.Beacon(31.5f, 13f);
             b.Beacon(4f, 18f);
             b.Beacon(31f, 24f);
 

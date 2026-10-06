@@ -97,7 +97,17 @@ namespace Swat
 
         public RoomController Room(string id, string name, float x0, float z0, float x1, float z1, Color floor, bool indoor = true)
         {
-            var slab = Slab(name + " Floor", x0, z0, x1, z1, -0.05f, indoor ? 0.03f : 0.015f, floor);
+            // A room inside another one's rectangle (a closet jutting into a corridor; add it after the
+            // corridor) gets its floor a few millimetres higher so the two don't flicker, and shares
+            // the corridor's ceiling.
+            int nested = 0;
+            foreach (var other in Layout.rooms)
+            {
+                var ob = other.Bounds;
+                if (other.Indoor == indoor && ob.min.x <= x0 + 0.01f && ob.max.x >= x1 - 0.01f && ob.min.z <= z0 + 0.01f && ob.max.z >= z1 - 0.01f) nested++;
+            }
+            float top = (indoor ? 0.03f : 0.015f) + nested * 0.006f;
+            var slab = Slab(name + " Floor", x0, z0, x1, z1, -0.05f, top, floor);
             var bounds = new Bounds(new Vector3((x0 + x1) * 0.5f, 1f, (z0 + z1) * 0.5f), new Vector3(x1 - x0, 4f, z1 - z0));
             var room = RoomController.Create(Geometry, id, name, bounds, CurrentArea, indoor);
             room.Style = RoomStyle.For(RoomStyle.Classify(id, name, indoor));
@@ -108,7 +118,7 @@ namespace Swat
             {
                 room.Fixture = Shapes.PointLight(room.transform, new Vector3(0f, 2.6f, 0f), new Color(1f, 0.93f, 0.8f), 1.6f, Mathf.Max(x1 - x0, z1 - z0) * 0.9f + 2f);
                 room.Fixture.enabled = false;
-                Ceiling(x0, z0, x1, z1);
+                if (nested == 0) Ceiling(x0, z0, x1, z1);
             }
             Layout.rooms.Add(room);
             return room;
@@ -220,6 +230,33 @@ namespace Swat
                 Layout.coverPoints.Add(position + new Vector3(0f, 0f, -halfZ));
             }
             return go;
+        }
+
+        // A structural column: cover all round that breaks up a big room or a long corridor. Like the
+        // walls it's drawn low from above and full height in first person, and always solid to full height.
+        public void Pillar(float x, float z, float size = 0.6f)
+        {
+            var color = new Color(0.62f, 0.62f, 0.6f);
+            var pillar = Prop("Pillar", new Vector3(x, 0f, z), new Vector3(size, WallLowHeight, size), color, true);
+            var surface = ExteriorWall == SurfaceKind.Concrete ? SurfaceKind.Concrete : SurfaceKind.PaintedWall;
+            Shapes.ApplySurface(pillar, color, surface);
+            SurfaceTag.Set(pillar, Swat.Surface.Concrete);
+            var box = pillar.GetComponent<BoxCollider>();
+            box.size = new Vector3(1f, WallSolidHeight / WallLowHeight, 1f);
+            box.center = new Vector3(0f, box.size.y * 0.5f - 0.5f, 0f);
+            Layout.view.AddStretch(pillar, WallLowHeight, WallHighHeight, WallSolidHeight, 0f, ProceduralTextures.TileMeters(surface));
+        }
+
+        // A free-standing partition panel from (x0, z0) to (x1, z1): cubicle walls, a screen, a low
+        // divider. Tall enough (1.7 m by default) to hide someone standing behind it, and cover.
+        public void Partition(float x0, float z0, float x1, float z1, float height = 1.7f, Color? color = null)
+        {
+            float dx = x1 - x0, dz = z1 - z0;
+            float length = Mathf.Sqrt(dx * dx + dz * dz);
+            if (length < 0.05f) return;
+            float yaw = Mathf.Atan2(dx, dz) * Mathf.Rad2Deg - 90f;
+            var panel = Prop("Partition", new Vector3((x0 + x1) * 0.5f, 0f, (z0 + z1) * 0.5f), new Vector3(length, height, 0.08f), color ?? new Color(0.46f, 0.5f, 0.56f), true, yaw);
+            SurfaceTag.Set(panel, Swat.Surface.Wood);
         }
 
         public void Desk(Vector3 position, float yaw, float width = 1.6f, bool monitor = true)

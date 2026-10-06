@@ -248,10 +248,11 @@ namespace Swat
             var player = game.Player;
             foreach (var room in level.rooms)
             {
-                bool occupied = player.IsAlive && room.Contains(player.Position);
+                // The room someone is actually in (standing in a closet doesn't investigate the corridor around it).
+                bool occupied = player.IsAlive && level.RoomAt(player.Position) == room;
                 if (!occupied)
                     foreach (var officer in AIManager.Instance.Officers)
-                        if (officer.IsAlive && room.Contains(officer.Position)) { occupied = true; break; }
+                        if (officer.IsAlive && level.RoomAt(officer.Position) == room) { occupied = true; break; }
 
                 if (occupied)
                 {
