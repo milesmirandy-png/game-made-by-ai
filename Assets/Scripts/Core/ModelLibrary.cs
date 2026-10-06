@@ -41,7 +41,27 @@ namespace Swat
 
         static readonly Dictionary<string, Model> cache = new Dictionary<string, Model>();
         static readonly HashSet<string> missing = new HashSet<string>();
-        static readonly Dictionary<string, KeyValuePair<Mesh, int[]>> trimmed = new Dictionary<string, KeyValuePair<Mesh, int[]>>();
+        static readonly Dictionary<string, Variant> variants = new Dictionary<string, Variant>();
+
+        // Low-poly camouflage for a uniform: its triangles are split in four and each piece takes one of a
+        // few colours from smooth 3D noise in model space (so the blotches carry on across arms, body and legs).
+        public class Camo
+        {
+            public string id;          // names the pattern (meshes are cached by it)
+            public string[] slots;     // the colour slots it covers
+            public Color[] colors;     // base colour first, then the blotches
+            public float[] cuts;       // noise level where each blotch colour starts (rising)
+            public float scale;        // blotch size, metres
+            public int seed;
+        }
+
+        // A part's mesh with some slots left out and/or camouflage applied: sub-meshes and what colours them.
+        class Variant
+        {
+            public Mesh mesh;
+            public int[] slots;    // colour slot of each sub-mesh
+            public int[] layers;   // camouflage colour of each sub-mesh, or -1 for the slot's own colour
+        }
 
         // The model, or null if its file isn't there (callers fall back to the built-in shapes).
         public static Model Get(string id)
@@ -158,11 +178,23 @@ namespace Swat
         // covers many kits. The trimmed mesh is made once per combination.
         public static GameObject Spawn(Model model, string partName, Transform parent, Vector3 localPosition, System.Func<string, Color, Color> recolor, ICollection<string> hidden)
         {
+            return Spawn(model, partName, parent, localPosition, recolor, hidden, null);
+        }
+
+        public static GameObject Spawn(Model model, string partName, Transform parent, Vector3 localPosition, System.Func<string, Color, Color> recolor, ICollection<string> hidden, Camo camo)
+        {
             var part = model != null ? model.Find(partName) : null;
             if (part == null || part.mesh == null) return null;
             Mesh mesh = part.mesh;
             int[] slots = part.slots;
-            if (hidden != null && hidden.Count > 0) Trim(model, part, hidden, out mesh, out slots);
+            int[] layers = null;
+            if ((hidden != null && hidden.Count > 0) || camo != null)
+            {
+                var variant = MakeVariant(model, part, hidden, camo);
+                mesh = variant.mesh;
+                slots = variant.slots;
+                layers = variant.layers;
+            }
             if (slots.Length == 0) return null;
             var go = new GameObject(model.id + " " + partName);
             go.transform.SetParent(parent, false);
@@ -175,6 +207,7 @@ namespace Swat
                 int slot = slots[i];
                 Color color = model.slotColors[slot];
                 if (recolor != null) color = recolor(model.slotNames[slot], color);
+                if (layers != null && layers[i] >= 0) color = camo.colors[layers[i]];
                 materials[i] = Shapes.Mat(color);
             }
             renderer.sharedMaterials = materials;
@@ -182,40 +215,103 @@ namespace Swat
             return go;
         }
 
-        static void Trim(Model model, Part part, ICollection<string> hidden, out Mesh mesh, out int[] slots)
+        static Variant MakeVariant(Model model, Part part, ICollection<string> hidden, Camo camo)
         {
-            var keep = new List<int>();
             var key = new System.Text.StringBuilder(model.id).Append('/').Append(part.name);
             for (int i = 0; i < part.slots.Length; i++)
+                if (hidden != null && hidden.Contains(model.slotNames[part.slots[i]])) key.Append('-').Append(i);
+            bool camouflaged = false;
+            if (camo != null)
+                for (int i = 0; i < part.slots.Length; i++)
+                    if (System.Array.IndexOf(camo.slots, model.slotNames[part.slots[i]]) >= 0) camouflaged = true;
+            if (camouflaged) key.Append('/').Append(camo.id);
+            Variant made;
+            if (variants.TryGetValue(key.ToString(), out made) && made.mesh != null) return made;
+
+            var vertices = new List<Vector3>(part.mesh.vertices);
+            var groups = new List<List<int>>();
+            var slots = new List<int>();
+            var layers = new List<int>();
+            for (int s = 0; s < part.slots.Length; s++)
             {
-                if (hidden.Contains(model.slotNames[part.slots[i]])) key.Append('-').Append(i);
-                else keep.Add(i);
-            }
-            if (keep.Count == part.slots.Length)
-            {
-                mesh = part.mesh;
-                slots = part.slots;
-                return;
-            }
-            KeyValuePair<Mesh, int[]> made;
-            if (!trimmed.TryGetValue(key.ToString(), out made) || made.Key == null)
-            {
-                var copy = new Mesh { name = part.mesh.name + " (trimmed)" };
-                copy.vertices = part.mesh.vertices;
-                copy.normals = part.mesh.normals;
-                copy.subMeshCount = keep.Count;
-                var kept = new int[keep.Count];
-                for (int i = 0; i < keep.Count; i++)
+                string name = model.slotNames[part.slots[s]];
+                if (hidden != null && hidden.Contains(name)) continue;
+                var triangles = part.mesh.GetTriangles(s);
+                if (!camouflaged || System.Array.IndexOf(camo.slots, name) < 0)
                 {
-                    copy.SetTriangles(part.mesh.GetTriangles(keep[i]), i);
-                    kept[i] = part.slots[keep[i]];
+                    groups.Add(new List<int>(triangles));
+                    slots.Add(part.slots[s]);
+                    layers.Add(-1);
+                    continue;
                 }
-                copy.RecalculateBounds();
-                made = new KeyValuePair<Mesh, int[]>(copy, kept);
-                trimmed[key.ToString()] = made;
+                // One sub-mesh per camouflage colour used on this slot.
+                var byLayer = new List<int>[camo.colors.Length];
+                for (int i = 0; i + 2 < triangles.Length; i += 3)
+                {
+                    Vector3 a = vertices[triangles[i]], b = vertices[triangles[i + 1]], c = vertices[triangles[i + 2]];
+                    Vector3 ab = (a + b) * 0.5f, bc = (b + c) * 0.5f, ca = (c + a) * 0.5f;
+                    AddCamo(vertices, byLayer, camo, part.pivot, a, ab, ca, part.slots[s]);
+                    AddCamo(vertices, byLayer, camo, part.pivot, ab, b, bc, part.slots[s]);
+                    AddCamo(vertices, byLayer, camo, part.pivot, ca, bc, c, part.slots[s]);
+                    AddCamo(vertices, byLayer, camo, part.pivot, ab, bc, ca, part.slots[s]);
+                }
+                for (int l = 0; l < byLayer.Length; l++)
+                {
+                    if (byLayer[l] == null) continue;
+                    groups.Add(byLayer[l]);
+                    slots.Add(part.slots[s]);
+                    layers.Add(l);
+                }
             }
-            mesh = made.Key;
-            slots = made.Value;
+            var mesh = new Mesh { name = part.mesh.name + " (variant)" };
+            if (vertices.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.SetVertices(vertices);
+            mesh.subMeshCount = groups.Count;
+            for (int i = 0; i < groups.Count; i++) mesh.SetTriangles(groups[i], i);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            made = new Variant { mesh = mesh, slots = slots.ToArray(), layers = layers.ToArray() };
+            variants[key.ToString()] = made;
+            return made;
+        }
+
+        static void AddCamo(List<Vector3> vertices, List<int>[] byLayer, Camo camo, Vector3 pivot, Vector3 a, Vector3 b, Vector3 c, int slotSalt)
+        {
+            Vector3 centre = (a + b + c) / 3f + pivot;
+            float v = Noise(centre / camo.scale, camo.seed + slotSalt * 3) * 0.65f + Noise(centre * (2.3f / camo.scale), camo.seed + slotSalt * 3 + 7) * 0.35f;
+            int layer = 0;
+            for (int k = 0; k < camo.cuts.Length && k + 1 < camo.colors.Length; k++) if (v > camo.cuts[k]) layer = k + 1;
+            if (byLayer[layer] == null) byLayer[layer] = new List<int>();
+            int start = vertices.Count;
+            vertices.Add(a);
+            vertices.Add(b);
+            vertices.Add(c);
+            byLayer[layer].Add(start);
+            byLayer[layer].Add(start + 1);
+            byLayer[layer].Add(start + 2);
+        }
+
+        // Smooth 3D value noise in 0..1.
+        static float Noise(Vector3 p, int seed)
+        {
+            int i = Mathf.FloorToInt(p.x), j = Mathf.FloorToInt(p.y), k = Mathf.FloorToInt(p.z);
+            float fx = p.x - i, fy = p.y - j, fz = p.z - k;
+            fx = fx * fx * (3f - 2f * fx); fy = fy * fy * (3f - 2f * fy); fz = fz * fz * (3f - 2f * fz);
+            float x00 = Mathf.Lerp(Hash(i, j, k, seed), Hash(i + 1, j, k, seed), fx);
+            float x10 = Mathf.Lerp(Hash(i, j + 1, k, seed), Hash(i + 1, j + 1, k, seed), fx);
+            float x01 = Mathf.Lerp(Hash(i, j, k + 1, seed), Hash(i + 1, j, k + 1, seed), fx);
+            float x11 = Mathf.Lerp(Hash(i, j + 1, k + 1, seed), Hash(i + 1, j + 1, k + 1, seed), fx);
+            return Mathf.Lerp(Mathf.Lerp(x00, x10, fy), Mathf.Lerp(x01, x11, fy), fz);
+        }
+
+        static float Hash(int i, int j, int k, int seed)
+        {
+            unchecked
+            {
+                uint h = (uint)(i * 374761393 + j * 668265263 + k * 2147483647 + seed * 144269504);
+                h = (h ^ (h >> 13)) * 1274126177u;
+                return ((h ^ (h >> 16)) & 0xffff) / 65535f;
+            }
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -223,7 +319,7 @@ namespace Swat
         {
             cache.Clear();
             missing.Clear();
-            trimmed.Clear();
+            variants.Clear();
         }
     }
 }

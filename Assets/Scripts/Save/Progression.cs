@@ -33,18 +33,21 @@ namespace Swat
 
         // Uniforms are whole kits: shirt, trousers, plate carrier, pouches, helmet and gloves/boots
         // (the blocky figures use the shirt colour; the soldier model wears the whole kit).
-        public static readonly string[] UniformNames = { "Navy", "Black", "Urban Gray", "Olive", "Midnight Blue", "Charcoal", "Ranger Green", "Desert Tan", "Woodland", "Gray & Coyote" };
+        // The last four are camouflage (GearCatalog.CamoFor): the colours below are their average.
+        public static readonly string[] UniformNames = { "Navy", "Black", "Urban Gray", "Olive", "Midnight Blue", "Charcoal", "Ranger Green", "Desert Tan", "Woodland", "Gray & Coyote", "Arid Camo", "Woodland Camo", "Urban Camo", "Night Camo" };
         public static readonly float[,] UniformColors =
         {
             { 0.12f, 0.16f, 0.26f }, { 0.07f, 0.07f, 0.08f }, { 0.32f, 0.34f, 0.36f },
             { 0.22f, 0.26f, 0.17f }, { 0.08f, 0.11f, 0.22f }, { 0.18f, 0.18f, 0.2f },
             { 0.2f, 0.27f, 0.15f }, { 0.62f, 0.5f, 0.34f }, { 0.27f, 0.33f, 0.18f }, { 0.4f, 0.41f, 0.43f },
+            { 0.6f, 0.52f, 0.37f }, { 0.3f, 0.32f, 0.2f }, { 0.48f, 0.49f, 0.5f }, { 0.13f, 0.13f, 0.14f },
         };
-        public static readonly int[] UniformUnlocks = { 0, 0, 1, 2, 3, 4, 0, 1, 2, 3 };
+        public static readonly int[] UniformUnlocks = { 0, 0, 1, 2, 3, 4, 0, 1, 2, 3, 0, 1, 2, 3 };
 
         public struct UniformKit
         {
             public UnityEngine.Color shirt, pants, vest, pouches, helmet, gear;
+            public int camo;   // 0 plain, else GearCatalog.CamoFor
         }
 
         static UnityEngine.Color C(float r, float g, float b) { return new UnityEngine.Color(r, g, b); }
@@ -76,6 +79,18 @@ namespace Swat
                     break;
                 case "Gray & Coyote":
                     kit.pants = C(0.24f, 0.28f, 0.17f); kit.vest = C(0.5f, 0.38f, 0.24f); kit.pouches = C(0.56f, 0.43f, 0.27f); kit.helmet = C(0.46f, 0.36f, 0.23f); kit.gear = C(0.3f, 0.22f, 0.14f);
+                    break;
+                case "Arid Camo":
+                    kit.camo = 1; kit.pants = shirt; kit.vest = C(0.5f, 0.39f, 0.25f); kit.pouches = C(0.56f, 0.44f, 0.28f); kit.helmet = C(0.52f, 0.42f, 0.28f); kit.gear = C(0.36f, 0.27f, 0.17f);
+                    break;
+                case "Woodland Camo":
+                    kit.camo = 2; kit.pants = shirt; kit.vest = C(0.24f, 0.29f, 0.17f); kit.pouches = C(0.29f, 0.34f, 0.2f); kit.helmet = C(0.22f, 0.27f, 0.15f); kit.gear = C(0.22f, 0.17f, 0.11f);
+                    break;
+                case "Urban Camo":
+                    kit.camo = 3; kit.pants = shirt; kit.vest = C(0.22f, 0.23f, 0.25f); kit.pouches = C(0.28f, 0.29f, 0.31f); kit.helmet = C(0.25f, 0.26f, 0.28f);
+                    break;
+                case "Night Camo":
+                    kit.camo = 4; kit.pants = shirt; kit.vest = C(0.1f, 0.1f, 0.11f); kit.pouches = C(0.14f, 0.14f, 0.15f); kit.helmet = C(0.09f, 0.09f, 0.1f);
                     break;
             }
             return kit;

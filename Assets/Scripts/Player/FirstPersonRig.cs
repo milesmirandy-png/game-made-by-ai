@@ -455,7 +455,7 @@ namespace Swat
             pivot.SetParent(gunPivot, false);
             var forearm = model != null ? model.Find(part) : null;
             var hand = model != null ? model.Find(handPoint) : null;
-            if (forearm != null && hand != null && ModelLibrary.Spawn(model, part, pivot, Vector3.zero, recolor) != null)
+            if (forearm != null && hand != null && ModelLibrary.Spawn(model, part, pivot, Vector3.zero, recolor, null, GearCatalog.CamoFor(look.camo)) != null)
             {
                 rest = hand.pivot - forearm.pivot;
                 return pivot;

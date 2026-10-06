@@ -312,6 +312,8 @@ namespace Swat
             Section(ref y, x, cw, "HEAD AND FACE");
             changed |= Pick(ref y, x, cw, "Headgear", ref loadout.headgearIndex, GearCatalog.HeadgearNames);
             changed |= Pick(ref y, x, cw, "Face", ref loadout.faceIndex, GearCatalog.FaceNames);
+            changed |= Pick(ref y, x, cw, "Facial hair", ref loadout.facialHairIndex, GearCatalog.FacialHairNames);
+            changed |= Pick(ref y, x, cw, "Hair colour", ref loadout.hairColorIndex, GearCatalog.HairColorNames);
             y += 8f;
 
             Section(ref y, x, cw, "PATCH (left shoulder and chest)");
@@ -331,7 +333,7 @@ namespace Swat
                 default: vest = "Standard plate carrier with pouches and a pack."; break;
             }
             UITheme.Text(new Rect(x, y, cw, 40f), vest + " The vest follows the armor you pick under Armor & gear.", 14, UITheme.Dim);
-            y += 48f;
+            y += 44f;
             UITheme.Text(new Rect(x, y, cw, 60f), "Looks only: headgear, face and patches don't change protection, which comes from the armor. The right shoulder keeps the officer's role colour so the squad stays easy to tell apart.", 13, UITheme.Faint);
             return changed;
         }

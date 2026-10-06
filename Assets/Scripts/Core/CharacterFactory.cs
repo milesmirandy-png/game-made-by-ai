@@ -32,6 +32,10 @@ namespace Swat
         public int face;              // GearCatalog.Face
         public ArmorStyle armorStyle;
         public int patch, patchColor; // GearCatalog.Patch and colour index (left shoulder and chest)
+        public int camo;              // GearCatalog.CamoFor (0 = plain uniform)
+        public int facialHair;        // GearCatalog.FacialHair
+        public Color hairColor;       // soldier model's hair, brows and beard (zero = dark brown)
+        public bool features;         // soldier model: draw eyes and brows (officers)
     }
 
     // References to the parts of a blocky character, plus helpers to show
@@ -390,13 +394,14 @@ namespace Swat
         {
             Color vest = look.vestOn ? look.vest : Shapes.Shade(look.shirt, 0.85f);
             var recolor = SoldierColors(look);
-            ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor, TorsoHidden(look));
-            parts.leftLeg = SoldierPart(model, "legL", m, recolor);
-            parts.rightLeg = SoldierPart(model, "legR", m, recolor);
-            parts.leftArm = SoldierPart(model, "armL", m, recolor);
-            parts.rightArm = SoldierPart(model, "armR", m, recolor);
-            parts.leftForearm = SoldierPart(model, "foreL", parts.leftArm, recolor, model.Find("armL"));
-            parts.rightForearm = SoldierPart(model, "foreR", parts.rightArm, recolor, model.Find("armR"));
+            var camo = GearCatalog.CamoFor(look.camo);
+            ModelLibrary.Spawn(model, "torso", m, Vector3.zero, recolor, TorsoHidden(look), camo);
+            parts.leftLeg = SoldierPart(model, "legL", m, recolor, null, null, camo);
+            parts.rightLeg = SoldierPart(model, "legR", m, recolor, null, null, camo);
+            parts.leftArm = SoldierPart(model, "armL", m, recolor, null, null, camo);
+            parts.rightArm = SoldierPart(model, "armR", m, recolor, null, null, camo);
+            parts.leftForearm = SoldierPart(model, "foreL", parts.leftArm, recolor, model.Find("armL"), null, camo);
+            parts.rightForearm = SoldierPart(model, "foreR", parts.rightArm, recolor, model.Find("armR"), null, camo);
             parts.leftHand = SoldierPoint(model, "handL", parts.leftForearm, model.Find("foreL"));
             parts.rightHand = SoldierPoint(model, "handR", parts.rightForearm, model.Find("foreR"));
             // The gun sits a little higher and more central than on the blocky figures, within reach of
@@ -405,8 +410,8 @@ namespace Swat
             parts.head = SoldierPart(model, "head", m, recolor, null, HeadHidden(look));
             // A slightly bigger head in pixel art, as for the blocky figures, so helmets read from above.
             if (QualityManager.PixelArt) parts.head.localScale = Vector3.one * 1.15f;
-            DressHead(parts.head, look);
-            DressArmor(parts, look, m, vest);
+            DressHead(parts.head, look, model);
+            DressArmor(parts, look, m, vest, model);
             if (look.patch > 0)
             {
                 // The chosen patch on the left shoulder and the chest (the right shoulder keeps the squad colour).
@@ -429,13 +434,13 @@ namespace Swat
         }
 
         // A part on its own pivot; within another part (a forearm in an upper arm), relative to that part's pivot.
-        static Transform SoldierPart(ModelLibrary.Model model, string name, Transform parent, System.Func<string, Color, Color> recolor, ModelLibrary.Part within = null, ICollection<string> hidden = null)
+        static Transform SoldierPart(ModelLibrary.Model model, string name, Transform parent, System.Func<string, Color, Color> recolor, ModelLibrary.Part within = null, ICollection<string> hidden = null, ModelLibrary.Camo camo = null)
         {
             var part = model.Find(name);
             var pivot = new GameObject(name).transform;
             pivot.SetParent(parent, false);
             pivot.localPosition = part != null ? part.pivot - (within != null ? within.pivot : Vector3.zero) : Vector3.zero;
-            ModelLibrary.Spawn(model, name, pivot, Vector3.zero, recolor, hidden);
+            ModelLibrary.Spawn(model, name, pivot, Vector3.zero, recolor, hidden, camo);
             return pivot;
         }
 
@@ -468,59 +473,93 @@ namespace Swat
             return hide;
         }
 
-        // Headgear and face pieces the model doesn't have, built from boxes on the head (head space:
-        // the skull top is about 0.23 m up, the face looks along +z).
-        static void DressHead(Transform head, Appearance look)
+        // Headgear, face and hair pieces the model doesn't have. Hair, beards, cap crowns and the gas mask
+        // are shells grown from the head's own surface (MeshKit), so they fit it; brims and the face shield
+        // are their own low-poly meshes. Head space: the skull top is about 0.23 m up, the face looks along +z.
+        static void DressHead(Transform head, Appearance look, ModelLibrary.Model model)
         {
             Color helmet = look.headwear.a > 0f ? look.headwear : new Color(0.12f, 0.13f, 0.15f);
             Color dark = look.gear.a > 0f ? look.gear : new Color(0.08f, 0.08f, 0.09f);
-            switch ((GearCatalog.Headgear)look.headgear)
+            Color hair = look.hairColor.a > 0f ? look.hairColor : GearCatalog.HairColor(1);
+            string[] skin = { "Skin" };
+            var headgear = (GearCatalog.Headgear)look.headgear;
+            switch (headgear)
             {
                 case GearCatalog.Headgear.HelmetVisor:
-                    Shapes.Box("Face Shield", head, new Vector3(0f, 0.078f, 0.088f), new Vector3(0.19f, 0.15f, 0.01f), new Color(0.16f, 0.21f, 0.27f), false).transform.localRotation = Quaternion.Euler(-10f, 0f, 0f);
-                    Shapes.Box("Shield Rim", head, new Vector3(0f, 0.152f, 0.084f), new Vector3(0.2f, 0.02f, 0.03f), Shapes.Shade(helmet, 0.8f), false);
+                    MeshKit.Piece("Face Shield", head, MeshKit.Arc(0.125f, -62f, 62f, 0.15f, 8, "face shield"), new Color(0.16f, 0.21f, 0.27f), new Vector3(0f, 0.005f, -0.03f), Quaternion.identity);
+                    Shapes.Box("Shield Rim", head, new Vector3(0f, 0.157f, 0.088f), new Vector3(0.17f, 0.016f, 0.024f), Shapes.Shade(helmet, 0.8f), false);
                     break;
                 case GearCatalog.Headgear.OpsCap:
-                    Shapes.Box("Cap", head, new Vector3(0f, 0.2f, -0.027f), new Vector3(0.17f, 0.09f, 0.2f), helmet, false);
-                    Shapes.Box("Brim", head, new Vector3(0f, 0.163f, 0.105f), new Vector3(0.16f, 0.012f, 0.08f), Shapes.Shade(helmet, 0.85f), false);
+                    MeshKit.Piece("Cap", head, MeshKit.Shell(model, "head", skin, (c, top) => top > 0.16f, 0.016f, 0.1f, "cap crown"), helmet, Vector3.zero, Quaternion.identity);
+                    MeshKit.Piece("Brim", head, MeshKit.Brim(0.1f, -80f, 80f, 0.014f, 10, 0f, "cap brim"), Shapes.Shade(helmet, 0.88f), new Vector3(0f, 0.152f, 0.03f), Quaternion.identity);
                     break;
                 case GearCatalog.Headgear.Beanie:
-                    Shapes.Box("Beanie", head, new Vector3(0f, 0.205f, -0.027f), new Vector3(0.175f, 0.1f, 0.205f), dark, false);
-                    Shapes.Box("Fold", head, new Vector3(0f, 0.163f, -0.027f), new Vector3(0.181f, 0.032f, 0.211f), Shapes.Shade(dark, 0.8f), false);
+                    MeshKit.Piece("Beanie", head, MeshKit.Shell(model, "head", skin, (c, top) => top > 0.14f, 0.016f, 0.14f, "beanie"), dark, Vector3.zero, Quaternion.identity);
+                    MeshKit.Piece("Fold", head, MeshKit.Shell(model, "head", skin, (c, top) => top > 0.14f && c.y < 0.165f, 0.024f, 0.05f, "beanie fold"), Shapes.Shade(dark, 0.8f), Vector3.zero, Quaternion.identity);
                     break;
                 case GearCatalog.Headgear.Boonie:
-                    Shapes.Box("Crown", head, new Vector3(0f, 0.208f, -0.027f), new Vector3(0.17f, 0.09f, 0.19f), look.pants, false);
-                    Shapes.Box("Brim", head, new Vector3(0f, 0.166f, -0.027f), new Vector3(0.32f, 0.012f, 0.32f), Shapes.Shade(look.pants, 0.9f), false);
+                    MeshKit.Piece("Crown", head, MeshKit.Shell(model, "head", skin, (c, top) => top > 0.16f, 0.018f, 0.1f, "boonie crown"), look.pants, Vector3.zero, Quaternion.identity);
+                    MeshKit.Piece("Brim", head, MeshKit.Brim(0.17f, 0f, 360f, 0.03f, 16, 0.095f, "boonie brim"), Shapes.Shade(look.pants, 0.92f), new Vector3(0f, 0.152f, -0.025f), Quaternion.identity);
                     break;
                 case GearCatalog.Headgear.BareHead:
-                    Shapes.Box("Hair", head, new Vector3(0f, 0.205f, -0.03f), new Vector3(0.16f, 0.05f, 0.18f), new Color(0.12f, 0.09f, 0.07f), false);
+                    // Short hair: lower at the back than at the forehead.
+                    MeshKit.Piece("Hair", head, MeshKit.Shell(model, "head", skin, (c, top) => c.y > (c.z > 0f ? 0.175f : 0.175f + c.z * 0.7f), 0.009f, 0.1f, "hair"), hair, Vector3.zero, Quaternion.identity);
                     break;
             }
-            switch ((GearCatalog.Face)look.face)
+
+            var face = (GearCatalog.Face)look.face;
+            switch (face)
             {
                 case GearCatalog.Face.GasMask:
-                    Shapes.Box("Mask Face", head, new Vector3(0f, 0.05f, 0.058f), new Vector3(0.13f, 0.12f, 0.04f), new Color(0.13f, 0.13f, 0.14f), false);
-                    Shapes.Box("Lens", head, new Vector3(0.035f, 0.104f, 0.072f), new Vector3(0.045f, 0.035f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false);
-                    Shapes.Box("Lens", head, new Vector3(-0.035f, 0.104f, 0.072f), new Vector3(0.045f, 0.035f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false);
-                    var filter = Shapes.Make(PrimitiveType.Cylinder, "Filter", head, new Vector3(0f, 0.02f, 0.095f), new Vector3(0.065f, 0.025f, 0.065f), new Color(0.2f, 0.21f, 0.2f), false).transform;
+                    MeshKit.Piece("Gas Mask", head, MeshKit.Shell(model, "head", new[] { "Mask" }, (c, top) => c.z > -0.02f && c.y < 0.125f, 0.012f, 0.1f, "gas mask"), new Color(0.13f, 0.13f, 0.14f), Vector3.zero, Quaternion.identity);
+                    Shapes.Box("Lens", head, new Vector3(0.032f, 0.104f, 0.078f), new Vector3(0.04f, 0.032f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false).transform.localRotation = Quaternion.Euler(0f, 30f, 0f);
+                    Shapes.Box("Lens", head, new Vector3(-0.032f, 0.104f, 0.078f), new Vector3(0.04f, 0.032f, 0.008f), new Color(0.32f, 0.38f, 0.44f), false).transform.localRotation = Quaternion.Euler(0f, -30f, 0f);
+                    var filter = Shapes.Make(PrimitiveType.Cylinder, "Filter", head, new Vector3(0f, 0.022f, 0.1f), new Vector3(0.062f, 0.024f, 0.062f), new Color(0.2f, 0.21f, 0.2f), false).transform;
                     filter.localRotation = Quaternion.Euler(70f, 0f, 0f);
                     break;
                 case GearCatalog.Face.Shades:
-                    Shapes.Box("Shades", head, new Vector3(0f, 0.11f, 0.06f), new Vector3(0.15f, 0.025f, 0.01f), new Color(0.04f, 0.04f, 0.05f), false);
+                    Shapes.Box("Shades", head, new Vector3(0f, 0.108f, 0.072f), new Vector3(0.11f, 0.022f, 0.01f), new Color(0.04f, 0.04f, 0.05f), false);
+                    Shapes.Box("Shades", head, new Vector3(0.05f, 0.108f, 0.05f), new Vector3(0.006f, 0.02f, 0.05f), new Color(0.04f, 0.04f, 0.05f), false).transform.localRotation = Quaternion.Euler(0f, 34f, 0f);
+                    Shapes.Box("Shades", head, new Vector3(-0.05f, 0.108f, 0.05f), new Vector3(0.006f, 0.02f, 0.05f), new Color(0.04f, 0.04f, 0.05f), false).transform.localRotation = Quaternion.Euler(0f, -34f, 0f);
                     break;
             }
+
+            // Eyes and brows, painted on the face as small flat pieces turned to its sides (goggles and a
+            // gas mask cover them; shades cover the eyes).
+            bool goggles = headgear == GearCatalog.Headgear.HelmetFull || headgear == GearCatalog.Headgear.HelmetGoggles;
+            if (look.features && !goggles && face != GearCatalog.Face.GasMask)
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    if (face != GearCatalog.Face.Shades)
+                        Shapes.Box("Eye", head, new Vector3(side * 0.03f, 0.106f, 0.066f), new Vector3(0.019f, 0.011f, 0.006f), new Color(0.06f, 0.05f, 0.05f), false).transform.localRotation = Quaternion.Euler(0f, side * 34f, 0f);
+                    Shapes.Box("Brow", head, new Vector3(side * 0.03f, 0.123f, 0.062f), new Vector3(0.027f, 0.008f, 0.006f), hair, false).transform.localRotation = Quaternion.Euler(0f, side * 34f, -side * 8f);
+                }
+
+            // Facial hair shows with a bare face or shades (a balaclava or gas mask covers it).
+            if (face == GearCatalog.Face.Bare || face == GearCatalog.Face.Shades)
+                switch ((GearCatalog.FacialHair)look.facialHair)
+                {
+                    case GearCatalog.FacialHair.Stubble:
+                        MeshKit.Piece("Stubble", head, MeshKit.Shell(model, "head", skin, (c, top) => c.y < 0.07f && c.z > 0f, 0.002f, 0f, "stubble"), Shapes.Shade(look.skin, 0.7f), Vector3.zero, Quaternion.identity);
+                        break;
+                    case GearCatalog.FacialHair.Beard:
+                        MeshKit.Piece("Beard", head, MeshKit.Shell(model, "head", skin, (c, top) => c.y < 0.07f && c.z > 0f, 0.007f, 0.1f, "beard"), hair, Vector3.zero, Quaternion.identity);
+                        break;
+                    case GearCatalog.FacialHair.Moustache:
+                        Shapes.Box("Moustache", head, new Vector3(0f, 0.07f, 0.08f), new Vector3(0.045f, 0.011f, 0.01f), hair, false);
+                        break;
+                }
         }
 
-        // Heavy armor adds shoulder guards, a collar and a groin protector in the vest colour.
-        static void DressArmor(CharacterParts parts, Appearance look, Transform m, Color vest)
+        // Heavy armor adds shoulder guards and a collar shaped to the arms and neck, and a groin plate.
+        static void DressArmor(CharacterParts parts, Appearance look, Transform m, Color vest, ModelLibrary.Model model)
         {
             if (look.armorStyle != ArmorStyle.Heavy) return;
             Color guard = Shapes.Shade(vest, 1.1f);
-            Shapes.Box("Shoulder Guard", parts.leftArm, new Vector3(-0.012f, -0.05f, 0.012f), new Vector3(0.085f, 0.11f, 0.13f), guard, false);
-            Shapes.Box("Shoulder Guard", parts.rightArm, new Vector3(0.012f, -0.05f, 0.012f), new Vector3(0.085f, 0.11f, 0.13f), guard, false);
-            Shapes.Box("Collar", m, new Vector3(0f, 1.47f, 0.13f), new Vector3(0.22f, 0.07f, 0.035f), guard, false);
-            Shapes.Box("Collar", m, new Vector3(0.12f, 1.47f, 0.02f), new Vector3(0.035f, 0.07f, 0.22f), guard, false);
-            Shapes.Box("Collar", m, new Vector3(-0.12f, 1.47f, 0.02f), new Vector3(0.035f, 0.07f, 0.22f), guard, false);
+            string[] sleeve = { "Shirt" };
+            MeshKit.Piece("Shoulder Guard", parts.leftArm, MeshKit.Shell(model, "armL", sleeve, (c, top) => top > -0.13f, 0.014f, 0.08f, "guard L"), guard, Vector3.zero, Quaternion.identity);
+            MeshKit.Piece("Shoulder Guard", parts.rightArm, MeshKit.Shell(model, "armR", sleeve, (c, top) => top > -0.13f, 0.014f, 0.08f, "guard R"), guard, Vector3.zero, Quaternion.identity);
+            MeshKit.Piece("Collar", m, MeshKit.Shell(model, "torso", new[] { "Scarf" }, (c, top) => true, 0.016f, 0.06f, "collar"), guard, Vector3.zero, Quaternion.identity);
             Shapes.Box("Groin Plate", m, new Vector3(0f, 0.9f, 0.14f), new Vector3(0.17f, 0.15f, 0.03f), guard, false);
         }
 
@@ -560,6 +599,16 @@ namespace Swat
                 case GearCatalog.Patch.Diamond:
                     bar(0f, 0f, size * 0.42f, size * 0.42f, 45f);
                     break;
+                case GearCatalog.Patch.Flag:
+                {
+                    // Stripes and a blue canton (its own colours, not the patch colour).
+                    Color red = new Color(0.72f, 0.12f, 0.12f), white = new Color(0.92f, 0.92f, 0.9f);
+                    float h = size * 0.8f, stripe = h / 5f;
+                    for (int i = 0; i < 5; i++)
+                        Shapes.Box("Stripe", root, new Vector3(0f, -h * 0.5f + stripe * (i + 0.5f), front), new Vector3(size, stripe, 0.004f), i % 2 == 0 ? red : white, false);
+                    Shapes.Box("Canton", root, new Vector3(-size * 0.27f, h * 0.2f, front + 0.001f), new Vector3(size * 0.46f, h * 0.6f, 0.004f), new Color(0.15f, 0.22f, 0.45f), false);
+                    break;
+                }
                 case GearCatalog.Patch.Target:
                     bar(0f, size * 0.27f, size * 0.6f, t * 0.7f, 0f);
                     bar(0f, -size * 0.27f, size * 0.6f, t * 0.7f, 0f);

@@ -14,7 +14,7 @@ namespace Swat
         public static void Show(OfficerData officer, OfficerLoadout loadout, Vector3 position, float yaw)
         {
             string key = officer.id + "|" + loadout.primaryId + "|" + loadout.sidearmId + "|" + loadout.armorId + "|" + loadout.useShield + "|"
-                + string.Join(",", Weapon.Ids(loadout)) + "|" + loadout.uniformIndex + "|" + loadout.headgearIndex + "," + loadout.faceIndex + "," + loadout.patchIndex + "," + loadout.patchColorIndex + "|" + position;
+                + string.Join(",", Weapon.Ids(loadout)) + "|" + loadout.uniformIndex + "|" + loadout.headgearIndex + "," + loadout.faceIndex + "," + loadout.patchIndex + "," + loadout.patchColorIndex + "," + loadout.facialHairIndex + "," + loadout.hairColorIndex + "|" + position;
             if (root != null && key == shownKey) return;
             Hide();
             shownKey = key;

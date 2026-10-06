@@ -38,6 +38,8 @@ namespace Swat
         public int faceIndex;
         public int patchIndex;
         public int patchColorIndex;
+        public int facialHairIndex;
+        public int hairColorIndex = 1;
         public List<EquipmentCount> equipment = new List<EquipmentCount>();
 
         public OfficerLoadout Clone()
@@ -124,6 +126,8 @@ namespace Swat
             loadout.faceIndex = Math.Max(0, Math.Min(loadout.faceIndex, GearCatalog.FaceNames.Length - 1));
             loadout.patchIndex = Math.Max(0, Math.Min(loadout.patchIndex, GearCatalog.PatchNames.Length - 1));
             loadout.patchColorIndex = Math.Max(0, Math.Min(loadout.patchColorIndex, GearCatalog.PatchColorNames.Length - 1));
+            loadout.facialHairIndex = Math.Max(0, Math.Min(loadout.facialHairIndex, GearCatalog.FacialHairNames.Length - 1));
+            loadout.hairColorIndex = Math.Max(0, Math.Min(loadout.hairColorIndex, GearCatalog.HairColorNames.Length - 1));
             for (int i = loadout.equipment.Count - 1; i >= 0; i--)
             {
                 var item = GameData.Equipment(loadout.equipment[i].id);
