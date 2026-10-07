@@ -653,6 +653,7 @@ namespace Swat
             look.shirt = new Color(0.3f, 0.2f, 0.13f);
             look.pants = new Color(0.17f, 0.22f, 0.34f);
             look.vestOn = false;
+            look.armorStyle = ArmorStyle.None;   // no raid vest (and no POLICE lettering)
             look.camo = 0;
             look.ring = new Color(1f, 0.25f, 0.2f);
             look.idColor = new Color(0.95f, 0.3f, 0.25f);

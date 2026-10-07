@@ -228,7 +228,6 @@ namespace Swat
                 Tune(Attachment("stock_fixed", "Fixed Stock", AttachmentSlot.Stock, 1f, 0.9f, 1f, 0.98f, 1f, 2, "Marginally steadier."), AttachmentLook.FixedStock),
                 // Grips and lasers
                 Tune(Attachment("grip_vertical", "Vertical Grip", AttachmentSlot.Underbarrel, 1f, 0.88f, 1f, 0.99f, 1f, 0, "Less recoil."), AttachmentLook.VerticalGrip),
-                Tune(Attachment("grip_angled", "Angled Grip", AttachmentSlot.Underbarrel, 1f, 0.94f, 1f, 1f, 1f, 1, "A little less recoil and quicker to the sights."), AttachmentLook.AngledGrip, aim: 1.12f),
                 Tune(Attachment("rail_laser", "Laser Module", AttachmentSlot.Underbarrel, 0.9f, 1f, 1f, 1f, 1f, 2, "A red aim laser (a dot where you aim in first person) and slightly tighter spread."), AttachmentLook.Laser, laser: true),
                 // Magazines
                 Tune(Attachment("mag_quick", "Quick-Pull Magazine", AttachmentSlot.Magazine, 1f, 1f, 1f, 1f, 1f, 0, "A pull tab on the magazine: faster reloads."), AttachmentLook.QuickMag, reload: 0.82f),
@@ -258,10 +257,10 @@ namespace Swat
             return new List<ArmorData>
             {
                 // Barebones: no plates at all. Quickest and carries the most, but every hit lands in full.
-                Armor("armor_none", "No Armor", 0, 0f, 1.08f, 2, 0f, false, new Color(0.2f, 0.2f, 0.2f), "Barebones: just a belt and kneepads. The quickest and carries the most, but nothing stops a round."),
-                Armor("armor_light", "Light Vest", 1, 0.2f, 1.05f, 1, 70f, false, new Color(0.22f, 0.24f, 0.26f), "A slick plate carrier with no pouches: fast and roomy, modest protection."),
-                Armor("armor_standard", "Plate Carrier", 2, 0.35f, 1f, 0, 100f, true, new Color(0.08f, 0.09f, 0.11f), "A plate carrier with pouches: balanced protection."),
-                Armor("armor_heavy", "Heavy Armor", 3, 0.5f, 0.88f, -1, 140f, true, new Color(0.04f, 0.04f, 0.05f), "Plates, shoulder guards, collar and groin protector: strong protection, slower and carries less."),
+                Armor("armor_none", "No Vest", 0, 0f, 1.08f, 2, 0f, false, new Color(0.2f, 0.2f, 0.2f), "Barebones: BDUs, a duty belt and kneepads. The quickest and carries the most, but nothing stops a round."),
+                Armor("armor_light", "Concealable Vest", 1, 0.2f, 1.05f, 1, 70f, false, new Color(0.22f, 0.24f, 0.26f), "Soft body armor with no pouches: fast and roomy, stops handgun rounds better than rifle rounds."),
+                Armor("armor_standard", "Tactical Vest", 2, 0.35f, 1f, 0, 100f, true, new Color(0.08f, 0.09f, 0.11f), "A raid vest over soft armor with a trauma plate, pouches and POLICE panels: balanced protection."),
+                Armor("armor_heavy", "Heavy Tactical Vest", 3, 0.5f, 0.88f, -1, 140f, true, new Color(0.04f, 0.04f, 0.05f), "Ceramic plates, shoulder guards, collar and groin protector: strong protection, slower and carries less."),
             };
         }
 

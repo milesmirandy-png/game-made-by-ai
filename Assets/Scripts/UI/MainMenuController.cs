@@ -108,7 +108,7 @@ namespace Swat
             UITheme.Fill(new Rect(rect.x + 4f, rect.y + 98f, 64f, 4f), Color.Lerp(UITheme.AlertRed * 0.6f, UITheme.AlertRed, pulse));
             UITheme.Fill(new Rect(rect.x + 72f, rect.y + 98f, 64f, 4f), Color.Lerp(UITheme.AlertBlue, UITheme.AlertBlue * 0.6f, pulse));
             UITheme.Text(new Rect(rect.x + 2f, rect.y + 110f, rect.width, 40f), "TACTICAL RESPONSE", 30, UITheme.Accent, TextAnchor.UpperLeft, true);
-            UITheme.Text(new Rect(rect.x + 2f, rect.y + 150f, rect.width, 24f), "Port Avalon Police Department  -  Tactical Response Unit", 15, UITheme.Dim);
+            UITheme.Text(new Rect(rect.x + 2f, rect.y + 150f, rect.width, 24f), "Port Avalon Police Department  -  Tactical Response Unit  -  1999", 15, UITheme.Dim);
         }
 
         static void Credits(Rect rect)

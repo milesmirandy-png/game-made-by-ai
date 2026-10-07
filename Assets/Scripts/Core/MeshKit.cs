@@ -24,7 +24,18 @@ namespace Swat
         // How far forward (+z) a slot's surface is at (x, y) in a part: where eyes and brows go on the face.
         public static float FrontZ(ModelLibrary.Model model, string partName, string slot, float x, float y, float fallback)
         {
-            string key = model.id + "/" + partName + "/" + slot + "/z/" + x + "/" + y;
+            return SurfaceZ(model, partName, slot, x, y, fallback, true);
+        }
+
+        // The same on the back (-z): where lettering goes on the back of a vest.
+        public static float BackZ(ModelLibrary.Model model, string partName, string slot, float x, float y, float fallback)
+        {
+            return SurfaceZ(model, partName, slot, x, y, fallback, false);
+        }
+
+        static float SurfaceZ(ModelLibrary.Model model, string partName, string slot, float x, float y, float fallback, bool front)
+        {
+            string key = model.id + "/" + partName + "/" + slot + "/z" + (front ? "+" : "-") + "/" + x + "/" + y;
             float z;
             if (measured.TryGetValue(key, out z)) return z;
             z = fallback;
@@ -47,7 +58,7 @@ namespace Swat
                         float w2 = 1f - w0 - w1;
                         if (w0 < -1e-5f || w1 < -1e-5f || w2 < -1e-5f) continue;
                         float hz = w0 * a.z + w1 * b.z + w2 * c.z;
-                        if (!any || hz > z) z = hz;
+                        if (!any || (front ? hz > z : hz < z)) z = hz;
                         any = true;
                     }
                 }
@@ -228,6 +239,41 @@ namespace Swat
             mesh.triangles = triangles;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        // Block lettering from a 3x5 pixel font, centred on the origin in the x-y plane (both faces), each
+        // pixel 'pixel' wide: vest lettering ("POLICE") without a texture. Letters it doesn't know are gaps.
+        static readonly Dictionary<char, string> Font = new Dictionary<char, string>
+        {
+            { 'P', "111101111100100" }, { 'O', "111101101101111" }, { 'L', "100100100100111" },
+            { 'I', "111010010010111" }, { 'C', "111100100100111" }, { 'E', "111100111100111" },
+            { 'S', "111100111001111" }, { 'W', "101101101111101" }, { 'A', "111101111101101" }, { 'T', "111010010010010" },
+        };
+
+        public static Mesh Text(string text, float pixel, string key)
+        {
+            key = "text/" + text + "/" + pixel;
+            Mesh mesh;
+            if (cache.TryGetValue(key, out mesh) && mesh != null) return mesh;
+            var points = new List<Vector3>();
+            float width = (text.Length * 4 - 1) * pixel, height = 5f * pixel;
+            for (int i = 0; i < text.Length; i++)
+            {
+                string glyph;
+                if (!Font.TryGetValue(char.ToUpperInvariant(text[i]), out glyph)) continue;
+                for (int row = 0; row < 5; row++)
+                    for (int col = 0; col < 3; col++)
+                    {
+                        if (glyph[row * 3 + col] != '1') continue;
+                        float x0 = -width * 0.5f + (i * 4 + col) * pixel, y0 = height * 0.5f - (row + 1) * pixel;
+                        Vector3 a = new Vector3(x0, y0, 0f), b = new Vector3(x0, y0 + pixel, 0f), c = new Vector3(x0 + pixel, y0 + pixel, 0f), d = new Vector3(x0 + pixel, y0, 0f);
+                        points.Add(a); points.Add(b); points.Add(c);
+                        points.Add(a); points.Add(c); points.Add(d);
+                    }
+            }
+            mesh = Flat(key, points, true);
+            cache[key] = mesh;
             return mesh;
         }
 

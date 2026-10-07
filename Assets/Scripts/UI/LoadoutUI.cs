@@ -349,9 +349,9 @@ namespace Swat
             switch (GearCatalog.StyleFor(armor))
             {
                 case ArmorStyle.None: vest = "No armor: barebones, just a belt and kneepads."; break;
-                case ArmorStyle.Light: vest = "Light vest: a slick plate carrier, no pouches."; break;
+                case ArmorStyle.Light: vest = "Concealable vest: soft armor, no pouches."; break;
                 case ArmorStyle.Heavy: vest = "Heavy armor: plates, pouches, shoulder guards, collar and groin protector."; break;
-                default: vest = "Standard plate carrier with pouches and a pack."; break;
+                default: vest = "Tactical vest with pouches, a pack and POLICE panels."; break;
             }
             UITheme.Text(new Rect(x, y, cw, 40f), vest + " The vest follows the armor you pick under Armor & gear.", 14, UITheme.Dim);
             y += 44f;

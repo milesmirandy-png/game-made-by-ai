@@ -7,6 +7,17 @@ namespace Swat
     // and the rolled plan (so the briefing matches what you'll find).
     public static class MissionBriefing
     {
+        // The campaign runs over a few weeks in the autumn of 1999: each level a couple of days after the
+        // last, at a time of day that matches its lighting (minutes vary with the seed).
+        public static string DateLine(MissionData mission, MissionPlan plan)
+        {
+            int day = mission.isTraining ? 0 : System.Math.Max(1, mission.levelNumber) * 2 + 1;
+            var date = new System.DateTime(1999, 10, 4).AddDays(day);
+            int hour = plan.timeOfDay == TimeOfDay.Night ? 23 : plan.timeOfDay == TimeOfDay.Evening ? 19 : 14;
+            int minute = (int)(System.Math.Abs((long)plan.seed * 7) % 60);
+            return date.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture) + "  -  " + hour.ToString("00") + ":" + minute.ToString("00");
+        }
+
         public static readonly string[] MapNames =
         {
             "office", "Office Complex", "warehouse", "Warehouse", "apartment", "Apartment Building", "training", "Training Ground",

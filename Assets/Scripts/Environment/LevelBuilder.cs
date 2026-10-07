@@ -264,8 +264,9 @@ namespace Swat
         {
             var desk = Prop("Desk", position, new Vector3(width, 0.8f, 0.85f), new Color(0.5f, 0.38f, 0.26f), true, yaw);
             if (!monitor) return;
-            var screen = Shapes.Box("Monitor", desk.transform, new Vector3(0f, 0.85f, 0.15f), new Vector3(0.35f / width, 0.5f, 0.06f), new Color(0.08f, 0.08f, 0.1f), false);
-            Shapes.Box("Screen", screen.transform, new Vector3(0f, 0f, -0.6f), new Vector3(0.9f, 0.8f, 0.2f), new Color(0.35f, 0.6f, 0.9f), false, 1.2f);
+            // A 1999 desk: a deep beige CRT monitor.
+            var screen = Shapes.Box("Monitor", desk.transform, new Vector3(0f, 0.725f, 0.12f), new Vector3(0.4f / width, 0.45f, 0.45f), new Color(0.78f, 0.75f, 0.66f), false);
+            Shapes.Box("Screen", screen.transform, new Vector3(0f, 0.05f, -0.51f), new Vector3(0.78f, 0.7f, 0.02f), new Color(0.3f, 0.55f, 0.75f), false, 1.2f);
             // Desk clutter: keyboard, mug, papers (visual only).
             Shapes.Box("Keyboard", desk.transform, new Vector3(0f, 0.53f, -0.15f), new Vector3(0.28f / width, 0.04f, 0.18f), new Color(0.12f, 0.12f, 0.14f), false);
             Shapes.Make(PrimitiveType.Cylinder, "Mug", desk.transform, new Vector3(0.32f, 0.56f, -0.1f), new Vector3(0.05f / width, 0.07f, 0.08f), new Color(0.85f, 0.85f, 0.8f), false);

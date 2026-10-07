@@ -445,6 +445,12 @@ namespace Swat
                 Shapes.Box("Radio", m, new Vector3(0.1f, 1.37f, chest + 0.012f), new Vector3(0.036f, 0.07f, 0.024f), new Color(0.1f, 0.1f, 0.11f), false);
                 Shapes.Box("Radio Knob", m, new Vector3(0.09f, 1.412f, chest + 0.012f), new Vector3(0.01f, 0.014f, 0.01f), new Color(0.2f, 0.2f, 0.21f), false);
                 Shapes.Box("Antenna", m, new Vector3(0.115f, 1.44f, chest + 0.006f), new Vector3(0.006f, 0.075f, 0.006f), new Color(0.07f, 0.07f, 0.08f), false);
+                // 1999 raid vests: POLICE in yellow block letters across the chest and big on the back.
+                var lettering = new Color(0.95f, 0.82f, 0.22f);
+                float front = MeshKit.FrontZ(model, "torso", "Vest", 0f, 1.22f, 0.16f);
+                float back = MeshKit.BackZ(model, "torso", "Vest", 0f, 1.26f, -0.15f);
+                MeshKit.Piece("Police Front", m, MeshKit.Text("POLICE", 0.0062f, null), lettering, new Vector3(0f, 1.22f, front + 0.003f), Quaternion.identity);
+                MeshKit.Piece("Police Back", m, MeshKit.Text("POLICE", 0.012f, null), lettering, new Vector3(0f, 1.26f, back - 0.003f), Quaternion.Euler(0f, 180f, 0f));
             }
             if (look.patch > 0)
             {
@@ -490,6 +496,8 @@ namespace Swat
             if (headgear != GearCatalog.Headgear.HelmetFull) hide.Add("Scope");
             if (headgear >= GearCatalog.Headgear.Helmet) { hide.Add("Glasses"); hide.Add("Material.002"); }
             if (!GearCatalog.HasHelmet(look.headgear)) { hide.Add("Helmet"); hide.Add("Torch"); }
+            // The classic kevlar helmet is built over the head instead of the model's modern one.
+            if (headgear == GearCatalog.Headgear.Kevlar) { hide.Add("Helmet"); hide.Add("Torch"); }
             if (headgear == GearCatalog.Headgear.Boonie || headgear == GearCatalog.Headgear.BareHead) hide.Add("Band");
             if (look.face != (int)GearCatalog.Face.Balaclava) hide.Add("Mask");
             return hide;
@@ -534,6 +542,14 @@ namespace Swat
                 case GearCatalog.Headgear.Boonie:
                     MeshKit.Piece("Crown", head, MeshKit.Shell(model, "head", skin, (c, top) => top > 0.16f, 0.018f, 0.1f, "boonie crown"), look.pants, Vector3.zero, Quaternion.identity);
                     MeshKit.Piece("Brim", head, MeshKit.Brim(0.17f, 0f, 360f, 0.03f, 16, 0.095f, "boonie brim"), Shapes.Shade(look.pants, 0.92f), new Vector3(0f, 0.152f, -0.025f), Quaternion.identity);
+                    break;
+                case GearCatalog.Headgear.Kevlar:
+                    // 1990s kevlar helmet: a thick dome over the skull with the flared lip round the brow,
+                    // lower over the ears and the back of the neck.
+                    MeshKit.Piece("Kevlar Helmet", head, MeshKit.Shell(model, "head", skin, (c, top) => top > (c.z > 0.02f ? 0.15f : 0.11f), 0.03f, 0.16f, "kevlar dome"), helmet, Vector3.zero, Quaternion.identity);
+                    MeshKit.Piece("Helmet Lip", head, MeshKit.Brim(0.135f, 0f, 360f, 0.022f, 18, 0.11f, "kevlar lip"), Shapes.Shade(helmet, 0.9f), new Vector3(0f, 0.142f, -0.02f), Quaternion.identity);
+                    Shapes.Box("Chin Strap", head, new Vector3(0.062f, 0.06f, 0.02f), new Vector3(0.008f, 0.1f, 0.016f), dark, false);
+                    Shapes.Box("Chin Strap", head, new Vector3(-0.062f, 0.06f, 0.02f), new Vector3(0.008f, 0.1f, 0.016f), dark, false);
                     break;
                 case GearCatalog.Headgear.BareHead:
                     // Short hair: lower at the back than at the forehead.

@@ -17,7 +17,7 @@ namespace Swat
                 game.GoToHeadquarters();
                 return;
             }
-            UITheme.Header(new Rect(60f, 40f, w - 120f, 60f), "Mission Briefing", mission.LevelLabel + "  |  " + mission.displayName + "  -  " + mission.location);
+            UITheme.Header(new Rect(60f, 40f, w - 120f, 60f), "Mission Briefing", mission.LevelLabel + "  |  " + mission.displayName + "  -  " + mission.location + "  |  " + MissionBriefing.DateLine(mission, plan));
 
             // Left: situation and objectives.
             var left = new Rect(60f, 120f, w * 0.5f - 80f, h - 240f);

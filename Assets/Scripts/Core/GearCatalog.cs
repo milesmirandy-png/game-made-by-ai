@@ -2,16 +2,16 @@ using UnityEngine;
 
 namespace Swat
 {
-    // How the vest looks, from the armor you pick: no armor (barebones: shirt, belt and kneepads), a slick
-    // plate carrier, the full carrier with pouches and pack, or that plus shoulder guards, collar and groin
-    // protector. Standard is first so a default Appearance keeps the full kit.
+    // How the vest looks, from the armor you pick (1999 kit): no vest (barebones: BDUs, belt and kneepads),
+    // a concealable vest, the tactical raid vest with pouches and pack, or that plus shoulder guards, collar
+    // and groin protector. Standard is first so a default Appearance keeps the full kit.
     public enum ArmorStyle { Standard, Light, Heavy, None }
 
     // The looks an officer can pick in the loadout (Look tab): headgear, face, a patch and its colour.
     // They're cosmetic: protection comes from the armor. Indexes are stored in OfficerLoadout.
     public static class GearCatalog
     {
-        public enum Headgear { HelmetFull, HelmetGoggles, Helmet, HelmetVisor, OpsCap, Beanie, Boonie, BareHead }
+        public enum Headgear { HelmetFull, HelmetGoggles, Helmet, HelmetVisor, OpsCap, Beanie, Boonie, BareHead, Kevlar }
         public enum Face { Balaclava, Bare, GasMask, Shades }
         public enum Patch { None, Badge, Stripes, Chevron, Star, Cross, Diamond, Target, Flag }
         public enum FacialHair { None, Stubble, Beard, Moustache }
@@ -19,7 +19,7 @@ namespace Swat
         public static readonly string[] HeadgearNames =
         {
             "Helmet, NVG and goggles", "Helmet and goggles", "Helmet", "Helmet and face shield",
-            "Ops cap", "Beanie", "Boonie hat", "Bare head",
+            "Ops cap", "Beanie", "Boonie hat", "Bare head", "Classic kevlar helmet",
         };
         public static readonly string[] FaceNames = { "Balaclava", "Bare face", "Gas mask", "Shades" };
         public static readonly string[] PatchNames = { "None", "Unit badge", "Stripes", "Chevron", "Star", "Medic cross", "Diamond", "Target", "Flag" };
@@ -73,9 +73,9 @@ namespace Swat
                 string[] uniform = { "Shirt", "Pants" };
                 camos = new[]
                 {
-                    // Arid: a multi-colour pattern, tan with khaki, olive and brown blotches.
-                    new ModelLibrary.Camo { id = "arid", slots = uniform, scale = 0.07f, seed = 3, cuts = new[] { 0.42f, 0.56f, 0.66f },
-                        colors = new[] { new Color(0.62f, 0.53f, 0.37f), new Color(0.71f, 0.62f, 0.45f), new Color(0.45f, 0.45f, 0.28f), new Color(0.44f, 0.31f, 0.19f) } },
+                    // Desert: the 1990s three-colour pattern, light tan with khaki and brown blotches.
+                    new ModelLibrary.Camo { id = "desert", slots = uniform, scale = 0.08f, seed = 3, cuts = new[] { 0.48f, 0.64f },
+                        colors = new[] { new Color(0.74f, 0.66f, 0.5f), new Color(0.6f, 0.52f, 0.36f), new Color(0.46f, 0.35f, 0.24f) } },
                     new ModelLibrary.Camo { id = "woodland", slots = uniform, scale = 0.08f, seed = 11, cuts = new[] { 0.45f, 0.58f, 0.7f },
                         colors = new[] { new Color(0.33f, 0.38f, 0.22f), new Color(0.39f, 0.29f, 0.17f), new Color(0.19f, 0.25f, 0.14f), new Color(0.09f, 0.09f, 0.08f) } },
                     new ModelLibrary.Camo { id = "urban", slots = uniform, scale = 0.07f, seed = 5, cuts = new[] { 0.45f, 0.58f, 0.7f },
@@ -103,7 +103,7 @@ namespace Swat
 
         public static bool HasHelmet(int headgear)
         {
-            return headgear <= (int)Headgear.HelmetVisor;
+            return headgear <= (int)Headgear.HelmetVisor || headgear == (int)Headgear.Kevlar;
         }
     }
 }

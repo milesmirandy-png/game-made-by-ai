@@ -34,7 +34,7 @@ namespace Swat
         public string magazineId;
         public int uniformIndex;
         // Looks only (see CharacterFactory.Gear): headgear, face, patch design and patch colour.
-        public int headgearIndex;
+        public int headgearIndex = (int)GearCatalog.Headgear.Kevlar;   // 1999: the classic kevlar helmet
         public int faceIndex;
         public int patchIndex;
         public int patchColorIndex;

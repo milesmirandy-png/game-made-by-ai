@@ -31,10 +31,10 @@ namespace Swat
             return Gate(officer.unlockAfterMissions);
         }
 
-        // Uniforms are whole kits: shirt, trousers, plate carrier, pouches, helmet and gloves/boots
+        // Uniforms are whole 1999-era kits: BDU shirt, trousers, tactical vest, pouches, helmet and gloves/boots
         // (the blocky figures use the shirt colour; the soldier model wears the whole kit).
         // The last four are camouflage (GearCatalog.CamoFor): the colours below are their average.
-        public static readonly string[] UniformNames = { "Navy", "Black", "Urban Gray", "Olive", "Midnight Blue", "Charcoal", "Ranger Green", "Desert Tan", "Woodland", "Gray & Coyote", "Arid Camo", "Woodland Camo", "Urban Camo", "Night Camo" };
+        public static readonly string[] UniformNames = { "Navy BDU", "Black BDU", "Urban Gray", "OD Green", "Midnight Blue", "Charcoal", "Forest Green", "Khaki", "Woodland", "Gray & Khaki", "Desert Camo", "Woodland Camo", "Urban Camo", "Night Camo" };
         public static readonly float[,] UniformColors =
         {
             { 0.12f, 0.16f, 0.26f }, { 0.07f, 0.07f, 0.08f }, { 0.32f, 0.34f, 0.36f },
@@ -59,29 +59,30 @@ namespace Swat
             var kit = new UniformKit { shirt = shirt, pants = Shapes.Shade(shirt, 0.82f), vest = C(0.1f, 0.11f, 0.13f), pouches = C(0.15f, 0.16f, 0.18f), helmet = C(0.08f, 0.09f, 0.11f), gear = C(0.07f, 0.075f, 0.085f) };
             switch (UniformNames[index])
             {
-                case "Black":
+                case "Black BDU":
                     kit.pants = C(0.08f, 0.08f, 0.09f); kit.vest = C(0.11f, 0.11f, 0.12f); kit.pouches = C(0.15f, 0.15f, 0.16f); kit.helmet = C(0.09f, 0.09f, 0.1f);
                     break;
                 case "Urban Gray":
                     kit.pants = C(0.27f, 0.28f, 0.3f); kit.vest = C(0.2f, 0.21f, 0.23f); kit.pouches = C(0.26f, 0.27f, 0.29f); kit.helmet = C(0.22f, 0.23f, 0.25f);
                     break;
-                case "Olive":
+                case "OD Green":
                     kit.pants = C(0.19f, 0.22f, 0.14f); kit.vest = C(0.25f, 0.28f, 0.18f); kit.pouches = C(0.3f, 0.33f, 0.21f); kit.helmet = C(0.21f, 0.24f, 0.15f); kit.gear = C(0.17f, 0.14f, 0.1f);
                     break;
-                case "Ranger Green":
-                    kit.pants = C(0.18f, 0.24f, 0.13f); kit.vest = C(0.24f, 0.31f, 0.18f); kit.pouches = C(0.29f, 0.36f, 0.21f); kit.helmet = C(0.2f, 0.27f, 0.15f); kit.gear = C(0.2f, 0.16f, 0.11f);
+                case "Forest Green":
+                    kit.pants = C(0.18f, 0.24f, 0.13f); kit.vest = C(0.2f, 0.24f, 0.15f); kit.pouches = C(0.24f, 0.28f, 0.17f); kit.helmet = C(0.2f, 0.25f, 0.15f); kit.gear = C(0.1f, 0.1f, 0.09f);
                     break;
-                case "Desert Tan":
-                    kit.pants = C(0.57f, 0.46f, 0.31f); kit.vest = C(0.49f, 0.36f, 0.21f); kit.pouches = C(0.56f, 0.42f, 0.26f); kit.helmet = C(0.47f, 0.35f, 0.21f); kit.gear = C(0.38f, 0.27f, 0.16f);
+                case "Khaki":
+                    // Khaki BDUs with an OD green vest (coyote brown gear came later).
+                    kit.pants = C(0.57f, 0.5f, 0.36f); kit.vest = C(0.24f, 0.27f, 0.17f); kit.pouches = C(0.29f, 0.32f, 0.2f); kit.helmet = C(0.24f, 0.27f, 0.17f); kit.gear = C(0.12f, 0.12f, 0.1f);
                     break;
                 case "Woodland":
-                    kit.pants = C(0.42f, 0.4f, 0.28f); kit.vest = C(0.45f, 0.35f, 0.22f); kit.pouches = C(0.51f, 0.4f, 0.26f); kit.helmet = C(0.26f, 0.31f, 0.17f); kit.gear = C(0.27f, 0.2f, 0.12f);
+                    kit.pants = C(0.3f, 0.32f, 0.2f); kit.vest = C(0.22f, 0.25f, 0.16f); kit.pouches = C(0.27f, 0.3f, 0.19f); kit.helmet = C(0.22f, 0.26f, 0.15f); kit.gear = C(0.12f, 0.11f, 0.09f);
                     break;
-                case "Gray & Coyote":
-                    kit.pants = C(0.24f, 0.28f, 0.17f); kit.vest = C(0.5f, 0.38f, 0.24f); kit.pouches = C(0.56f, 0.43f, 0.27f); kit.helmet = C(0.46f, 0.36f, 0.23f); kit.gear = C(0.3f, 0.22f, 0.14f);
+                case "Gray & Khaki":
+                    kit.pants = C(0.24f, 0.25f, 0.27f); kit.vest = C(0.55f, 0.48f, 0.34f); kit.pouches = C(0.6f, 0.53f, 0.38f); kit.helmet = C(0.2f, 0.21f, 0.23f); kit.gear = C(0.12f, 0.12f, 0.12f);
                     break;
-                case "Arid Camo":
-                    kit.camo = 1; kit.pants = shirt; kit.vest = C(0.5f, 0.39f, 0.25f); kit.pouches = C(0.56f, 0.44f, 0.28f); kit.helmet = C(0.52f, 0.42f, 0.28f); kit.gear = C(0.36f, 0.27f, 0.17f);
+                case "Desert Camo":
+                    kit.camo = 1; kit.pants = shirt; kit.vest = C(0.62f, 0.54f, 0.38f); kit.pouches = C(0.66f, 0.58f, 0.42f); kit.helmet = C(0.6f, 0.52f, 0.37f); kit.gear = C(0.4f, 0.31f, 0.2f);
                     break;
                 case "Woodland Camo":
                     kit.camo = 2; kit.pants = shirt; kit.vest = C(0.24f, 0.29f, 0.17f); kit.pouches = C(0.29f, 0.34f, 0.2f); kit.helmet = C(0.22f, 0.27f, 0.15f); kit.gear = C(0.22f, 0.17f, 0.11f);
