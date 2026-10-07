@@ -1,7 +1,7 @@
 # SWAT: Tactical Response
 
-A tactical SWAT game made in Unity, played from above or in first person
-(body cam style). You lead a
+A tactical SWAT game made in Unity and set in 1999, played in first person
+(through a VHS helmet cam) or from above. You lead a
 small team of the (fictional) Port Avalon Police Department's Tactical
 Response Unit: pick your officers and their kit at headquarters, read the
 briefing, deploy by van, then clear buildings room by room, protect and
@@ -25,11 +25,112 @@ low-poly models (a soldier, a police riot shield and a weapon pack). See
 > update was played; everything since (Gun Game, Elimination, spectating and
 > pings; then the tactical overhaul, the new models, first person, gear
 > customization, the Ready or Not-style procedure, the realism changes, the
-> view switch and the map rework) has been compiled but **not played yet**. No performance has been measured, and no
+> view switch, the map rework, and the 1999 / combat / game modes /
+> first-person update) has been compiled but **not played yet**. No performance has been measured, and no
 > gameplay screenshots are in the repository yet. [Screenshots/README.md](Screenshots/README.md) explains how
 > to capture them (the screenshot tour does most of it).
 
-## What's new: switch views with V, and reworked maps
+## What's new: 1999, harder combat, SWAT 4-style modes and a first-person overhaul
+
+This update does four things together.
+
+### Set in 1999
+
+- The campaign runs in October and November 1999. Every briefing is dated
+  (each level a couple of days after the last), with a start time that
+  matches its lighting. The helmet cam's time stamp runs on from there.
+- **Period gear.** The classic kevlar helmet is the new default headgear.
+  Vests are now No Vest, Concealable Vest, Tactical Vest and Heavy Tactical
+  Vest. Officers' vests carry yellow POLICE lettering on the front and back.
+  Uniforms are BDUs in period colours and camo: navy, black, urban gray, OD
+  green, woodland, desert and night camo, and others. The angled foregrip
+  (a later invention) is gone.
+- **Period props.** Office desks have beige CRT monitors.
+
+### Harder, more realistic combat (Ready or Not + SWAT 4)
+
+- **Hit zones** on every character: head, torso, arms and legs.
+  - Head hits do 2.2x damage; arms 0.55x and legs 0.65x.
+  - Body armor only covers the torso. Helmets cover the head.
+- **Ammo type per officer** (Loadout, the button on the sidearm row):
+  - **FMJ** gets through armor and penetrates. Pistols and SMGs go through
+    a door; rifles go through a door or a thin interior wall, with less
+    damage on the far side.
+  - **JHP** hits unarmored targets harder (1.2x) but is stopped by armor
+    and goes through nothing.
+  - Suspects carry either.
+- **Incapacitation, as in SWAT 4.** A body or limb hit can put a suspect
+  down alive.
+  - They must be restrained and reported. That scores between an arrest
+    and a kill.
+  - Head hits always kill.
+  - A round in the arm often makes them drop the gun and give up; a leg hit
+    slows them.
+- **Rules of engagement.** Deadly force is unauthorized, and costs you
+  score, against an armed suspect who hasn't seen the police and wasn't
+  ordered to comply. So is any force on someone already down.
+- **Tactical reloads** keep a round in the chamber on closed-bolt guns (the
+  new magazine plus one). Open-bolt SMGs and machine guns don't.
+
+### Better deathmatch and SWAT 4-style game modes
+
+- **SWAT against Suspects.** The other side now dresses like suspects:
+  street clothes, no vests. Each side's bots carry that side's kind of guns.
+- **VIP Escort** (rounds). One SWAT player each round is the VIP: sidearm
+  only, no respawn. SWAT wins the round by getting them to the extraction
+  point, the room furthest from SWAT's base. The suspects win by tagging
+  the VIP out or running out the 3-minute clock.
+- **Rapid Deployment** (rounds). The suspects defend three devices hidden in
+  the building. SWAT wins the round by disarming them all (hold E, four
+  seconds each) before the 3-minute clock runs out.
+- Both are first to 2, 3 or 4 rounds, work with bots and are synced online.
+  The extraction point and the devices are marked on screen and on the
+  minimap, and the VIP on screen.
+- **Arrests.** An opponent dazed by a flashbang, a shove or a less-lethal
+  round can be restrained (hold E). In Team Deathmatch an arrest counts
+  double. For now this works on bots only, offline or when you host.
+- **Arcade weapons** option. The over-the-top guns (RG6 rotary gun, D20 drum
+  shotgun, KV SMG, GL6 marker launcher) are now off by default, and Gun
+  Game's ladder leaves them out unless you turn the option on.
+- Online play needs everyone on this version (network message version 4).
+
+### First-person overhaul
+
+- **First person is now the default** for new players. V still switches to
+  top-down at any time. Existing saves keep the view they had.
+- **VHS helmet cam.** The first-person look is now a 1999 camcorder taping
+  to VHS:
+  - a blinking REC light, tape speed and counter, the date and time stamp,
+    the unit and officer, and a battery that runs down over a long mission;
+  - colour that smears sideways, faint scanlines, and a tracking band that
+    rolls down the picture now and then and tears when you're hit or under
+    fire (no tracking band with "reduce flashes").
+  - **Settings -> Camera -> Helmet cam look** turns all of it off.
+- **Breathing sway.** Aiming down the sights, the view drifts in a slow
+  figure of eight, and your shots go where the view is.
+  - Small when you're rested, crouched and still.
+  - Bigger when you're out of breath, under fire, wounded in the arm,
+    moving or carrying a heavy gun.
+- **Check magazine (K).** The gun tips over so you can see the magazine.
+  - It takes a second; firing or sprinting breaks it off.
+  - Afterwards the HUD says how full the magazine feels and how many
+    magazines are left.
+  - It works in both views.
+- **Minimal first-person HUD** (on by default; Settings -> Camera).
+  - No panels: a state line and thin health, armor and stamina bars, and
+    the gun, fire mode and selected equipment.
+  - With realistic ammo, nothing about the magazine until you check it (or
+    it runs dry).
+  - The full HUD is one toggle away.
+- **First-person reticle:** a dot from the hip (as before) or none. Hit and
+  takedown markers still show either way.
+- **Working the action.** Pump shotguns work the pump with the support hand
+  after each shot; the lever and bolt guns work the action with the trigger
+  hand.
+- The key list in Settings -> Controls now fits on the screen. Its last
+  rows used to run under the buttons.
+
+## Earlier: switch views with V, and reworked maps
 
 - **V switches between top-down and first person at any time.** In a
   mission (paused or not) it changes straight away. Before one (main menu,
@@ -508,10 +609,11 @@ All keys can be remapped in **Settings -> Controls**.
 | Input | Action |
 | --- | --- |
 | **W A S D** | Move (relative to the screen; in first person, forward / back / strafe) |
-| **Mouse** | Aim (your officer faces the cursor; in first person, look around) |
+| **Mouse** | Aim (in first person, the default, look around; from above, your officer faces the cursor) |
 | **Left mouse** | Fire |
-| **Right mouse** | Steady aim (tighter spread, slower movement); in first person, aim down the sights |
+| **Right mouse** | Steady aim (tighter spread, slower movement); in first person, aim down the sights (the view drifts with your breathing) |
 | **R** | Reload |
+| **K** | Check magazine: how full it feels and how many are left (takes a second) |
 | **Left Shift** | Sprint (uses stamina; loud). From a crouch it stands you up |
 | **C** | Crouch. While sprinting: slide |
 | **Left Ctrl (hold)** | Peek / lean past a corner or door frame (picks the open side; hold a movement key to lean that way on screen, or A / D in first person) |
@@ -639,10 +741,12 @@ uses the normal deployment: the van arrives, then the exercise starts.
 | Zone Control | A zone is marked in a room about halfway between the bases. Stand in it with no opponents inside to take it; while it's yours your team scores a point per second. |
 | Gun Game | Every tag-out moves you to the next gun on a ladder of 8, 12 or 16 (from the RG6 rotary gun down to the BK6 pistol). The first to tag someone out with the last gun wins for their team. Your team's score is its best climber's rung. |
 | Elimination | Rounds with no respawns: tag out the whole other team to win the round (or have more officers left when the 2-minute round clock runs out). First to 3, 5 or 7 rounds. Everyone restarts at their base each round. |
+| VIP Escort | Rounds. One SWAT player is the VIP (sidearm only, no respawn). SWAT wins the round by getting the VIP to the extraction point; the suspects by tagging the VIP out or holding out for the 3-minute round clock. First to 2, 3 or 4 rounds. |
+| Rapid Deployment | Rounds. The suspects defend three devices in the building; SWAT wins the round by disarming all three (hold E for four seconds at each) before the 3-minute round clock runs out. First to 2, 3 or 4 rounds. |
 
-- **Teams:** you plus your squadmates (bots using their own loadouts; extra
-  places are filled by other officers) against the Red Team (bots with random
-  weapons). Team size 1 vs 1 to 6 vs 6; bot skill Easy, Normal or Hard.
+- **Teams:** SWAT (you plus your squadmates: bots using their own loadouts;
+  extra places are filled by other officers) against the Suspects (bots in
+  street clothes, no vests, with suspects' kinds of guns). Team size 1 vs 1 to 6 vs 6; bot skill Easy, Normal or Hard.
   Online, other players take places on either team (see below).
 - **Respawns:** 5 seconds after being tagged out, at your base, with full
   health and ammo and a moment of protection (in Elimination, at the start of
@@ -653,9 +757,13 @@ uses the normal deployment: the van arrives, then the exercise starts.
   and look.
 - **Maps:** warehouse, office, corner store, motel, bank, clinic, nightclub,
   steelworks and the training facility. Every usable door starts open.
-- **What you see:** the Red Team is only shown while your team can see them
+- **What you see:** the other side is only shown while your team can see them
   (the Line of Sight setting), plus a moment after they fire near you. Flags,
-  the zone and both bases are marked on screen and on the minimap.
+  the zone, both bases, the extraction point and the devices are marked on
+  screen and on the minimap; the VIP is marked on screen.
+- **Arcade weapons** (off by default): allows the rotary gun, drum shotgun,
+  KV SMG and marker launcher, and puts them on the Gun Game ladder (which
+  otherwise starts at the LM8 light machine gun).
 - **HUD:** score and clock at the top (Elimination: the round clock); flag,
   zone, gun-ladder or round status under it; a takedown feed and your team on
   the right; and a respawn countdown with who you're watching.
@@ -815,11 +923,13 @@ Assets/
                        AlarmSystem, ExtractionZone, EvidenceItem, Stairwell, TrainingTarget,
                        LevelBuilder, LevelLayout, NavMeshBaker, *Map.cs, MapDresser (lighting zones,
                        props, contact shadows), RoomStyle, EnvironmentProps, LightFlicker,
-                       AmbientDust, SurfaceTag
+                       AmbientDust, SurfaceTag, ViewParts (what changes between the two views),
+                       ThinWall (walls rifle rounds go through)
     Vehicles/          VanBuilder, VehicleArrival, LightBar, VanSupply
     LevelEditor/       CustomLevel (data), CustomLevelGeometry (walls from rooms), CustomLevelValidator,
                        CustomLevelBuilder (map + mission), CustomLevelStore (JSON files, example level)
-    Versus/            VersusMatch (game modes: teams, flags, zone, scoring, events), ArenaBot
+    Versus/            VersusMatch (game modes: teams, flags, zone, scoring, events), VersusObjectives
+                       (VIP Escort, Rapid Deployment, arrests), BombDevice, ArenaBot
     Net/               NetTransport (UDP peer, reliable/unreliable messages, LAN discovery; plain C#),
                        NetSession (lobby, match start, snapshots, hits), NetActor (other players on screen)
     Missions/          MissionData, MissionManager, Objective, ObjectiveTracker, MissionScoring,

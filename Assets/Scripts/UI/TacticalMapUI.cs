@@ -364,6 +364,25 @@ namespace Swat
                     Box(new Rect(p.x - 1f, p.y - 10f, 2f, 10f), Color.white);
                     Box(new Rect(p.x + 1f, p.y - 10f, 8f, 5f), color);
                 }
+            if (match.Mode == GameMode.VipEscort)
+            {
+                var gold = new Color(1f, 0.82f, 0.25f);
+                Vector2 exit = ToMap(match.VipExit);
+                RingAt(exit, Mathf.Clamp(1.1f * scale, 6f, 12f), gold, 2f);
+                Label(new Rect(exit.x - 50f, exit.y + 10f, 100f, 16f), "EXTRACTION", 11, gold, TextAnchor.UpperCenter, true);
+            }
+            if (match.Mode == GameMode.RapidDeployment)
+            {
+                var red = new Color(1f, 0.35f, 0.25f);
+                for (int i = 0; i < match.Bombs.Count; i++)
+                {
+                    var bomb = match.Bombs[i];
+                    if (bomb.disarmed) continue;
+                    Vector2 p = ToMap(bomb.position);
+                    Box(new Rect(p.x - 4f, p.y - 4f, 8f, 8f), red);
+                    Label(new Rect(p.x - 40f, p.y + 6f, 80f, 16f), "DEVICE " + (i + 1), 10, red, TextAnchor.UpperCenter, true);
+                }
+            }
         }
 
         void DrawVersusPeople(VersusMatch match, float r)

@@ -23,6 +23,18 @@ namespace Swat
         public int ShotsHit { get; private set; }
         public bool Overcharged { get; set; }
 
+        // Checking the magazine (K): you tip the gun and look at or feel the magazine (or the loading
+        // gate), which takes a moment and can't be done while shooting. The HUD shows what you found
+        // for a few seconds after (CheckedAt, CheckedText).
+        public const float CheckTime = 1f, CheckShown = 3f;
+        public bool IsChecking { get { return checkEnd > 0f; } }
+        public float CheckProgress { get { return IsChecking ? Mathf.Clamp01(1f - (checkEnd - Time.time) / CheckTime) : 0f; } }
+        public float CheckedAt { get; private set; } = -10f;
+        public string CheckedText { get; private set; }
+        // Pump and bolt guns: 0..1 through working the action after a shot (0 when not).
+        public float CycleProgress { get { float p = (Time.time - cycleStart) / 0.3f; return p > 0f && p < 1f ? p : 0f; } }
+        public bool CyclePump { get { return IsShotgun(Current.Data); } }
+
         // Weapon wheel (hold the switch-weapon key): primary, sidearm and each equipment item.
         public struct WheelEntry
         {
@@ -48,7 +60,7 @@ namespace Swat
 
         PlayerController player;
         Transform laser;
-        float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f, raisedAt;
+        float nextFireTime, reloadEnd, reloadDuration, switchEnd, bloom, lastShotTime = -10f, pumpAt = -1f, raisedAt, checkEnd, cycleStart = -10f;
         bool wasSprinting;
         int burstLeft;
         bool reloadFromEmpty;
@@ -75,6 +87,7 @@ namespace Swat
             if (pumpAt > 0f && Time.time >= pumpAt)
             {
                 pumpAt = -1f;
+                cycleStart = Time.time;
                 AudioManager.Play(Sound.Pump, player.Position, 0.55f, Random.Range(0.96f, 1.04f), SoundCategory.Weapons);
                 player.Animator.Fire(0.35f);
                 var cycled = Current.Data;
@@ -138,6 +151,7 @@ namespace Swat
             burstLeft = 0;
             spin = 0f;
             pumpAt = -1f;
+            checkEnd = 0f;
             switchEnd = Time.time + Current.Data.switchTime;
             lowAmmoWarned = Current.Magazine <= Current.MagazineSize / 4;
             ApplyWeaponModel();
@@ -240,6 +254,7 @@ namespace Swat
             burstLeft = 0;
             spin = 0f;
             pumpAt = -1f;
+            checkEnd = 0f;
             switchEnd = Time.time + data.switchTime;
             lowAmmoWarned = false;
             ApplyWeaponModel();
@@ -273,6 +288,7 @@ namespace Swat
             Spread = ((weapon.Spread * rested + bloom) * stance + moving + (sprinting ? 6f : 0f)) * (1f + player.GasExposure * 0.8f) * (player.Health.ArmInjured ? 1.3f : 1f) * (1f + player.Suppression * 0.6f);
 
             if (GameInput.Down(InputAction.Reload) && weapon.CanReload && !IsReloading) StartReload();
+            UpdateMagazineCheck(weapon, sprinting);
             bool blocked = IsReloading || IsSwitching || sprinting || Time.time < raisedAt;
 
             // Burst: one pull fires a short string of shots on its own.
@@ -311,6 +327,29 @@ namespace Swat
             }
         }
 
+        // K starts a magazine check; pulling the trigger or sprinting breaks it off (nothing learned),
+        // and at the end you know how the magazine feels and how many are left in the pouches.
+        void UpdateMagazineCheck(Weapon weapon, bool sprinting)
+        {
+            if (GameInput.Down(InputAction.CheckMagazine) && !IsChecking && !IsReloading && !IsSwitching && !sprinting && burstLeft == 0)
+            {
+                checkEnd = Time.time + CheckTime;
+                AudioManager.Play(Sound.Click, player.Position, 0.3f, 0.8f, SoundCategory.Weapons);
+            }
+            if (!IsChecking) return;
+            if (sprinting || GameInput.Down(InputAction.Fire))
+            {
+                checkEnd = 0f;
+                return;
+            }
+            if (Time.time < checkEnd) return;
+            checkEnd = 0f;
+            bool realistic = SaveManager.Settings.realisticAmmo && !VersusMatch.Active;
+            CheckedText = weapon.AmmoText(realistic);
+            CheckedAt = Time.time;
+            AudioManager.Play(Sound.MagIn, player.Position, 0.25f, 1.15f, SoundCategory.Weapons);
+        }
+
         void StartReload()
         {
             // Reloading from empty takes a little longer (and ends with a charging handle).
@@ -319,6 +358,7 @@ namespace Swat
             reloadEnd = Time.time + reloadDuration;
             burstLeft = 0;
             pumpAt = -1f;
+            checkEnd = 0f;
             lowAmmoWarned = false;
             AudioManager.Play(Sound.MagOut, player.Position, 0.6f, 1f, SoundCategory.Weapons);
             MissionManager.Instance.Report(ObjectiveType.TrainingReload, 1);
@@ -358,6 +398,7 @@ namespace Swat
             burstLeft = 0;
             spin = 0f;
             pumpAt = -1f;
+            checkEnd = 0f;
             switchEnd = Time.time + Current.Data.switchTime;
             lowAmmoWarned = false;
             ApplyWeaponModel();

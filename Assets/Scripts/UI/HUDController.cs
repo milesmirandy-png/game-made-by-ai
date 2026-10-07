@@ -30,9 +30,9 @@ namespace Swat
             // Under fire: the edges of the view darken (tunnel vision).
             if (player.Suppression > 0.01f) DrawSuppression(player.Suppression);
 
-            // First person: the scope picture when aiming a scoped rifle, and the body cam overlay.
+            // First person: the scope picture when aiming a scoped rifle, and the helmet cam overlay.
             if (FirstPersonRig.Scoped && player.IsAlive) DrawScope();
-            if (player.FirstPerson && settings.bodyCamLook) DrawBodyCam(game, player);
+            if (player.FirstPerson && settings.bodyCamLook) DrawHelmetCam(game, player);
 
             // Screen effects (kept mild: no gore, just tints; "reduce flashes" softens them further).
             bool reduce = settings.reduceFlashes;
@@ -58,10 +58,25 @@ namespace Swat
                 y = DrawStatusTopRight(game, y);
                 DrawSquad(game, Mathf.Max(150f, y + 8f));
             }
-            DrawPlayer(game, player);
-            DrawWeapon(player);
+            // First person can use a pared-down HUD (Settings -> Camera): no panels, and with realistic
+            // ammo nothing about the magazine until you check it.
+            if (MinimalHud(player))
+            {
+                DrawPlayerMinimal(player);
+                DrawWeaponMinimal(player);
+            }
+            else
+            {
+                DrawPlayer(game, player);
+                DrawWeapon(player);
+            }
             DrawPrompt(game, player);
             DrawRadio();
+        }
+
+        public static bool MinimalHud(PlayerController player)
+        {
+            return player != null && player.FirstPerson && SaveManager.Settings.fpMinimalHud;
         }
 
         static string WoundText(PlayerController player)
@@ -245,6 +260,85 @@ namespace Swat
             UITheme.Text(new Rect(rect.x + 10f, rect.y + 110f, rect.width - 20f, 20f), ability + (player.Weapons.Overcharged ? "  |  OVERCHARGED" : ""), 13, player.AbilityReadyIn > 0f ? UITheme.Faint : UITheme.Accent);
         }
 
+        // First person, minimal: a state line and thin health, armor and (when not full) stamina bars,
+        // brighter when you're hurt.
+        void DrawPlayerMinimal(PlayerController player)
+        {
+            float h = UITheme.Height;
+            var health = player.Health;
+            bool hurt = health.Fraction < 0.6f || health.DamageFlash > 0.05f || health.LegInjured || health.ArmInjured;
+            float alpha = hurt ? 1f : 0.7f;
+            float x = 24f, y = h - 92f, width = 230f;
+            string state = !player.IsAlive ? "DOWN" : player.Health.Bracing ? "Shield braced" : player.Peeking ? "Peeking" : player.IsSprinting ? "Sprinting" : player.IsCrouched ? "Crouched" : player.IsSteadyAiming ? "Aiming" : "";
+            if (player.FlashlightOn) state += (state.Length > 0 ? "  |  " : "") + "Light";
+            if (player.NightVision) state += (state.Length > 0 ? "  |  " : "") + "NVG";
+            string wounds = WoundText(player);
+            if (wounds.Length > 0) state += (state.Length > 0 ? "  |  " : "") + "<color=#ff7a5c>" + wounds + "</color>";
+            string ability = player.Officer.abilityName + " [" + UITheme.KeyFor(InputAction.Ability) + "]";
+            if (player.Officer.role != OfficerRole.Shield) ability += player.AbilityReadyIn > 0f ? "  " + Mathf.CeilToInt(player.AbilityReadyIn) + "s" : "  ready";
+            UITheme.ShadowText(new Rect(x, y - 20f, 400f, 18f), ability, 12, player.AbilityReadyIn > 0f ? new Color(1f, 1f, 1f, 0.4f) : new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, 0.75f));
+            UITheme.ShadowText(new Rect(x, y, 400f, 20f), state, 13, new Color(1f, 1f, 1f, 0.8f * alpha));
+            y += 24f;
+            var healthRect = new Rect(x, y, width, 6f);
+            if (healthGhost < health.Fraction || healthGhost < 0f) healthGhost = health.Fraction;
+            else if (healthGhost > health.Fraction && Time.unscaledTime > ghostHoldUntil) healthGhost = Mathf.MoveTowards(healthGhost, health.Fraction, Time.unscaledDeltaTime * 0.5f);
+            if (health.DamageFlash > 0.95f) ghostHoldUntil = Time.unscaledTime + 0.5f;
+            UITheme.Fill(new Rect(healthRect.x - 1f, healthRect.y - 1f, healthRect.width + 2f, healthRect.height + 2f), new Color(0f, 0f, 0f, 0.45f * alpha));
+            var color = HealthColor(health.Fraction);
+            color.a = alpha;
+            UITheme.Fill(new Rect(healthRect.x, healthRect.y, healthRect.width * health.Fraction, healthRect.height), color);
+            if (healthGhost > health.Fraction + 0.002f)
+                UITheme.Fill(new Rect(healthRect.x + healthRect.width * health.Fraction, healthRect.y, healthRect.width * (healthGhost - health.Fraction), healthRect.height), new Color(1f, 0.92f, 0.85f, 0.75f * alpha));
+            UITheme.ShadowText(new Rect(x + width + 8f, y - 7f, 60f, 20f), Mathf.CeilToInt(health.Current).ToString(), 14, new Color(1f, 1f, 1f, alpha), TextAnchor.MiddleLeft, true);
+            y += 12f;
+            if (health.Armor != null && health.Armor.durability > 0f)
+            {
+                UITheme.Fill(new Rect(x - 1f, y - 1f, width + 2f, 6f), new Color(0f, 0f, 0f, 0.45f * alpha));
+                UITheme.Fill(new Rect(x, y, width * health.ArmorCondition, 4f), new Color(UITheme.Accent.r, UITheme.Accent.g, UITheme.Accent.b, alpha));
+                y += 10f;
+            }
+            if (player.StaminaFraction < 0.98f)
+            {
+                UITheme.Fill(new Rect(x - 1f, y - 1f, width + 2f, 5f), new Color(0f, 0f, 0f, 0.4f * alpha));
+                UITheme.Fill(new Rect(x, y, width * player.StaminaFraction, 3f), new Color(0.75f, 0.8f, 0.9f, 0.85f * alpha));
+            }
+        }
+
+        // First person, minimal: the gun and fire mode, the selected equipment, and the ammunition only
+        // as far as you know it: with realistic ammo, what the last magazine check found (K).
+        void DrawWeaponMinimal(PlayerController player)
+        {
+            float w = UITheme.Width, h = UITheme.Height;
+            var weapons = player.Weapons;
+            var weapon = weapons.Current;
+            float right = w - 24f, width = 420f, x = right - width;
+            float y = h - 46f;
+            var dim = new Color(1f, 1f, 1f, 0.7f);
+            string mode = weapon.ModeName + (weapon.Data.lessLethal ? "  |  LESS-LETHAL" : "");
+            UITheme.ShadowText(new Rect(x, y, width, 20f), weapon.Data.displayName + "  |  " + mode, 13, dim, TextAnchor.UpperRight);
+            y -= 30f;
+            bool realistic = SaveManager.Settings.realisticAmmo && !VersusMatch.Active;
+            string ammo;
+            Color ammoColor = UITheme.TextColor;
+            if (weapons.IsReloading) { ammo = "RELOADING"; ammoColor = UITheme.Warn; }
+            else if (weapons.IsSwitching) { ammo = "SWITCHING"; ammoColor = UITheme.Dim; }
+            else if (weapons.IsChecking) { ammo = "CHECKING..."; ammoColor = UITheme.Dim; }
+            else if (!realistic) { ammo = weapon.Magazine + " / " + weapon.Reserve; ammoColor = weapon.Magazine == 0 ? UITheme.Bad : weapon.Magazine <= weapon.MagazineSize / 4 ? UITheme.Warn : UITheme.TextColor; }
+            else if (weapon.Magazine == 0) { ammo = "EMPTY"; ammoColor = UITheme.Bad; }
+            else if (Time.time - weapons.CheckedAt < WeaponController.CheckShown) ammo = weapons.CheckedText.ToUpperInvariant();
+            else { ammo = "[" + UITheme.KeyFor(InputAction.CheckMagazine) + "] check magazine"; ammoColor = new Color(1f, 1f, 1f, 0.45f); }
+            bool quiet = ammo.StartsWith("[");
+            UITheme.ShadowText(new Rect(x, y, width, 28f), ammo, quiet ? 13 : 20, ammoColor, TextAnchor.LowerRight, !quiet);
+            if (weapons.IsReloading) UITheme.Bar(new Rect(right - 160f, y + 30f, 160f, 3f), weapons.ReloadProgress, UITheme.Warn);
+            if (weapons.IsChecking) UITheme.Bar(new Rect(right - 160f, y + 30f, 160f, 3f), weapons.CheckProgress, UITheme.Dim);
+            var slot = weapons.Inventory.SelectedSlot;
+            if (slot != null)
+            {
+                string count = slot.Data.consumable ? "  x" + slot.Count : "";
+                UITheme.ShadowText(new Rect(x, y - 22f, width, 20f), slot.Data.displayName + count + "  [" + UITheme.KeyFor(InputAction.UseEquipment) + "]", 13, slot.Count > 0 || !slot.Data.consumable ? dim : new Color(1f, 1f, 1f, 0.4f), TextAnchor.UpperRight);
+            }
+        }
+
         // ---- Weapon ----
 
         void DrawWeapon(PlayerController player)
@@ -303,6 +397,8 @@ namespace Swat
                 UIIcons.Equipment(new Rect(box.x + 2f, box.y + 2f, 26f, 26f), slot.Data.kind, slot.Count > 0 ? UITheme.TextColor : UITheme.Faint);
                 UITheme.Text(new Rect(box.x + 26f, box.y, 22f, 30f), slot.Data.consumable ? slot.Count.ToString() : "-", 14, slot.Count > 0 ? UITheme.TextColor : UITheme.Faint, TextAnchor.MiddleCenter, true);
             }
+            if (weapons.IsChecking || Time.time - weapons.CheckedAt < WeaponController.CheckShown)
+                UITheme.ShadowText(new Rect(rect.x, rect.y - 48f, rect.width, 22f), weapons.IsChecking ? "Checking magazine..." : "Magazine: " + weapons.CheckedText, 15, UITheme.TextColor, TextAnchor.UpperRight, true);
             var selectedSlot = inventory.SelectedSlot;
             if (selectedSlot != null)
                 UITheme.ShadowText(new Rect(rect.x, rect.y - 24f, rect.width, 22f), selectedSlot.Data.displayName + "  [" + UITheme.KeyFor(InputAction.UseEquipment) + "] use   [" + UITheme.KeyFor(InputAction.Slot3) + "/" + UITheme.KeyFor(InputAction.Slot4) + "] select", 14, UITheme.Dim, TextAnchor.UpperRight);
@@ -512,7 +608,7 @@ namespace Swat
             if (player.FirstPerson && GameInput.LookMode)
                 DrawFirstPersonCrosshair(c, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
             else DrawCrosshairShape(c, weapons.Spread, hitAge <= HitMarkerTime ? hitAge : -1f, weapons.Current.Magazine == 0, killAge <= KillMarkerTime ? killAge : -1f);
-            if (weapons.IsReloading)
+            if (weapons.IsReloading && !MinimalHud(player))
             {
                 float size = Mathf.Clamp(SaveManager.Settings.crosshairSize, 0.5f, 2f);
                 float radius = (6f + weapons.Spread * 3f) * Mathf.Lerp(1f, size, 0.5f) + 9f * size + 8f;
@@ -530,13 +626,14 @@ namespace Swat
         const float HitMarkerTime = 0.18f, KillMarkerTime = 0.4f;
 
         // First person: no spread cross (you look down the gun). A small dot from the hip that fades
-        // as the sights come up; hit and takedown markers as usual.
+        // as the sights come up (or no dot: Settings -> Camera); hit and takedown markers as usual.
         static void DrawFirstPersonCrosshair(Vector2 c, float hitAge, bool empty, float killAge)
         {
             var settings = SaveManager.Settings;
             float size = Mathf.Clamp(settings.crosshairSize, 0.5f, 2f);
             float opacity = Mathf.Clamp(settings.crosshairOpacity, 0.2f, 1f);
-            float hip = 1f - FirstPersonRig.AimBlend;
+            // Reticle: a dot from the hip, or none at all (hit and takedown markers still show).
+            float hip = settings.fpReticle == 1 ? 0f : 1f - FirstPersonRig.AimBlend;
             Color color = empty ? UITheme.Warn : UITheme.CrosshairColors[Mathf.Clamp(settings.crosshairColor, 0, UITheme.CrosshairColors.Length - 1)];
             if (hip > 0.02f && !FirstPersonRig.Scoped)
             {
@@ -648,21 +745,44 @@ namespace Swat
             return texture;
         }
 
-        // Body cam overlay: a blinking REC light, the date and time, and the unit and officer.
-        static void DrawBodyCam(GameManager game, PlayerController player)
+        // Helmet cam overlay, like a 1999 camcorder taping to VHS: a blinking REC light, the tape speed
+        // and counter, the date and time stamp (the mission's date and start time, running with the
+        // mission clock), the unit and officer, and the battery. The tape look itself (colour bleed,
+        // scanlines, the tracking band) is in the post-processing pass.
+        static void DrawHelmetCam(GameManager game, PlayerController player)
         {
             float w = UITheme.Width;
-            float y = VersusMatch.Active ? 104f : 14f;
-            string stamp = System.DateTime.Now.ToString("yyyy-MM-dd  HH:mm:ss");
-            string unit = "PAPD TRU   " + player.Officer.callsign.ToUpperInvariant();
-            var rect = new Rect(w * 0.5f - 170f, y, 340f, 40f);
-            UITheme.Fill(rect, new Color(0f, 0f, 0f, 0.28f));
+            float top = VersusMatch.Active ? 104f : 14f;
+            float width = 380f, x = w * 0.5f - width * 0.5f;
+            var white = new Color(1f, 1f, 1f, 0.88f);
+            var faint = new Color(1f, 1f, 1f, 0.6f);
             bool blink = Mathf.Repeat(Time.unscaledTime, 1.2f) < 0.8f;
-            if (blink) UITheme.Dot(new Vector2(rect.x + 16f, rect.y + 12f), 5f, new Color(0.95f, 0.12f, 0.1f, 0.95f));
-            UITheme.ShadowText(new Rect(rect.x + 26f, rect.y + 3f, 60f, 18f), "REC", 13, new Color(1f, 1f, 1f, 0.9f), TextAnchor.UpperLeft, true);
-            UITheme.ShadowText(new Rect(rect.x + 70f, rect.y + 3f, rect.width - 80f, 18f), stamp, 13, new Color(1f, 1f, 1f, 0.85f), TextAnchor.UpperRight, true);
-            UITheme.ShadowText(new Rect(rect.x + 10f, rect.y + 21f, rect.width - 20f, 16f), unit, 11, new Color(1f, 1f, 1f, 0.7f), TextAnchor.UpperLeft);
-            UITheme.ShadowText(new Rect(rect.x + 10f, rect.y + 21f, rect.width - 20f, 16f), "BODY CAM", 11, new Color(1f, 1f, 1f, 0.55f), TextAnchor.UpperRight);
+            if (blink) UITheme.Dot(new Vector2(x + 7f, top + 10f), 5f, new Color(0.95f, 0.12f, 0.1f, 0.95f));
+            UITheme.ShadowText(new Rect(x + 18f, top, 80f, 20f), "REC", 15, white, TextAnchor.UpperLeft, true);
+            float clock = MissionClock();
+            int seconds = Mathf.FloorToInt(clock);
+            string counter = (seconds / 3600) + ":" + (seconds / 60 % 60).ToString("00") + ":" + (seconds % 60).ToString("00");
+            UITheme.ShadowText(new Rect(x, top, width, 20f), "SP   " + counter, 15, white, TextAnchor.UpperRight, true);
+            var plan = game.Plan;
+            var stamp = MissionBriefing.StartTime(plan != null ? plan.mission : null, plan).AddSeconds(seconds);
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            UITheme.ShadowText(new Rect(x, top + 20f, width, 20f), stamp.ToString("MMM. dd yyyy", culture).ToUpperInvariant(), 15, white, TextAnchor.UpperLeft, true);
+            UITheme.ShadowText(new Rect(x, top + 20f, width, 20f), stamp.ToString("h:mm:ss tt", culture), 15, white, TextAnchor.UpperRight, true);
+            string unit = "PAPD TRU   " + player.Officer.callsign.ToUpperInvariant() + "   HELMET CAM";
+            UITheme.ShadowText(new Rect(x, top + 41f, width, 16f), unit, 11, faint, TextAnchor.UpperLeft);
+            // Battery: three bars, running down over a long mission.
+            var battery = new Rect(x + width - 30f, top + 44f, 24f, 11f);
+            UITheme.Frame(battery, faint);
+            UITheme.Fill(new Rect(battery.xMax, battery.y + 3f, 2f, 5f), faint);
+            int bars = clock < 600f ? 3 : clock < 1200f ? 2 : 1;
+            for (int i = 0; i < bars; i++) UITheme.Fill(new Rect(battery.x + 2f + i * 7f, battery.y + 2f, 6f, 7f), faint);
+        }
+
+        static float MissionClock()
+        {
+            if (VersusMatch.Active) return VersusMatch.Instance.Elapsed;
+            var missions = MissionManager.Instance;
+            return missions != null ? missions.Elapsed : Time.timeSinceLevelLoad;
         }
 
         // The crosshair itself, using the size, opacity and colour settings. hitAge < 0 means no

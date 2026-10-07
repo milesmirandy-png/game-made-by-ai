@@ -50,6 +50,9 @@ namespace Swat
         // First person: where you look (with pitch), and where shots start and go.
         public Vector3 LookDirection { get; private set; }
         public float LookPitch { get { return lookPitch; } }
+        // First person: how far breathing and tired, shaken or wounded arms pull the aim off the view
+        // you set with the mouse (degrees: x pitch, y yaw). The camera and the shots both follow it.
+        public Vector2 AimSway { get; private set; }
         public bool FirstPerson { get { return ViewMode.FirstPerson && FirstPersonRig.Active; } }
         public Vector3 ShotOrigin { get { return FirstPerson ? FirstPersonRig.CameraPosition : ChestPosition; } }
         public Vector3 ShotDirection { get { return FirstPerson ? LookDirection : AimDirection; } }
@@ -109,7 +112,7 @@ namespace Swat
         int leanSide;               // the side chosen while the peek key is held (-1 left, +1 right)
         float slideStart, slideReadyAt, nextSlideDust;
         Vector3 slideVelocity, moveVelocity;
-        float lookYaw, lookPitch, recoilDebt, lastKickTime;
+        float lookYaw, lookPitch, recoilDebt, lastKickTime, swayPhase;
         bool aimedFirstPerson;
         CapsuleCollider leanBox;
         float meleeReadyAt;
@@ -373,10 +376,33 @@ namespace Swat
             }
             transform.rotation = Quaternion.Euler(0f, lookYaw, 0f);
             AimDirection = transform.forward;
-            LookDirection = Quaternion.Euler(lookPitch, lookYaw, 0f) * Vector3.forward;
+            AimSway = BreathingSway();
+            LookDirection = Quaternion.Euler(lookPitch + AimSway.x, lookYaw + AimSway.y, 0f) * Vector3.forward;
             Vector3 eye = FirstPersonRig.Active ? FirstPersonRig.CameraPosition : EyePosition;
             RaycastHit hit;
             AimPoint = aimTarget = Physics.Raycast(eye, LookDirection, out hit, 40f, Layers.ShootableMask, QueryTriggerInteraction.Ignore) ? hit.point : eye + LookDirection * 20f;
+        }
+
+        // Aiming down the sights you hold the gun still against your breathing: a slow figure of eight,
+        // small when rested and braced low, bigger when out of breath, under fire, wounded in the arm
+        // or on the move, with a little tremor. From the hip the cone of fire covers it instead.
+        Vector2 BreathingSway()
+        {
+            float aim = FirstPersonRig.AimBlend;
+            if (aim <= 0.01f || !IsAlive) return Vector2.zero;
+            float amount = 0.1f + (1f - StaminaFraction) * 0.55f + Suppression * 0.6f;
+            if (Health.ArmInjured) amount += 0.35f;
+            if (IsCrouched) amount *= 0.6f;
+            if (IsMoving) amount *= 1.6f;
+            var data = Weapons != null && Weapons.Current != null ? Weapons.Current.Data : null;
+            if (data != null) amount *= Mathf.Lerp(1.25f, 0.85f, Mathf.InverseLerp(0.75f, 1f, data.moveSpeedMultiplier));
+            // Breathing speeds up when you're tired.
+            float rate = Mathf.Lerp(1.2f, 2.4f, 1f - StaminaFraction);
+            swayPhase += Time.deltaTime * rate;
+            float t = Time.time;
+            float tremor = Mathf.PerlinNoise(t * 3.1f, 4.7f) - 0.5f, tremorSide = Mathf.PerlinNoise(9.2f, t * 2.7f) - 0.5f;
+            var sway = new Vector2(Mathf.Sin(swayPhase) + tremor * 0.6f, Mathf.Sin(swayPhase * 0.5f) * 0.8f + tremorSide * 0.6f) * amount;
+            return sway * aim;
         }
 
         // First person recoil: the view climbs by up degrees (and wanders sideways a little).

@@ -4,14 +4,17 @@ using UnityEngine.Rendering;
 
 namespace Swat
 {
-    // First person, body cam style (Settings -> Camera view). The camera sits at
+    // First person, helmet cam style (Settings -> Camera view). The camera sits at
     // the officer's eyes (lower when crouched or sliding, out to the side and
     // rolled when peeking) with the drift and bob of a camera worn on a moving
     // body. The gun is a separate view model held by the soldier model's gloved
     // forearms: it trails the view when you turn (heavy guns more), bobs with
     // your steps, comes up to the eye when you aim down the sights, drops to a
     // low ready when you sprint or come up against a wall, dips for reloads
-    // and draws, and kicks with every shot. Recoil climbs the view itself.
+    // and draws, tips over when you check the magazine, works the pump or bolt
+    // after each shot, and kicks with every shot. Recoil climbs the view itself,
+    // and aiming down the sights the view drifts with your breathing
+    // (PlayerController.AimSway).
     // Scoped rifles zoom and show the scope instead of the gun. A shield is held
     // up on the left. Your own body still casts its shadow but isn't drawn.
     // CameraController drives this from LateUpdate while it's in use.
@@ -29,6 +32,8 @@ namespace Swat
         public static bool Scoped { get; private set; }
 
         const float NearClip = 0.03f;
+        // Where the trigger hand holds the gun (gun space).
+        static readonly Vector3 Grip = new Vector3(0f, -0.045f, -0.02f);
 
         static PlayerController player;
         static CharacterController body;
@@ -114,8 +119,8 @@ namespace Swat
 
             float targetHeight = player.IsSliding ? 0.8f : player.IsCrouched ? 1.05f : 1.6f;
             eyeHeight = Mathf.Lerp(eyeHeight, targetHeight, 1f - Mathf.Exp(-10f * dt));
-            float yaw = player.transform.eulerAngles.y;
-            float pitch = player.LookPitch;
+            float yaw = player.transform.eulerAngles.y + player.AimSway.y;
+            float pitch = player.LookPitch + player.AimSway.x;
 
             // A worn camera never sits still: a slow drift, stronger on the move.
             float t = Time.time;
@@ -227,6 +232,16 @@ namespace Swat
             float r = Mathf.Sin(reload * Mathf.PI);
             angles += new Vector3(14f, 12f, 30f) * r;
             position += new Vector3(-0.03f, -0.045f, -0.03f) * r;
+            // Magazine check: the gun tips over to the left and comes in so you can see the magazine.
+            float check = weapons != null ? weapons.CheckProgress : 0f;
+            float c = check > 0f ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(check / 0.25f)) * (1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((check - 0.75f) / 0.25f))) : 0f;
+            angles += new Vector3(6f, -10f, -35f) * c;
+            position += new Vector3(-0.06f, 0.03f, -0.05f) * c;
+            // Pump and bolt guns: working the action after each shot.
+            float cycle = weapons != null ? weapons.CycleProgress : 0f;
+            float cy = Mathf.Sin(cycle * Mathf.PI);
+            bool pump = cycle > 0f && weapons.CyclePump;
+            if (cycle > 0f) angles += pump ? new Vector3(3f, 0f, 0f) * cy : new Vector3(-2f, 4f, -10f) * cy;
             float draw = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((Time.time - drawStart) / Mathf.Max(0.05f, drawTime)));
             position.y -= 0.28f * draw * draw;
             angles.x += 45f * draw;
@@ -263,7 +278,15 @@ namespace Swat
                     else if (reload < 0.8f) target = mag;
                     else target = Vector3.Lerp(mag, support, Mathf.SmoothStep(0f, 1f, (reload - 0.8f) / 0.2f));
                 }
+                else if (c > 0f) target = Vector3.Lerp(support, new Vector3(0f, -0.13f, 0.06f), c);
+                else if (pump) target = support + new Vector3(0f, 0f, -0.09f) * cy;
                 PlaceForearm(leftFore, leftRest, target, pistol ? new Vector3(-0.45f, -0.4f, -1f) : new Vector3(-0.45f, -0.5f, -0.9f));
+            }
+            // A bolt or lever: the trigger hand works it and comes back to the grip.
+            if (rightFore != null)
+            {
+                Vector3 hand = Grip + (cycle > 0f && !pump ? new Vector3(0.05f, 0.05f, -0.05f) * cy : Vector3.zero);
+                PlaceForearm(rightFore, rightRest, hand, pistol ? new Vector3(0.25f, -0.4f, -1f) : new Vector3(0.3f, -0.45f, -1f));
             }
         }
 
@@ -443,7 +466,7 @@ namespace Swat
             var recolor = CharacterFactory.ArmColors(look);
             support = pistol ? new Vector3(-0.01f, -0.06f, 0.02f) : new Vector3(0f, -0.025f, Mathf.Min(0.24f, front * 0.45f));
             rightFore = Forearm(model, "foreR", "handR", recolor, look, ref rightRest);
-            PlaceForearm(rightFore, rightRest, new Vector3(0f, -0.045f, -0.02f), pistol ? new Vector3(0.25f, -0.4f, -1f) : new Vector3(0.3f, -0.45f, -1f));
+            PlaceForearm(rightFore, rightRest, Grip, pistol ? new Vector3(0.25f, -0.4f, -1f) : new Vector3(0.3f, -0.45f, -1f));
             leftFore = Forearm(model, "foreL", "handL", recolor, look, ref leftRest);
             PlaceForearm(leftFore, leftRest, support, pistol ? new Vector3(-0.45f, -0.4f, -1f) : new Vector3(-0.45f, -0.5f, -0.9f));
             if (builtShield) leftFore.gameObject.SetActive(false);

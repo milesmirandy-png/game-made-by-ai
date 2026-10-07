@@ -1,8 +1,9 @@
 # SWAT: Tactical Response - Final Report
 
 This report covers what was built, what was simplified, how it was checked,
-and what is still unverified. It has twelve parts: **the view switch (V)
-and map rework** (newest, first), **gear, better-looking officers, Ready or
+and what is still unverified. It has thirteen parts: **the 1999 setting,
+combat realism, SWAT 4-style modes and first-person overhaul** (newest,
+first), **the view switch (V) and map rework**, **gear, better-looking officers, Ready or
 Not-style procedure and realism**, **the
 tactical overhaul, new models and first person**, **Gun Game, Elimination,
 spectating and pings**, **peek, slide, balance and
@@ -17,13 +18,192 @@ something).
 The short version: everything is implemented in C# (plus five small shaders),
 compiles in three configurations and the shaders pass a syntax check. The
 owner has built the game and played it, including LAN matches with friends;
-that is the only play-testing, and it happened before the four newest
-parts, which have only been compiled. The two newest parts also add models
+that is the only play-testing, and it happened before the five newest
+parts, which have only been compiled. Parts 0g and 0h also add models
 that were converted and checked outside Unity, and their first-person view
 and character looks were checked with offline software renders of the same
 model files (not game screenshots). No profiling or performance measurements have been
 made, and no screenshots are in the repository. Treat everything below as
 "implemented in code" unless it says otherwise.
+
+# Part 0j: 1999 setting, combat realism, SWAT 4-style modes and first-person overhaul
+
+Requested as one update: combat more like Ready or Not mixed with SWAT 4/3,
+better deathmatch and game modes, a first-person overhaul, and the game set
+in 1999 with period gear.
+
+## What was added
+
+**1999 setting**
+
+- `MissionBriefing.StartTime` dates each mission. The campaign starts on
+  October 4, 1999, each level comes two days after the last, and the hour
+  comes from the time of day (14:00, 19:00 or 23:00) with the minutes taken
+  from the seed. The briefing header shows it. The helmet cam stamp is that
+  start time plus the mission clock.
+- Gear:
+  - `GearCatalog.Headgear.Kevlar` is a classic kevlar helmet: a dome
+    shell, a lip and chin straps. It's the new default for officers.
+  - The vests are renamed (No Vest, Concealable Vest, Tactical Vest, Heavy
+    Tactical Vest) and keep their stats.
+  - Armored officers get yellow POLICE lettering on the vest, front and
+    back, from a small 3x5 pixel font (`MeshKit.Text`).
+  - The uniform list is now period BDU colours and camo patterns,
+    including a new desert camo.
+  - The angled foregrip is removed. Saved loadouts that used it fall back
+    to no grip through the existing attachment validation.
+- Office desks get a beige CRT monitor.
+- The menu subtitle and credits mention 1999. A scan of the briefing text
+  found nothing out of period.
+
+**Combat** (in the previous commit, 9a581bd)
+
+- Hit zones:
+  - `Ballistics.ZoneOf` sorts a hit by its height on the collider (top 14%
+    head, below 46% legs) and how far it is to the side (arms).
+  - Multipliers: head 2.2x, arms 0.55x, legs 0.65x.
+  - Body armor applies to the torso only; helmets to the head
+    (officers' headgear, the Armored suspects' helmet).
+- Ammo:
+  - FMJ: armor stops 60% of its usual share.
+  - JHP: armor stops 135% of it, and does 1.2x damage on unarmored
+    targets.
+  - Armor never stops more than 90% of a hit.
+  - Penetration (FMJ only): pistols and SMGs go through one door; rifles
+    through one door or one thin interior wall (a `ThinWall` marker),
+    with damage reduced on the far side.
+  - Shotguns, less-lethal weapons and explosives don't penetrate.
+- Incapacitation:
+  - Chance by zone: head never (it kills), arm 90%, leg 85%, torso 45%.
+  - An incapacitated suspect is down but alive, can be restrained and
+    reported, and scores 30.
+  - An arm hit has a 35% chance to make them drop the gun and surrender; a
+    leg hit cuts their speed to 55%.
+- Rules of engagement. Force was already unauthorized on a suspect who
+  had given up or was restrained, and on an unarmed suspect (less-lethal
+  aside). It is now also unauthorized:
+  - on an incapacitated suspect;
+  - on a calm, unaware, armed suspect who hasn't been told to comply in
+    the last 10 seconds.
+  The existing unauthorized-force penalty (-100) applies.
+- Tactical reloads: closed-bolt guns keep the chambered round; open-bolt
+  SMGs and machine guns don't.
+
+**Game modes** (mostly in 9a581bd)
+
+- SWAT against Suspects: the suspect side wears street clothes with no
+  vest, and its bots draw from suspects' guns.
+- VIP Escort and Rapid Deployment (`VersusObjectives.cs`, `BombDevice.cs`):
+  - 3-minute rounds, first to 2, 3 or 4.
+  - Bots play the objectives: escorting or hunting the VIP, disarming or
+    guarding the devices.
+  - Synced online through the match setup (exit point and device
+    positions), snapshots (VIP id, disarmed devices) and a new `Disarm`
+    message. The network version is now 4.
+- Arrests of dazed bots, worth two points in Team Deathmatch.
+- The arcade guns are behind an option that is off by default, including
+  on the Gun Game ladder.
+- New in this commit: the extraction point and the undisarmed devices are
+  drawn on the minimap and tactical map, as they already were on screen.
+
+**First-person overhaul**
+
+- First person is the default view for new saves (`cameraView = 1`). Saves
+  that already have the field keep it.
+- VHS helmet cam:
+  - The post-processing pass (`SwatPostFX.shader`) adds tape effects
+    whenever the helmet cam look is on: colour smeared sideways while
+    brightness stays sharp, faint scanlines, a per-line wobble, and a
+    tracking band.
+  - The band rolls down the picture every 11 seconds and tears the lines
+    it crosses. `VhsTracking` makes it stronger when you take a hit or
+    come under fire, and turns it off with "reduce flashes".
+  - The HUD overlay shows REC, the tape speed and counter, the date and
+    time, the unit, callsign and "HELMET CAM", and a battery that drops a
+    bar at 10 and 20 minutes.
+- Breathing sway:
+  - `PlayerController.AimSway` offsets the first-person look direction
+    while aiming down the sights. Shots, the aim point and the camera all
+    use it, so the sights never point away from where rounds go.
+  - Size: 0.1 degrees rested, plus up to 0.55 when out of breath, 0.6
+    under fire and 0.35 with an arm wound. Crouching scales it by 0.6,
+    moving by 1.6 and gun weight by 0.85 to 1.25. Breathing gets faster
+    when tired.
+- Check magazine (new action, default K, remappable):
+  - It takes a second. Firing or sprinting cancels it, as do reloading,
+    switching weapons and a new loadout.
+  - At the end it reports `Weapon.AmmoText`: how full the magazine feels
+    and the magazines left with realistic ammo; exact rounds without.
+  - The HUD shows it for 3 seconds. In first person the gun tips over and
+    the support hand goes to the magazine.
+- Key-binding migration (`GameInput.Load`) is now general. Any action
+  added since a save gets its default key, unless another saved action
+  already uses that key; then it's left unbound. The V / zoom-preset move
+  is kept.
+- Minimal first-person HUD (Settings -> Camera, on by default):
+  - It replaces the two bottom panels with a state line and thin bars on
+    the left, and the gun, fire mode, ammo state and selected equipment on
+    the right.
+  - With realistic ammo outside versus, the ammo line only shows the last
+    check, "EMPTY", or reloading, switching or checking.
+  - The reload ring round the crosshair is hidden with it.
+- First-person reticle option: a dot from the hip (as before) or none.
+- Pump guns work the pump with the support hand 0.3 s after each shot;
+  bolt and lever guns work the action with the trigger hand.
+- Settings -> Controls: rows shrink to fit the panel. With 38 actions the
+  last rows were already running under the buttons; there are 39 now.
+
+## Limitations
+
+- The VIP isn't highlighted on the minimap, only on screen.
+- Arrests in game modes work on bots only, offline or when hosting (as
+  before).
+- Some things are tuned by eye and unplayed:
+  - the breathing sway amounts;
+  - the tape effect strengths;
+  - the 1-second magazine check.
+  Sway that's too strong would make aiming down the sights tiring. All of
+  it is in one place each (`BreathingSway`, `PostEffects`,
+  `WeaponController.CheckTime`).
+- There is no third-person animation for the magazine check, so from above
+  only the HUD shows it.
+- The tracking band's direction can flip on graphics APIs that flip render
+  textures. It's cosmetic.
+- First person as the new default only affects saves without the camera
+  setting. Anyone who had played before keeps top-down until they press V
+  or change it in Settings.
+
+## Testing performed for this part
+
+- All scripts compile in the three configurations (0 errors, 0 warnings at
+  warning level 4).
+- The five shaders pass the syntax check (glslang through a small Unity
+  stub), the edited post-processing shader included.
+- The online transport test still passes.
+- **New offline test:** the compiled game assembly was loaded under Mono
+  and key-binding loading was run on saved lists like those older versions
+  wrote. All twelve checks pass:
+  - no save: Check magazine on K;
+  - a save from before Check magazine: it gets K;
+  - K already used by another action: left unbound;
+  - a save from before the view switch: zoom preset moves from V to Y and
+    V switches the view;
+  - Report already on V: switching the view is left unbound;
+  - a rebound key survives saving and loading.
+  - The helmet cam's and briefing's date format strings were checked too
+    (for example "OCT. 05 1999  12:37:05 AM", rolling over midnight).
+  - `MissionBriefing.StartTime` itself can't run outside Unity (it touches
+    a ScriptableObject).
+- **Not done:** any play-testing, or running in Unity. Specifically not
+  seen:
+  - the VHS effect and overlay;
+  - the breathing sway;
+  - the magazine check and its animation;
+  - the pump and bolt animation;
+  - the minimal HUD;
+  - the kevlar helmet, lettering and CRT monitors in the game;
+  - the new hit zones, penetration and incapacitation in a firefight;
+  - VIP Escort and Rapid Deployment with bots or online.
 
 # Part 0i: View switch (V) and map rework
 

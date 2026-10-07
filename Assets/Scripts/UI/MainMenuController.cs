@@ -116,7 +116,7 @@ namespace Swat
             UITheme.Panel(rect);
             UITheme.Header(new Rect(rect.x + 24f, rect.y + 20f, rect.width - 48f, 50f), "Credits");
             string text =
-                "SWAT: Tactical Response - a single-player top-down tactical prototype built in Unity.\n\n" +
+                "SWAT: Tactical Response - a tactical police game set in 1999, played in first person or from above, built in Unity.\n\n" +
                 "Design, code, level layouts, procedural models and procedural audio were generated for this project.\n\n" +
                 "Weapon icons: pixel-art guns from a free-to-use sprite pack supplied by the project owner (see CREDITS.md). " +
                 "No other third-party art, sound or code assets are used.\n\n" +

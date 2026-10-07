@@ -11,7 +11,8 @@ namespace Swat
     {
         static readonly string[] Tabs = { "Gameplay", "Camera", "Graphics", "Audio", "Accessibility", "Controls" };
         public const int ControlsTab = 5;
-        static readonly string[] ViewNames = { "Top-down (tactical)", "First person (body cam)" };
+        static readonly string[] ViewNames = { "Top-down (tactical)", "First person (helmet cam)" };
+        static readonly string[] ReticleNames = { "Dot from the hip", "None" };
         static readonly string[] ShakeNames = { "Off", "Low", "Medium" };
         static readonly string[] TextureNames = { "Low", "Medium", "High" };
         static readonly float[] UiScales = { 0.75f, 0.9f, 1f, 1.1f, 1.25f, 1.5f };
@@ -221,9 +222,11 @@ namespace Swat
                 changed = true;
             }
             changed |= Range(ref y, lx, colW, "Field of view", ref s.fieldOfView, 70f, 110f, Mathf.RoundToInt(s.fieldOfView) + " degrees");
-            changed |= Check(ref y, lx, colW, "Body cam look (wide lens, grain, REC)", ref s.bodyCamLook);
+            changed |= Check(ref y, lx, colW, "Helmet cam look (VHS tape, wide lens, REC)", ref s.bodyCamLook);
+            changed |= Check(ref y, lx, colW, "Minimal first-person HUD", ref s.fpMinimalHud);
+            changed |= Choice(ref y, lx, colW, "First-person reticle", ref s.fpReticle, ReticleNames);
             y += 8f;
-            UITheme.Text(new Rect(lx, y, colW, 120f), "First person: the mouse looks around, right mouse aims down the sights, Ctrl + A / D peeks. Walls go full height with ceilings in first person and drop low again from above. Field of view and the body cam look apply in first person only; screen shake (Accessibility) also sets how much the body cam moves.", 13, UITheme.Faint);
+            UITheme.Text(new Rect(lx, y, colW, 150f), "First person: the mouse looks around, right mouse aims down the sights (the view drifts with your breathing, more when tired, under fire or wounded), Ctrl + A / D peeks, " + UITheme.KeyFor(InputAction.CheckMagazine) + " checks the magazine. Walls go full height with ceilings in first person and drop low again from above. The minimal HUD drops the panels and, with realistic ammo, only tells you about the magazine when you check it. Screen shake (Accessibility) also sets how much the helmet cam moves.", 13, UITheme.Faint);
 
             y = body.y;
             Section(ref y, rx, colW, "Top-down camera");
@@ -514,17 +517,19 @@ namespace Swat
         void DrawKeyBindings(Rect body)
         {
             int count = GameInput.ActionCount;
-            float row = 32f;
             int perColumn = Mathf.CeilToInt(count / 2f);
+            // Two columns, squeezed to leave room for the buttons along the bottom.
+            float row = Mathf.Min(32f, Mathf.Floor((body.height - 48f) / perColumn));
+            int font = row < 30f ? 14 : 15;
             float colW = (body.width - 20f) * 0.5f;
             for (int i = 0; i < count; i++)
             {
                 var action = (InputAction)i;
                 float x = body.x + (i / perColumn) * (colW + 20f);
                 float y = body.y + (i % perColumn) * row;
-                UITheme.Text(new Rect(x, y, colW * 0.58f, row - 4f), GameInput.DisplayName(action), 15, UITheme.TextColor, TextAnchor.MiddleLeft);
+                UITheme.Text(new Rect(x, y, colW * 0.58f, row - 4f), GameInput.DisplayName(action), font, UITheme.TextColor, TextAnchor.MiddleLeft);
                 string key = rebindIndex == i ? "press a key..." : GameInput.KeyName(GameInput.Binding(action));
-                if (UITheme.Button(new Rect(x + colW * 0.58f, y + 1f, colW * 0.42f, row - 4f), key, true, rebindIndex == i, 15))
+                if (UITheme.Button(new Rect(x + colW * 0.58f, y + 1f, colW * 0.42f, row - 4f), key, true, rebindIndex == i, font))
                 {
                     rebindIndex = i;
                     rebindArmedAt = Time.unscaledTime + 0.15f;

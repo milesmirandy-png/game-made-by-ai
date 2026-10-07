@@ -6,10 +6,12 @@
 // one-pixel dark outlines where an object stands in front of something
 // farther away (from the depth texture) and reduces the palette with a
 // 2x2 ordered dither, so 3D models read like sprites. In the first-person
-// body cam view it adds the look of a small wide-angle camera: barrel
-// distortion, a touch of colour fringing at the edges, grain and a heavier
-// vignette (Settings -> Camera -> Body cam look). Night vision (the helmet
-// with NVG, key N) turns the picture into amplified green monochrome.
+// helmet cam view it adds the look of a 1999 camcorder taping to VHS: barrel
+// distortion, a touch of colour fringing at the edges, grain, a heavier
+// vignette, colour that smears sideways, faint scanlines and a tracking band
+// that now and then rolls down the picture (Settings -> Camera -> Helmet cam
+// look). Night vision (the helmet with NVG, key N) turns the picture into
+// amplified green monochrome.
 Shader "Hidden/SWAT/PostFX"
 {
     Properties
@@ -43,6 +45,9 @@ Shader "Hidden/SWAT/PostFX"
     float _Aberration;
     float _Grain;
     float _NightVision;
+    float _VHS;
+    float _Tracking;
+    float _TrackingPos;
 
     struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
     struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -103,6 +108,14 @@ Shader "Hidden/SWAT/PostFX"
             float r2 = dot(fromCentre, fromCentre);
             uv = 0.5 + fromCentre * (1.0 + _Barrel * r2) / (1.0 + _Barrel * 0.5);
         }
+        // VHS tape: each line wobbles sideways a little, and the tracking band rolling down the
+        // picture tears the lines it passes over.
+        float band = (1.0 - smoothstep(0.0, 0.035, abs(i.uv.y - _TrackingPos))) * _Tracking;
+        if (_VHS > 0.0)
+        {
+            float lineNoise = frac(sin(floor(i.uv.y * 240.0) * 91.7 + floor(_Time.y * 30.0) * 13.1) * 43758.5453) - 0.5;
+            uv.x += lineNoise * (0.0006 * _VHS + band * 0.02);
+        }
         float4 src = tex2D(_MainTex, uv);
         if (_BodyCam > 0.5)
         {
@@ -110,6 +123,15 @@ Shader "Hidden/SWAT/PostFX"
             float2 shift = fromCentre * _Aberration * dot(fromCentre, fromCentre) * 4.0;
             src.r = tex2D(_MainTex, uv + shift).r;
             src.b = tex2D(_MainTex, uv - shift).b;
+        }
+        if (_VHS > 0.0)
+        {
+            // Tape colour is much blurrier than its brightness: keep the brightness sharp and smear
+            // the colour to the right.
+            float2 px = float2(abs(_MainTex_TexelSize.x), 0.0);
+            float3 smear = (tex2D(_MainTex, uv - px * 3.0).rgb + tex2D(_MainTex, uv - px * 1.5).rgb + src.rgb) / 3.0;
+            float3 bled = smear - Luma(smear) + Luma(src.rgb);
+            src.rgb = lerp(src.rgb, max(bled, 0.0), _VHS);
         }
         float2 bloomUV = uv;
         #if UNITY_UV_STARTS_AT_TOP
@@ -156,6 +178,10 @@ Shader "Hidden/SWAT/PostFX"
             float2 cellUV = floor(i.uv * abs(_MainTex_TexelSize.zw)) + frac(_Time.y * 7.31) * 97.0;
             float noise = frac(sin(dot(cellUV, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
             c += noise * _Grain;
+            // Faint scanlines, and a bright noisy streak where the tracking band is.
+            float row = frac(i.uv.y * abs(_MainTex_TexelSize.w) * 0.5);
+            c *= 1.0 - _VHS * 0.05 * step(0.5, row);
+            c += band * (noise * 0.35 + 0.05);
         }
 
         if (_PixelArt > 0.5)

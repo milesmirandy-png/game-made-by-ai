@@ -9,8 +9,8 @@ namespace Swat
     // off by the Post Processing setting, Performance Mode and low presets.
     // In the pixel-art style it always adds sprite outlines (optional) and a
     // reduced, dithered palette, even when the rest of post-processing is off.
-    // The first-person body cam lens (distortion, fringing, grain) is applied
-    // whenever that view and the Body cam look setting are on.
+    // The first-person helmet cam look (lens distortion, fringing, grain and the
+    // VHS tape) is applied whenever that view and the Helmet cam look setting are on.
     // Under URP this component isn't used; UIManager draws a vignette overlay instead.
     [RequireComponent(typeof(Camera))]
     public class PostEffects : MonoBehaviour
@@ -137,6 +137,10 @@ namespace Swat
             material.SetFloat("_Barrel", 0.24f * lens);
             material.SetFloat("_Aberration", 0.012f * lens);
             material.SetFloat("_Grain", bodyCam ? (pixel ? 0.025f : 0.045f) : 0f);
+            // The tape: colour bleed and scanlines, and the tracking band (see VhsTracking).
+            material.SetFloat("_VHS", bodyCam ? (pixel ? 0.5f : 1f) : 0f);
+            material.SetFloat("_Tracking", bodyCam ? VhsTracking.Strength(game) : 0f);
+            material.SetFloat("_TrackingPos", VhsTracking.Position);
             // Night vision: bright green monochrome with its own grain.
             material.SetFloat("_NightVision", nightVision ? 1f : 0f);
             material.SetFloat("_Exposure", g.exposure);
@@ -159,6 +163,33 @@ namespace Swat
         void OnDestroy()
         {
             if (material != null) Destroy(material);
+        }
+    }
+
+    // The VHS tracking band: every so often a bright, torn band rolls down the helmet cam picture,
+    // and a hit or close fire knocks the tracking out for a moment. Off with "reduce flashes".
+    public static class VhsTracking
+    {
+        const float Period = 11f, Roll = 2.2f;
+
+        // Where the band is, in screen height (0 bottom, 1 top); off screen between rolls.
+        public static float Position
+        {
+            get
+            {
+                float t = Mathf.Repeat(Time.unscaledTime, Period);
+                return t < Roll ? Mathf.Lerp(1.08f, -0.08f, t / Roll) : -1f;
+            }
+        }
+
+        public static float Strength(GameManager game)
+        {
+            if (SaveManager.Settings.reduceFlashes) return 0f;
+            float strength = 0.35f;
+            var player = game != null ? game.Player : null;
+            if (player != null && player.Health != null)
+                strength += Mathf.Clamp01(player.Health.DamageFlash) * 0.9f + player.Suppression * 0.4f;
+            return Mathf.Clamp01(strength);
         }
     }
 }

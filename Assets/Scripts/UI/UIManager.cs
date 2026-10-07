@@ -359,7 +359,7 @@ namespace Swat
                     return;
             }
             string key = UITheme.KeyFor(InputAction.SwitchView);
-            string view = SaveManager.Settings.cameraView == 1 ? "First person (body cam)" : "Top-down";
+            string view = SaveManager.Settings.cameraView == 1 ? "First person (helmet cam)" : "Top-down";
             float y = quality != null && quality.ShowFps ? 30f : 8f;
             if (game.State == GameState.Deploying) y = 60f;
             UITheme.ShadowText(new Rect(UITheme.Width - 470f, y, 460f, 24f), "View: " + view + "   [" + key + "] switch", 15, UITheme.Dim, TextAnchor.UpperRight);

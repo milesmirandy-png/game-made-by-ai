@@ -55,9 +55,11 @@ namespace Swat
         public float cameraSmoothing = 0.12f;
         public bool edgeScrolling;
         public int cameraShake = 1;        // 0 off, 1 low, 2 medium
-        public int cameraView;             // 0 top-down, 1 first person (body cam); V switches it any time
+        public int cameraView = 1;         // 0 top-down, 1 first person (helmet cam, the default); V switches it any time
         public float fieldOfView = 90f;    // first person, horizontal degrees
-        public bool bodyCamLook = true;    // first person: wide lens, grain and the REC overlay
+        public bool bodyCamLook = true;    // first person: the VHS helmet cam look (wide lens, grain, tape, REC overlay)
+        public bool fpMinimalHud = true;   // first person: no HUD panels; with realistic ammo the magazine shows only when checked
+        public int fpReticle;              // first person: 0 a dot from the hip, 1 none
         public bool realisticAmmo = true;  // HUD shows how full the magazine feels and magazines left, not exact rounds
         public float mouseSensitivity = 1f;
         public float aimSmoothing;         // 0 = off (direct)
