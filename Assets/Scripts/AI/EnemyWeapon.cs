@@ -11,10 +11,12 @@ namespace Swat
         Transform muzzle;
         EnemyController body;
         float nextShot, accuracyMultiplier = 1f, staggerUntil;
+        AmmoType ammo;   // whatever they loaded: mostly full metal jacket
         int burstLeft;
 
         public void Init(EnemyData profile, Transform muzzlePoint, float difficultyAccuracy, WeaponData gun = null)
         {
+            ammo = Random.value < 0.7f ? AmmoType.FMJ : AmmoType.JHP;
             data = profile;
             model = gun;
             body = GetComponent<EnemyController>();
@@ -62,7 +64,7 @@ namespace Swat
             if (!onTarget) direction = Quaternion.Euler(0f, Random.Range(4f, 10f) * (Random.value < 0.5f ? -1f : 1f), 0f) * direction;
 
             Vector3 from = muzzle != null ? muzzle.position : origin;
-            var damage = new DamageInfo { amount = data.weaponDamage * Lethality.ToPolice, attacker = Team.Suspect, weapon = model };
+            var damage = new DamageInfo { amount = data.weaponDamage * Lethality.ToPolice, attacker = Team.Suspect, weapon = model, ammo = ammo };
             WeaponEffects.Shoot(origin, direction, data.detectionRange * 1.5f, damage, from, new Color(1f, 0.5f, 0.25f));
             if (muzzle != null) WeaponEffects.Fired(muzzle, model, 0.8f, 20f, NoiseKind.EnemyGunshot, 0.94f);
             else WeaponEffects.MuzzleFlash(from, Sound.EnemyShot, 0.8f, 20f, NoiseKind.EnemyGunshot);

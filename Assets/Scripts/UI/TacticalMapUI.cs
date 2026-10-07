@@ -343,7 +343,7 @@ namespace Swat
                 Vector2 b = ToMap(match.Bases[side]);
                 var color = VersusHUD.SideColor(side);
                 RingAt(b, Mathf.Clamp(1.3f * scale, 6f, 14f), color, 2f);
-                Label(new Rect(b.x - 40f, b.y + 10f, 80f, 16f), side == 0 ? "BLUE BASE" : "RED BASE", 11, color, TextAnchor.UpperCenter, true);
+                Label(new Rect(b.x - 40f, b.y + 10f, 80f, 16f), side == 0 ? "SWAT BASE" : "SUSPECT BASE", 11, color, TextAnchor.UpperCenter, true);
             }
             if (match.Mode == GameMode.ZoneControl)
             {
@@ -407,7 +407,7 @@ namespace Swat
                 Vector2 m = ToMap(where);
                 if (live)
                 {
-                    Dot(m, r, enemy.State == EnemyState.Surrendering ? UITheme.Warn : UITheme.Bad);
+                    Dot(m, r, enemy.State == EnemyState.Surrendering || enemy.State == EnemyState.Incapacitated ? UITheme.Warn : UITheme.Bad);
                 }
                 else
                 {

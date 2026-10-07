@@ -153,6 +153,7 @@ namespace Swat
 
             player.Health = go.AddComponent<PlayerHealth>();
             player.Health.Init(officer.maxHealth, armor, officer.armorRating, loadout.useShield);
+            player.Health.Helmet = GearCatalog.HasHelmet(loadout.headgearIndex);
             player.Interaction = go.AddComponent<PlayerInteraction>();
             player.Weapons = go.AddComponent<WeaponController>();
             var inventory = new WeaponInventory(loadout, bonus);

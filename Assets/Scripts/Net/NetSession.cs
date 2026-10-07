@@ -51,6 +51,8 @@ namespace Swat
         public readonly float[] baseYaw = new float[2];
         public Bounds zone;
         public readonly Vector3[] flagHomes = new Vector3[2];
+        public Vector3 objective;                                   // VIP Escort: the extraction point
+        public readonly List<Vector3> bombs = new List<Vector3>();  // Rapid Deployment: the devices
         public readonly List<RosterEntry> roster = new List<RosterEntry>();
     }
 
@@ -71,7 +73,7 @@ namespace Swat
         const float SnapshotInterval = 1f / 15f, StateInterval = 1f / 20f;
         const int NoId = 255;
 
-        enum Msg : byte { Lobby = 1, ChooseSide, Profile, Start, Setup, Loaded, Snapshot, State, Shot, Hit, Down, Respawn, Event, End, ToLobby, Remove, Ping }
+        enum Msg : byte { Lobby = 1, ChooseSide, Profile, Start, Setup, Loaded, Snapshot, State, Shot, Hit, Down, Respawn, Event, End, ToLobby, Remove, Ping, Disarm }
 
         public static NetSession Instance { get; private set; }
         public static bool IsHost { get { return Instance != null && Instance.Role == NetRole.Host; } }
@@ -345,8 +347,9 @@ namespace Swat
         }
 
         // Raised whenever a message gains or changes a field (2: lean and slide in movement updates;
-        // 3: Gun Game and Elimination, round state in snapshots, pings).
-        const int MessageVersion = 3;
+        // 3: Gun Game and Elimination, round state in snapshots, pings;
+        // 4: hit zones and ammo in hits, VIP Escort and Rapid Deployment, arcade weapons option).
+        const int MessageVersion = 4;
 
         // Both copies of the game must have the same weapons, officers, maps and messages.
         static int ContentHash()
@@ -577,6 +580,9 @@ namespace Swat
                 Vec(writer, match.Zone.center);
                 Vec(writer, match.Zone.size);
                 for (int side = 0; side < 2; side++) Vec(writer, match.FlagHome(side));
+                Vec(writer, match.VipExit);
+                writer.Byte(match.Bombs.Count);
+                foreach (var bomb in match.Bombs) Vec(writer, bomb.position);
                 writer.Byte(roster.Count);
                 foreach (var entry in roster)
                 {
@@ -613,6 +619,11 @@ namespace Swat
             writer.Byte(Mathf.Clamp(match.Round, 0, 255));
             writer.Bool(match.RoundOver);
             writer.Float(match.RoundStart);
+            // VIP Escort's VIP and which devices are disarmed (a client still loading misses the events).
+            writer.Byte(match.VipId < 0 ? NoId : match.VipId);
+            int disarmed = 0;
+            for (int i = 0; i < match.Bombs.Count && i < 8; i++) if (match.Bombs[i].disarmed) disarmed |= 1 << i;
+            writer.Byte(disarmed);
             for (int side = 0; side < 2; side++)
             {
                 var flag = match.Flags[side];
@@ -752,10 +763,22 @@ namespace Swat
             writer.Byte(weapon < 0 ? NoId : weapon);
             writer.Short(Mathf.RoundToInt(Mathf.Clamp(info.direction.x, -1f, 1f) * 1000f));
             writer.Short(Mathf.RoundToInt(Mathf.Clamp(info.direction.z, -1f, 1f) * 1000f));
+            // Where it landed and with what (hit zones and ammo, see Ballistics).
+            writer.Byte((info.zoned ? 1 : 0) | ((int)info.zone << 1) | ((int)info.ammo << 3) | (info.penetrated ? 16 : 0));
         }
 
         // Client: you were tagged out; the host credits whoever did it.
         // A ping: a player sends theirs to the host; the host passes it to that player's teammates.
+        // Client: you disarmed a device; the host makes it official.
+        public void SendDisarm(int index)
+        {
+            if (!IsClient || peer.Connections.Count == 0) return;
+            writer.Reset();
+            writer.Byte((byte)Msg.Disarm);
+            writer.Byte(index);
+            peer.Send(peer.Connections[0], writer.ToArray(), true);
+        }
+
         public void SendPing(int fromId, int side, bool enemy, Vector3 point)
         {
             if (peer == null) return;
@@ -1097,6 +1120,14 @@ namespace Swat
                     SendPing(actor.NetId, actor.Side, enemy, point);
                     break;
                 }
+                case Msg.Disarm:
+                {
+                    // A player on SWAT finished disarming a device (Rapid Deployment); the host checks they're close.
+                    int index = r.Byte();
+                    if (r.Failed || actor == null || match == null || !VersusMatch.Active || actor.Side != 0 || actor.Down) break;
+                    if (index < match.Bombs.Count && AIManager.FlatDistance(actor.Position, match.Bombs[index].position) < 3f) match.Disarm(index, actor.NetId);
+                    break;
+                }
             }
         }
 
@@ -1115,6 +1146,11 @@ namespace Swat
             info.stun = Mathf.Clamp(r.Float(), 0f, 10f);
             info.weapon = VersusMatch.WeaponAt(r.Byte());
             info.direction = new Vector3(r.Short() / 1000f, 0f, r.Short() / 1000f);
+            int body = r.Byte();
+            info.zoned = (body & 1) != 0;
+            info.zone = (HitZone)((body >> 1) & 3);
+            info.ammo = (AmmoType)((body >> 3) & 1);
+            info.penetrated = (body & 16) != 0;
             return info;
         }
 
@@ -1180,6 +1216,9 @@ namespace Swat
                     Vector3 center = Vec(r), size = Vec(r);
                     setup.zone = new Bounds(center, size);
                     for (int side = 0; side < 2; side++) setup.flagHomes[side] = Vec(r);
+                    setup.objective = Vec(r);
+                    int bombs = Mathf.Min(r.Byte(), 8);
+                    for (int i = 0; i < bombs; i++) setup.bombs.Add(Vec(r));
                     int count = r.Byte();
                     for (int i = 0; i < count; i++)
                     {
@@ -1319,6 +1358,8 @@ namespace Swat
             int round = r.Byte();
             bool roundOver = r.Bool();
             float roundStart = r.Float();
+            int vip = r.Byte();
+            int disarmed = r.Byte();
             var flagPosition = new Vector3[2];
             var flagCarrier = new int[2];
             var flagDropped = new float[2];
@@ -1337,6 +1378,7 @@ namespace Swat
             lastSnapshotSeq = seq;
             match.ApplyState(elapsed, blue, red, zone, owner, inBlue, inRed);
             match.ApplyRound(round, roundOver, roundStart);
+            match.ApplyObjectives(vip == NoId ? -1 : vip, disarmed);
             for (int i = 0; i < count; i++)
             {
                 int id = r.Byte();
@@ -1375,6 +1417,7 @@ namespace Swat
             w.Byte(o.timeIndex);
             w.Byte(o.botSkill);
             w.Byte(o.timeOfDay);
+            w.Bool(o.arcadeWeapons);
         }
 
         static VersusOptions ReadOptions(NetReader r)
@@ -1383,6 +1426,7 @@ namespace Swat
             {
                 mode = Mathf.Clamp(r.Byte(), 1, VersusMatch.LastMode), mapId = r.String(), teamSize = Mathf.Clamp(r.Byte(), 1, VersusMatch.MaxTeamSize),
                 scoreIndex = Mathf.Clamp(r.Byte(), 0, 2), timeIndex = Mathf.Clamp(r.Byte(), 0, 2), botSkill = Mathf.Clamp(r.Byte(), 0, 2), timeOfDay = Mathf.Clamp(r.Byte(), 0, 2),
+                arcadeWeapons = r.Bool(),
             };
         }
 

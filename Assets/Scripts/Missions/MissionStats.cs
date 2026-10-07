@@ -14,6 +14,7 @@ namespace Swat
     public class MissionStats
     {
         public int suspectsTotal, suspectsEncountered, suspectsArrested, suspectsKilled, suspectsEscaped;
+        public int suspectsIncapacitated;   // went down alive (SWAT 4): worth less than an arrest, more than a kill
         public int officersDowned, unauthorizedForce, doorsBreached, ordersGiven, evidenceSecured, evidenceTotal;
         public int shotsFired, shotsHit;
         // Ready or Not-style paperwork: suspects' guns left on the floor and secured, and reports to TOC.

@@ -30,7 +30,7 @@ namespace Swat
             float w = UITheme.Width;
             var rect = new Rect(w * 0.5f - 230f, 14f, 460f, 74f);
             UITheme.Panel(rect);
-            string goal = match.Mode == GameMode.GunGame ? match.ScoreLimit + "-GUN LADDER" : match.Mode == GameMode.Elimination ? "FIRST TO " + match.ScoreLimit + " ROUNDS" : "FIRST TO " + match.ScoreLimit;
+            string goal = match.Mode == GameMode.GunGame ? match.ScoreLimit + "-GUN LADDER" : match.RoundMode ? "FIRST TO " + match.ScoreLimit + " ROUNDS" : "FIRST TO " + match.ScoreLimit;
             UITheme.Text(new Rect(rect.x, rect.y + 4f, rect.width, 18f), VersusMatch.ModeNames[(int)match.Mode].ToUpperInvariant() + "   -   " + goal, 12, UITheme.Dim, TextAnchor.UpperCenter, true);
             var blue = new Rect(rect.x + 14f, rect.y + 24f, 130f, 42f);
             var red = new Rect(rect.xMax - 144f, rect.y + 24f, 130f, 42f);
@@ -38,11 +38,11 @@ namespace Swat
             UITheme.Fill(red, new Color(Red.r * 0.35f, Red.g * 0.35f, Red.b * 0.35f, 0.9f));
             UITheme.Fill(new Rect(blue.x, blue.yMax - 3f, blue.width * Mathf.Clamp01(match.Score[0] / Mathf.Max(1, match.ScoreLimit)), 3f), Blue);
             UITheme.Fill(new Rect(red.xMax - red.width * Mathf.Clamp01(match.Score[1] / Mathf.Max(1, match.ScoreLimit)), red.yMax - 3f, red.width * Mathf.Clamp01(match.Score[1] / Mathf.Max(1, match.ScoreLimit)), 3f), Red);
-            UITheme.Text(blue, "BLUE  " + Mathf.FloorToInt(match.Score[0]), 24, Color.white, TextAnchor.MiddleCenter, true);
-            UITheme.Text(red, Mathf.FloorToInt(match.Score[1]) + "  RED", 24, Color.white, TextAnchor.MiddleCenter, true);
-            // Elimination shows the round clock in the middle; the other modes the match clock.
-            float left = match.Mode == GameMode.Elimination ? match.RoundTimeLeft : match.TimeLeft;
-            string clock = match.Mode == GameMode.Elimination && match.RoundOver ? "--:--" : MissionScoring.FormatTime(left);
+            UITheme.Text(blue, "SWAT  " + Mathf.FloorToInt(match.Score[0]), 22, Color.white, TextAnchor.MiddleCenter, true);
+            UITheme.Text(red, Mathf.FloorToInt(match.Score[1]) + "  SUSP.", 22, Color.white, TextAnchor.MiddleCenter, true);
+            // Round modes show the round clock in the middle; the other modes the match clock.
+            float left = match.RoundMode ? match.RoundTimeLeft : match.TimeLeft;
+            string clock = match.RoundMode && match.RoundOver ? "--:--" : MissionScoring.FormatTime(left);
             UITheme.Text(new Rect(rect.x + 150f, rect.y + 26f, rect.width - 300f, 38f), clock, 24, left < 30f ? UITheme.Warn : UITheme.TextColor, TextAnchor.MiddleCenter, true);
 
             float y = rect.yMax + 4f;
@@ -54,10 +54,18 @@ namespace Swat
                 UITheme.ShadowText(new Rect(rect.x - 160f, y, rect.width + 320f, 22f), "Your gun " + (rung + 1) + "/" + match.Ladder.Count + ":  " + match.Ladder[rung].displayName + "     " + next, 15,
                     last ? UITheme.Warn : UITheme.TextColor, TextAnchor.UpperCenter, true);
             }
-            else if (match.Mode == GameMode.Elimination)
+            else if (match.RoundMode)
             {
-                string state = match.RoundOver ? "next round starting" : "still in  " + match.StillIn(0) + " vs " + match.StillIn(1);
-                UITheme.ShadowText(new Rect(rect.x - 120f, y, rect.width + 240f, 22f), "Round " + match.Round + "     " + state + "     match " + MissionScoring.FormatTime(match.TimeLeft), 15, UITheme.TextColor, TextAnchor.UpperCenter, true);
+                string state;
+                if (match.RoundOver) state = "next round starting";
+                else if (match.Mode == GameMode.VipEscort)
+                {
+                    var vip = match.Vip;
+                    state = vip == null ? "choosing the VIP" : vip == (ICombatTarget)match.Player ? "YOU are the VIP: get to the gold extraction point" : "VIP: " + match.NameOf(vip);
+                }
+                else if (match.Mode == GameMode.RapidDeployment) state = "devices left  " + match.BombsLeft + " of " + match.Bombs.Count;
+                else state = "still in  " + match.StillIn(0) + " vs " + match.StillIn(1);
+                UITheme.ShadowText(new Rect(rect.x - 160f, y, rect.width + 320f, 22f), "Round " + match.Round + "     " + state + "     match " + MissionScoring.FormatTime(match.TimeLeft), 15, UITheme.TextColor, TextAnchor.UpperCenter, true);
             }
             else if (match.Mode == GameMode.CaptureTheFlag)
             {
@@ -74,7 +82,7 @@ namespace Swat
                 if (c > 0f) UITheme.Fill(new Rect(mid, bar.y, bar.width * 0.5f * c, bar.height), Blue);
                 else if (c < 0f) UITheme.Fill(new Rect(mid + bar.width * 0.5f * c, bar.y, -bar.width * 0.5f * c, bar.height), Red);
                 UITheme.Fill(new Rect(mid - 1f, bar.y - 3f, 2f, bar.height + 6f), Color.white);
-                string owner = match.ZoneOwner == 0 ? "Zone: BLUE" : match.ZoneOwner == 1 ? "Zone: RED" : "Zone: neutral";
+                string owner = match.ZoneOwner == 0 ? "Zone: SWAT" : match.ZoneOwner == 1 ? "Zone: SUSPECTS" : "Zone: neutral";
                 string contest = match.ZoneCount[0] > 0 && match.ZoneCount[1] > 0 ? "   CONTESTED" : "";
                 UITheme.ShadowText(new Rect(rect.x, y + 16f, rect.width, 22f), owner + "   (in zone " + match.ZoneCount[0] + " vs " + match.ZoneCount[1] + ")" + contest, 15,
                     match.ZoneOwner == 0 ? Blue : match.ZoneOwner == 1 ? Red : UITheme.TextColor, TextAnchor.UpperCenter, true);
@@ -122,6 +130,7 @@ namespace Swat
                 string state = mate.IsAlive ? mate.Kills + " tag-outs" : mate.RespawnAt > 0f && !match.Mirror ? "back in " + Mathf.CeilToInt(Mathf.Max(0f, mate.RespawnAt - Time.time)) : "tagged out";
                 if (match.Mode == GameMode.GunGame && match.Ladder != null) state = "gun " + (Mathf.Clamp(mate.Kills, 0, match.Ladder.Count - 1) + 1) + "/" + match.Ladder.Count + (mate.IsAlive ? "" : "   (tagged out)");
                 if (match.Mode == GameMode.Elimination && !mate.IsAlive) state = "out this round";
+                if (match.Mode == GameMode.VipEscort && mate.NetId == match.VipId) state = "VIP" + (mate.IsAlive ? "" : " (down)");
                 if (match.IsCarrying(mate)) state = "HAS THE FLAG";
                 if (match.Spectating == mate) state += "   [watching]";
                 UITheme.ShadowText(new Rect(w - 330f, y, 310f, 20f), (mate.IsHuman ? "* " : "") + mate.Callsign + "   " + state, 14, mate.IsAlive ? UITheme.TextColor : UITheme.Faint, TextAnchor.UpperRight);
@@ -133,7 +142,7 @@ namespace Swat
         {
             var player = game.Player;
             if (player == null || player.IsAlive) return;
-            bool eliminated = match.Mode == GameMode.Elimination;
+            bool eliminated = match.Mode == GameMode.Elimination || (match.Mode == GameMode.VipEscort && match.VipId == match.MyId);
             if (match.PlayerRespawnAt <= 0f && !eliminated) return;
             float w = UITheme.Width, h = UITheme.Height;
             // Smaller and higher once you're watching a teammate, so the view stays clear.
@@ -168,7 +177,23 @@ namespace Swat
                     if (flag == null || flag.carrier == (ICombatTarget)game.Player) continue;
                     var carrier = flag.carrier as IVersusMember;
                     if (carrier != null && carrier.Side != match.MySide && !carrier.Seen) continue;
-                    Marker(cam, flag.position + Vector3.up * 2.7f, side == 0 ? "BLUE FLAG" : "RED FLAG", SideColor(side));
+                    Marker(cam, flag.position + Vector3.up * 2.7f, side == 0 ? "SWAT FLAG" : "SUSPECT FLAG", SideColor(side));
+                }
+            if (match.Mode == GameMode.VipEscort)
+            {
+                var gold = new Color(1f, 0.82f, 0.25f);
+                Marker(cam, match.VipExit + Vector3.up * 2.9f, "EXTRACTION", gold);
+                var vip = match.Vip;
+                var member = vip as IVersusMember;
+                if (vip != null && vip != (ICombatTarget)game.Player && vip.IsAlive && (member == null || member.Side == match.MySide || member.Seen))
+                    Marker(cam, vip.Position + Vector3.up * 2.6f, "VIP", gold);
+            }
+            if (match.Mode == GameMode.RapidDeployment)
+                for (int i = 0; i < match.Bombs.Count; i++)
+                {
+                    var bomb = match.Bombs[i];
+                    if (bomb.disarmed) continue;
+                    Marker(cam, bomb.position + Vector3.up * 1.4f, "DEVICE " + (i + 1), new Color(1f, 0.35f, 0.25f));
                 }
             if (match.Mode == GameMode.ZoneControl)
                 Marker(cam, match.Zone.center + Vector3.up * 2.6f, "ZONE", match.ZoneOwner < 0 ? Color.white : SideColor(match.ZoneOwner));

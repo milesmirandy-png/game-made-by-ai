@@ -147,6 +147,7 @@ namespace Swat
             y += 8f;
             Section(ref y, x, cw, "SUSPECTS");
             Line(ref y, x, cw, "Arrested", s.suspectsArrested + " / " + s.suspectsTotal);
+            Line(ref y, x, cw, "Incapacitated", s.suspectsIncapacitated.ToString());
             Line(ref y, x, cw, "Neutralized", s.suspectsKilled.ToString());
             if (s.suspectsEscaped > 0) Line(ref y, x, cw, "Escaped", s.suspectsEscaped.ToString(), true);
             Line(ref y, x, cw, "Unauthorized use of force", s.unauthorizedForce.ToString(), s.unauthorizedForce > 0);

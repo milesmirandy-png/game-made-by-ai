@@ -180,6 +180,7 @@ namespace Swat
             box.size = new Vector3(1f, WallSolidHeight / height, 1f);
             box.center = new Vector3(0f, box.size.y * 0.5f - 0.5f, 0f);
             Layout.view.AddStretch(wall, height, height - WallLowHeight + WallHighHeight, WallSolidHeight, 0f, ProceduralTextures.TileMeters(surface));
+            if (!exterior) wall.AddComponent<ThinWall>();
             Shapes.Box("Wall Top", wall.transform, new Vector3(0f, 0.5f, 0f), new Vector3(1.05f, 0.02f, 1f), Shapes.Shade(color, 0.55f), false);
             Layout.walls.Add(new WallSegment { a = new Vector2(from.x, from.z), b = new Vector2(to.x, to.z), area = CurrentArea, exterior = exterior });
         }

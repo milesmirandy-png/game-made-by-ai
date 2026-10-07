@@ -118,6 +118,20 @@ namespace Swat
                 best = weapon;
                 bestScore = score;
             }
+            // Game-mode devices to disarm.
+            foreach (var device in BombDevice.All)
+            {
+                if (device == null || !device.CanInteract(player)) continue;
+                Vector3 to = device.InteractPosition - player.Position;
+                to.y = 0f;
+                float distance = to.magnitude;
+                if (distance > range) continue;
+                float facing = distance > 0.01f ? Vector3.Dot(player.AimDirection, to / distance) : 1f;
+                float score = distance - facing * 0.8f;
+                if (score >= bestScore || !InReach(chest, device)) continue;
+                best = device;
+                bestScore = score;
+            }
             return best;
         }
 

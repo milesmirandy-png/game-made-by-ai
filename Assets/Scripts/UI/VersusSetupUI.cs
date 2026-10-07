@@ -31,20 +31,23 @@ namespace Swat
             bool changed = false;
 
             UITheme.Fill(new Rect(0f, 0f, w, h), new Color(0.02f, 0.03f, 0.05f, 0.86f));
-            UITheme.Header(new Rect(60f, 36f, w - 120f, 60f), "Game Modes", hosting ? "Hosting an online game: pick the match, then start it for everyone" : "Training exercises with marking rounds: you and your squad against the Red Team, or online with friends");
+            UITheme.Header(new Rect(60f, 36f, w - 120f, 60f), "Game Modes", hosting ? "Hosting an online game: pick the match, then start it for everyone" : "Training exercises with marking rounds: SWAT against the suspects, with bots or online with friends");
 
-            // Modes.
+            // Modes: a two-column grid, with what the selected one is about underneath.
             float x = 60f, y = 120f, cw = 520f;
+            float tileW = (cw - 10f) * 0.5f;
             for (int i = 1; i <= VersusMatch.LastMode; i++)
             {
-                var rect = new Rect(x, y, cw, 76f);
+                int index = i - 1;
+                var rect = new Rect(x + (index % 2) * (tileW + 10f), y + (index / 2) * 50f, tileW, 44f);
                 bool selected = o.mode == i;
                 if (UITheme.Button(rect, string.Empty, true, selected)) { o.mode = i; changed = true; }
                 UITheme.Fill(new Rect(rect.x, rect.y, 5f, rect.height), ModeColor((GameMode)i));
-                UITheme.Text(new Rect(rect.x + 22f, rect.y + 6f, cw - 40f, 26f), VersusMatch.ModeNames[i].ToUpperInvariant(), 19, selected ? Color.white : UITheme.TextColor, TextAnchor.UpperLeft, true);
-                UITheme.Text(new Rect(rect.x + 22f, rect.y + 32f, cw - 40f, 42f), VersusMatch.ModeGoals[i], 14, UITheme.Dim);
-                y += 84f;
+                UITheme.Text(new Rect(rect.x + 16f, rect.y, tileW - 22f, rect.height), VersusMatch.ModeNames[i].ToUpperInvariant(), 16, selected ? Color.white : UITheme.TextColor, TextAnchor.MiddleLeft, true);
             }
+            y += Mathf.Ceil(VersusMatch.LastMode / 2f) * 50f + 2f;
+            UITheme.Text(new Rect(x, y, cw, 44f), VersusMatch.ModeGoals[o.mode], 14, UITheme.Dim);
+            y += 46f;
 
             // Options.
             y += 6f;
@@ -56,7 +59,8 @@ namespace Swat
             y += 40f;
             var scores = new string[3];
             for (int i = 0; i < 3; i++) scores[i] = VersusMatch.ScoreLimitFor(mode, i) + " " + VersusMatch.ScoreUnit(mode);
-            int score = UITheme.Stepper(new Rect(x, y, cw, 34f), mode == GameMode.GunGame ? "Ladder" : mode == GameMode.Elimination ? "Rounds to win" : "Score limit", Mathf.Clamp(o.scoreIndex, 0, 2), scores);
+            bool rounds = mode == GameMode.Elimination || mode == GameMode.VipEscort || mode == GameMode.RapidDeployment;
+            int score = UITheme.Stepper(new Rect(x, y, cw, 34f), mode == GameMode.GunGame ? "Ladder" : rounds ? "Rounds to win" : "Score limit", Mathf.Clamp(o.scoreIndex, 0, 2), scores);
             if (score != o.scoreIndex) { o.scoreIndex = score; changed = true; }
             y += 40f;
             var times = new string[3];
@@ -69,6 +73,9 @@ namespace Swat
             y += 40f;
             int light = UITheme.Stepper(new Rect(x, y, cw, 34f), "Time of day", Mathf.Clamp(o.timeOfDay, 0, 2), TimeNames);
             if (light != o.timeOfDay) { o.timeOfDay = light; changed = true; }
+            y += 40f;
+            bool arcade = UITheme.Toggle(new Rect(x, y, cw, 30f), "Arcade weapons (rotary gun, drum shotgun, marker launcher... not 1999 police kit)", o.arcadeWeapons);
+            if (arcade != o.arcadeWeapons) { o.arcadeWeapons = arcade; changed = true; }
 
             // Maps.
             float mx = x + cw + 40f, mw = w - mx - 60f;
@@ -95,20 +102,20 @@ namespace Swat
             if (hosting)
             {
                 UITheme.Text(new Rect(tx, teamRect.y + 10f, tcw, 22f), "TEAMS", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
-                UITheme.Text(new Rect(tx, teamRect.y + 36f, tcw, 44f), "Blue:  " + OnlineLobbyUI.Lineup(o, 0), 15, VersusHUD.SideColor(0));
-                UITheme.Text(new Rect(tx, teamRect.y + 84f, tcw, 44f), "Red:  " + OnlineLobbyUI.Lineup(o, 1), 15, VersusHUD.SideColor(1));
+                UITheme.Text(new Rect(tx, teamRect.y + 36f, tcw, 44f), "SWAT:  " + OnlineLobbyUI.Lineup(o, 0), 15, VersusHUD.SideColor(0));
+                UITheme.Text(new Rect(tx, teamRect.y + 84f, tcw, 44f), "Suspects:  " + OnlineLobbyUI.Lineup(o, 1), 15, VersusHUD.SideColor(1));
                 UITheme.Text(new Rect(tx, teamRect.y + 134f, tcw, 80f), "Everyone plays their own officer and loadout. Tactical equipment is off and doors stay open in online matches. The game doesn't pause online.", 13, UITheme.Dim);
             }
             else
             {
-                UITheme.Text(new Rect(tx, teamRect.y + 10f, tcw, 22f), "BLUE TEAM", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
+                UITheme.Text(new Rect(tx, teamRect.y + 10f, tcw, 22f), "SWAT TEAM", 14, UITheme.Accent, TextAnchor.UpperLeft, true);
                 var names = new List<string> { OfficerSelectionManager.Leader.callsign + " (you)" };
                 foreach (var officer in OfficerSelectionManager.Squad) names.Add(officer.callsign);
                 int fill = Mathf.Max(0, o.teamSize - names.Count);
                 string line = string.Join("   ", names.GetRange(0, Mathf.Min(names.Count, o.teamSize)).ToArray()) + (fill > 0 ? "   + " + fill + " more officer" + (fill > 1 ? "s" : "") : "");
                 UITheme.Text(new Rect(tx, teamRect.y + 36f, tcw, 44f), line, 16, UITheme.TextColor);
                 UITheme.Text(new Rect(tx, teamRect.y + 84f, tcw, 120f),
-                    "Squadmates play as bots with their own loadouts. You use your loadout; your team respawns at the van, the Red Team deep inside. Every usable door starts open. Ammo refills at the van and when you respawn.", 14, UITheme.Dim);
+                    "Squadmates play as bots with their own loadouts. You use your loadout; your team respawns at the van, the suspects deep inside. Every usable door starts open. Ammo refills at the van and when you respawn. Dazed opponents can be arrested (hold E).", 14, UITheme.Dim);
             }
             UITheme.Text(new Rect(tx, teamRect.yMax - 28f, tcw, 22f), "Matches played " + o.matchesPlayed + "   |   Won " + o.matchesWon, 14, UITheme.Faint);
             online.DrawPanel(new Rect(mx + tw + 12f, ty, mw - tw - 12f, th2), game);
@@ -161,6 +168,8 @@ namespace Swat
                 case GameMode.CaptureTheFlag: return new Color(0.36f, 0.62f, 0.95f);
                 case GameMode.GunGame: return new Color(1f, 0.66f, 0.22f);
                 case GameMode.Elimination: return new Color(0.72f, 0.5f, 1f);
+                case GameMode.VipEscort: return new Color(1f, 0.82f, 0.25f);
+                case GameMode.RapidDeployment: return new Color(1f, 0.45f, 0.3f);
                 default: return new Color(0.4f, 0.85f, 0.55f);
             }
         }

@@ -7,6 +7,7 @@ namespace Swat
     {
         Idle, Patrol, Suspicious, Investigating, Alert, Chasing, Attacking, TakingCover, Searching,
         Fleeing, Hiding, Stunned, Surrendering, Restrained, Dead, Holding,
+        Incapacitated,   // down but alive: out of the fight until restrained
     }
 
     // A suspect's brain: a small finite state machine shared by every archetype.
@@ -20,6 +21,8 @@ namespace Swat
     //
     // Flashbangs and less-lethal rounds cause Stunned. Shouting can cause
     // Surrendering; restraining a surrendered suspect makes them Restrained.
+    // A body or limb hit that would put them down often leaves them Incapacitated
+    // (down, alive, unarmed) instead; they still have to be restrained and reported.
     // Think() runs a few times a second; FrameUpdate() only turns and shoots.
     //
     // Smarter behaviour on top: alerted suspects often Hold their room instead of
@@ -33,7 +36,10 @@ namespace Swat
         public EnemyData Data { get; private set; }
         public EnemyState State { get; private set; }
         public bool IsNeutralized { get { return State == EnemyState.Dead || State == EnemyState.Restrained || Escaped; } }
-        public bool IsArmedThreat { get { return Data.armed && !IsNeutralized && State != EnemyState.Surrendering && State != EnemyState.Hiding; } }
+        public bool IsArmedThreat { get { return Data.armed && !Down && State != EnemyState.Surrendering && State != EnemyState.Hiding; } }
+        // Out of the fight: neutralized, or lying incapacitated.
+        public bool Down { get { return IsNeutralized || State == EnemyState.Incapacitated; } }
+        public bool WasIncapacitated { get; private set; }
         public bool NeedsSecuring { get { return !IsNeutralized; } }
         public bool IsLeader { get { return Data.archetype == EnemyArchetype.Leader; } }
         public bool Escaped { get; private set; }
@@ -44,7 +50,7 @@ namespace Swat
         public int Area { get; set; }
         public EnemyController Body { get { return body; } }
 
-        public string Prompt { get { return Data.armed ? "[E] Secure Suspect (hold)" : "[E] Secure and Question Suspect (hold)"; } }
+        public string Prompt { get { return State == EnemyState.Incapacitated ? "[E] Restrain Incapacitated Suspect (hold)" : Data.armed ? "[E] Secure Suspect (hold)" : "[E] Secure and Question Suspect (hold)"; } }
         public Vector3 InteractPosition { get { return transform.position + Vector3.up; } }
 
         AgentMover mover;
@@ -66,6 +72,7 @@ namespace Swat
         int fakeTries;
         Vector3 holdFacing;
         bool everAlerted;
+        float lastShoutHeard = -100f;   // when an officer last ordered them to comply
         ICombatTarget target;
         Vector3 lastKnown, noisePosition, searchCenter, coverPoint, fleeTarget;
 
@@ -193,7 +200,7 @@ namespace Swat
 
         public void Think()
         {
-            if (IsNeutralized) return;
+            if (Down) return;
             if (State == EnemyState.Surrendering)
             {
                 if (fakeAt > 0f && Time.time >= fakeAt) TryFakeOut();
@@ -578,7 +585,7 @@ namespace Swat
                 if ((kind == NoiseKind.Door || kind == NoiseKind.Footstep) && (position - Position).sqrMagnitude < 100f) holdFacing = position;
                 return;
             }
-            if (IsNeutralized || State == EnemyState.Surrendering || State == EnemyState.Stunned || State == EnemyState.Attacking
+            if (Down || State == EnemyState.Surrendering || State == EnemyState.Stunned || State == EnemyState.Attacking
                 || State == EnemyState.Alert || State == EnemyState.Fleeing || State == EnemyState.Hiding) return;
 
             bool fromAlly = kind == NoiseKind.EnemyGunshot || kind == NoiseKind.Callout;
@@ -610,7 +617,7 @@ namespace Swat
 
         public void Stun(float duration)
         {
-            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            if (Down || State == EnemyState.Surrendering) return;
             SetState(EnemyState.Stunned);
             mover.Stop();
             stunUntil = Time.time + duration;
@@ -621,7 +628,7 @@ namespace Swat
         // some give up on the spot (the leader holds out longer).
         public void Gassed()
         {
-            if (IsNeutralized || State == EnemyState.Surrendering || Data.archetype == EnemyArchetype.TrainingDummy) return;
+            if (Down || State == EnemyState.Surrendering || Data.archetype == EnemyArchetype.TrainingDummy) return;
             gassedUntil = Time.time + 4f;
             everAlerted = true;
             if (Data.armed) weapon.Stagger(0.8f);
@@ -638,7 +645,7 @@ namespace Swat
         // A dazed suspect is much more likely to give up when shouted at.
         public void Shoved(Vector3 direction, float seconds)
         {
-            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            if (Down || State == EnemyState.Surrendering) return;
             body.Animator.Hit(direction);
             mover.Nudge(direction * 0.6f);
             if (Data.armed) weapon.Stagger(seconds);
@@ -651,7 +658,8 @@ namespace Swat
         // An officer shouted "Police! Show me your hands!"
         public void HearShout(Vector3 from, bool byPlayer)
         {
-            if (IsNeutralized || State == EnemyState.Surrendering || Time.time < nextShoutCheck) return;
+            if (!Down) lastShoutHeard = Time.time;
+            if (Down || State == EnemyState.Surrendering || Time.time < nextShoutCheck) return;
             nextShoutCheck = Time.time + 1f;
 
             float chance = Data.surrenderChance;
@@ -740,7 +748,7 @@ namespace Swat
         // and more likely to give up when shouted at.
         public void Suppress(Vector3 from)
         {
-            if (IsNeutralized || State == EnemyState.Surrendering || State == EnemyState.Stunned || Data.archetype == EnemyArchetype.TrainingDummy) return;
+            if (Down || State == EnemyState.Surrendering || State == EnemyState.Stunned || Data.archetype == EnemyArchetype.TrainingDummy) return;
             suppressedUntil = Time.time + 2f;
             if (Data.armed) weapon.Stagger(1f);
             if (State == EnemyState.Attacking && Random.value < 0.35f && CoverPoint.Find(Position, from, 8f, out coverPoint))
@@ -753,15 +761,17 @@ namespace Swat
         }
 
         public float InteractDuration(PlayerController player) { return 1f; }
-        public bool CanInteract(PlayerController player) { return State == EnemyState.Surrendering; }
+        public bool CanInteract(PlayerController player) { return State == EnemyState.Surrendering || State == EnemyState.Incapacitated; }
         public void Interact(PlayerController player) { Restrain(true); }
 
         public void Restrain(bool byPlayer)
         {
-            if (State != EnemyState.Surrendering) return;
+            if (State != EnemyState.Surrendering && State != EnemyState.Incapacitated) return;
+            bool lying = State == EnemyState.Incapacitated;
             SetState(EnemyState.Restrained);
             mover.Disable();
-            body.SetRestrained();
+            // Someone incapacitated is cuffed where they lie.
+            if (!lying) body.SetRestrained();
             AudioManager.Play(Sound.Click, Position, 0.8f);
             MissionManager.Instance.OnSuspectRestrained(this);
             if (byPlayer && Data.archetype != EnemyArchetype.TrainingDummy && !VersusMatch.Active)
@@ -774,22 +784,78 @@ namespace Swat
             }
         }
 
+        // Rules of engagement (SWAT 4): force is unauthorized against someone who has given up, is
+        // restrained or already down, against an unarmed suspect (less-lethal aside), and deadly force
+        // against an armed suspect who hasn't seen the police and wasn't ordered to comply first.
+        bool Unjustified(DamageInfo info)
+        {
+            if (State == EnemyState.Surrendering || State == EnemyState.Restrained || State == EnemyState.Incapacitated) return true;
+            if (Data.archetype == EnemyArchetype.TrainingDummy) return true;
+            if (info.lessLethal) return false;
+            if (!Data.armed) return true;
+            return !everAlerted && IsCalm && Time.time - lastShoutHeard > 10f && !VersusMatch.Active;
+        }
+
+        void ReportForce(DamageInfo info)
+        {
+            if (info.attacker != Team.Police || !Unjustified(info)) return;
+            if (Data.armed && !everAlerted && IsCalm && info.byPlayer)
+                UIManager.Notify("The suspect hadn't seen you and wasn't ordered to comply: shout (" + GameInput.PromptKey(InputAction.Shout) + ") first", true);
+            MissionManager.Instance.OnUnauthorizedForce(Data.displayName);
+        }
+
+        // Whether a hit that would put them down leaves them incapacitated instead (a head hit never does).
+        public bool Incapacitates(DamageInfo info)
+        {
+            if (Data.archetype == EnemyArchetype.TrainingDummy || State == EnemyState.Restrained || VersusMatch.Active) return false;
+            if (!info.zoned) return Random.value < 0.6f;
+            switch (info.zone)
+            {
+                case HitZone.Head: return false;
+                case HitZone.Arm: return Random.value < 0.9f;
+                case HitZone.Leg: return Random.value < 0.85f;
+                default: return Random.value < 0.45f;
+            }
+        }
+
+        public void Incapacitate(DamageInfo info)
+        {
+            ReportForce(info);
+            body.Animator.Hit(info.direction);
+            DropGun();
+            WasIncapacitated = true;
+            SetState(EnemyState.Incapacitated);
+            mover.Disable();
+            body.SetDead();
+            MissionManager.Instance.OnSuspectIncapacitated(this);
+            if (info.byPlayer) UIManager.Notify(Data.displayName + " is down but alive. Restrain them (E) and report it.");
+        }
+
         public void OnHit(DamageInfo info, bool lethal)
         {
             // A takedown too: the flash shows the hit, and they fall away from the shot.
             body.Animator.Hit(info.direction);
-            bool unjustified = State == EnemyState.Surrendering || State == EnemyState.Restrained
-                || (!Data.armed && !info.lessLethal) || Data.archetype == EnemyArchetype.TrainingDummy;
-            if (info.attacker == Team.Police && unjustified) MissionManager.Instance.OnUnauthorizedForce(Data.displayName);
+            ReportForce(info);
 
             if (lethal)
             {
                 Die();
                 return;
             }
-            if (IsNeutralized || State == EnemyState.Surrendering) return;
+            if (Down || State == EnemyState.Surrendering) return;
             // Getting hit throws their aim off for a moment.
             if (Data.armed && !info.lessLethal) weapon.Stagger(0.35f);
+            if (info.zoned && !info.lessLethal)
+            {
+                // A round in the gun arm: often they drop it and give up. In a leg: they can't run.
+                if (info.zone == HitZone.Arm && Data.armed && Random.value < 0.35f)
+                {
+                    UIManager.Notify(Data.displayName + " dropped their weapon");
+                    Surrender();
+                    return;
+                }
+                if (info.zone == HitZone.Leg) mover.SetSpeedMultiplier(0.55f);
+            }
 
             if (info.lessLethal && info.stun > 0f && Data.archetype != EnemyArchetype.Armored)
             {
@@ -836,7 +902,7 @@ namespace Swat
 
         public void SetSeen(bool visible)
         {
-            body.Parts.SetVisible(visible || State == EnemyState.Dead || State == EnemyState.Restrained);
+            body.Parts.SetVisible(visible || State == EnemyState.Dead || State == EnemyState.Restrained || State == EnemyState.Incapacitated);
         }
     }
 }

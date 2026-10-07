@@ -84,6 +84,7 @@ namespace Swat
             squad.mover.Agent.avoidancePriority = 20 + index;
             squad.Health = go.AddComponent<OfficerHealth>();
             squad.Health.Init(data.maxHealth, armor, data.armorRating, loadout.useShield);
+            squad.Health.Helmet = GearCatalog.HasHelmet(loadout.headgearIndex);
             squad.Inventory = new WeaponInventory(loadout, null);
 
             var parts = CharacterFactory.Build(go.transform, PlayerController.OfficerAppearance(data, loadout, false));
@@ -341,7 +342,7 @@ namespace Swat
             float bestScore = float.MaxValue;
             foreach (var enemy in AIManager.Instance.Enemies)
             {
-                if (enemy.IsNeutralized || enemy.Area != Area) continue;
+                if (enemy.Down || enemy.Area != Area) continue;
                 float distance = Vector3.Distance(enemy.Position, transform.position);
                 if (distance > Data.perceptionRange * 1.3f) continue;
                 float visibility = AIVisibility.VisibilityOf(enemy.Position, enemy.Body.IsCrouched, false);
@@ -407,7 +408,7 @@ namespace Swat
             Vector3 direction = (aim - origin).normalized;
             if (!onTarget) direction = Quaternion.Euler(0f, Random.Range(3f, 8f) * (Random.value < 0.5f ? -1f : 1f), 0f) * direction;
 
-            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data };
+            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, ammo = weapon.Ammo };
             Vector3 muzzle = body.Parts.muzzle.position;
             for (int i = 0; i < Mathf.Max(1, data.pellets); i++)
                 WeaponEffects.Shoot(origin, i == 0 ? direction : WeaponEffects.Scatter(direction, data.spread), data.range, damage, muzzle, data.tracerColor);
@@ -503,7 +504,8 @@ namespace Swat
             {
                 foreach (var enemy in AIManager.Instance.Enemies)
                 {
-                    if (enemy.State != EnemyState.Surrendering || enemy.Area != Area || SquadCommandManager.Instance.IsClaimed(enemy, this)) continue;
+                    bool givenUp = enemy.State == EnemyState.Surrendering || enemy.State == EnemyState.Incapacitated;
+                    if (!givenUp || enemy.Area != Area || SquadCommandManager.Instance.IsClaimed(enemy, this)) continue;
                     if (Vector3.Distance(enemy.Position, transform.position) > 9f) continue;
                     restrainTarget = enemy;
                     break;
@@ -511,7 +513,7 @@ namespace Swat
             }
             if (restrainTarget != null)
             {
-                if (restrainTarget.State != EnemyState.Surrendering) { restrainTarget = null; return false; }
+                if (restrainTarget.State != EnemyState.Surrendering && restrainTarget.State != EnemyState.Incapacitated) { restrainTarget = null; return false; }
                 if (Vector3.Distance(restrainTarget.Position, transform.position) > 1.4f)
                 {
                     mover.MoveTo(restrainTarget.Position, false);

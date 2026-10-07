@@ -41,6 +41,8 @@ namespace Swat
         public int facialHairIndex;
         public int hairColorIndex = 1;
         public bool longSleeves = true;
+        // Ammunition for both guns (Ballistics.AmmoType): 0 full metal jacket, 1 hollow point.
+        public int ammoIndex;
         public List<EquipmentCount> equipment = new List<EquipmentCount>();
 
         public OfficerLoadout Clone()
@@ -129,6 +131,7 @@ namespace Swat
             loadout.patchColorIndex = Math.Max(0, Math.Min(loadout.patchColorIndex, GearCatalog.PatchColorNames.Length - 1));
             loadout.facialHairIndex = Math.Max(0, Math.Min(loadout.facialHairIndex, GearCatalog.FacialHairNames.Length - 1));
             loadout.hairColorIndex = Math.Max(0, Math.Min(loadout.hairColorIndex, GearCatalog.HairColorNames.Length - 1));
+            loadout.ammoIndex = Math.Max(0, Math.Min(loadout.ammoIndex, Ballistics.AmmoNames.Length - 1));
             for (int i = loadout.equipment.Count - 1; i >= 0; i--)
             {
                 var item = GameData.Equipment(loadout.equipment[i].id);

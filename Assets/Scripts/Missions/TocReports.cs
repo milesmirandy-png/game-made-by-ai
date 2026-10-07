@@ -34,6 +34,7 @@ namespace Swat
                 if (enemy.Data.archetype == EnemyArchetype.TrainingDummy) return null;
                 if (enemy.State == EnemyState.Restrained) return "suspect secured";
                 if (enemy.State == EnemyState.Dead) return "suspect down";
+                if (enemy.State == EnemyState.Incapacitated) return "suspect incapacitated";
                 return null;
             }
             var civilian = target as CivilianAI;

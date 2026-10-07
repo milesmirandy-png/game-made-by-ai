@@ -21,6 +21,7 @@ namespace Swat
     {
         public const int ArrestPoints = 40;
         public const int NeutralizedPoints = 10;
+        public const int IncapacitatedPoints = 30;
         public const int EvacuatedPoints = 50;
         public const int CivilianInjuredPenalty = -50;
         public const int CivilianKilledPenalty = -200;
@@ -48,6 +49,7 @@ namespace Swat
             lines.Add(new ScoreLine("Primary objectives", mandatory));
             lines.Add(new ScoreLine("Optional objectives", optional));
             lines.Add(new ScoreLine("Suspects arrested (" + stats.suspectsArrested + ")", stats.suspectsArrested * ArrestPoints));
+            if (stats.suspectsIncapacitated > 0) lines.Add(new ScoreLine("Suspects incapacitated (" + stats.suspectsIncapacitated + ")", stats.suspectsIncapacitated * IncapacitatedPoints));
             lines.Add(new ScoreLine("Suspects neutralized (" + stats.suspectsKilled + ")", stats.suspectsKilled * NeutralizedPoints));
             lines.Add(new ScoreLine("Civilians evacuated (" + stats.civilians.evacuated + ")", stats.civilians.evacuated * EvacuatedPoints));
             if (stats.civilians.injured > 0) lines.Add(new ScoreLine("Civilians injured (" + stats.civilians.injured + ")", stats.civilians.injured * CivilianInjuredPenalty));

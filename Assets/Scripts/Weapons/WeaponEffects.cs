@@ -15,20 +15,33 @@ namespace Swat
         public static void ClearDoorHit() { DoorHit = null; DoorHitDistance = float.MaxValue; }
         static int lastThudFrame = -1;
 
-        // Returns the damageable that was hit (or null).
+        // Returns the damageable that was hit (or null). Bullets that hit someone land on a body part
+        // (head, torso, arm or leg). Full metal jacket rounds can go through one door (pistols and
+        // SMGs) or one door or thin interior wall (rifles), and hit what's behind it more weakly.
         public static IDamageable Shoot(Vector3 origin, Vector3 direction, float range, DamageInfo damage, Vector3 muzzle, Color tracer)
         {
             Vector3 end = origin + direction * range;
             IDamageable victim = null;
-            RaycastHit hit;
-            if (Physics.Raycast(origin, direction, out hit, range, Layers.ShootableMask, QueryTriggerInteraction.Ignore))
+            int power = Ballistics.Penetration(damage.weapon, damage.ammo);
+            Vector3 from = origin;
+            float left = range;
+            for (int pass = 0; pass < 2; pass++)
             {
+                RaycastHit hit;
+                if (!Physics.Raycast(from, direction, out hit, left, Layers.ShootableMask, QueryTriggerInteraction.Ignore))
+                {
+                    end = from + direction * left;
+                    break;
+                }
                 end = hit.point;
                 victim = hit.collider.GetComponentInParent<IDamageable>();
                 if (victim != null && victim.IsAlive)
                 {
                     damage.point = hit.point;
                     damage.direction = direction;
+                    var body = victim as Component;
+                    damage.zoned = true;
+                    damage.zone = Ballistics.ZoneOf(hit.collider, body != null ? body.transform : hit.collider.transform, hit.point);
                     victim.TakeDamage(damage);
                     // A neutral "impact" puff and a white spark rather than anything graphic.
                     EffectsManager.Instance.Burst(hit.point, -direction, new Color(0.85f, 0.85f, 0.85f), 2, 1.5f, 0.05f);
@@ -42,19 +55,28 @@ namespace Swat
                     // Hits shove the target a little (more for heavy weapons).
                     var mover = hit.collider.GetComponentInParent<AgentMover>();
                     if (mover != null && damage.amount > 1f) mover.Nudge(direction * Mathf.Clamp(damage.amount * 0.004f, 0.03f, 0.22f));
+                    break;
                 }
-                else
+                victim = null;
+                // Doors swing, so they get sparks or splinters but no lasting mark.
+                var door = hit.collider.GetComponentInParent<DoorController>();
+                if (door != null && hit.distance < DoorHitDistance && pass == 0)
                 {
-                    victim = null;
-                    // Doors swing, so they get sparks or splinters but no lasting mark.
-                    var door = hit.collider.GetComponentInParent<DoorController>();
-                    if (door != null && hit.distance < DoorHitDistance)
-                    {
-                        DoorHit = door;
-                        DoorHitDistance = hit.distance;
-                    }
-                    EffectsManager.Instance.Impact(hit.point, hit.normal, SurfaceTag.Of(hit.collider), door == null);
+                    DoorHit = door;
+                    DoorHitDistance = hit.distance;
                 }
+                EffectsManager.Instance.Impact(hit.point, hit.normal, SurfaceTag.Of(hit.collider), door == null);
+                // Through it? One surface at most, and the round comes out weaker.
+                int needed = door != null ? 1 : hit.collider.GetComponent<ThinWall>() != null ? 2 : 99;
+                if (power < needed) break;
+                float thickness = door != null ? 0.15f : 0.3f;
+                left -= hit.distance + thickness;
+                if (left < 0.5f) break;
+                from = hit.point + direction * thickness;
+                EffectsManager.Instance.Burst(from, direction, new Color(0.75f, 0.72f, 0.66f), 3, 1.2f, 0.05f);
+                damage.amount *= door != null ? 0.75f : 0.5f;
+                damage.penetrated = true;
+                power = 0;
             }
             float width = damage.weapon != null ? damage.weapon.tracerWidth : 0.04f;
             EffectsManager.Instance.SpawnTracer(muzzle, end, tracer, width, 0.06f);

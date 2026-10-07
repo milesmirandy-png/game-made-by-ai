@@ -35,8 +35,8 @@ namespace Swat
             var red = new Rect(w * 0.5f + 30f, 170f, 220f, 80f);
             UITheme.Fill(blue, new Color(0.1f, 0.2f, 0.38f, 0.95f));
             UITheme.Fill(red, new Color(0.38f, 0.1f, 0.1f, 0.95f));
-            UITheme.Text(blue, "BLUE  " + result.blueScore, 36, Color.white, TextAnchor.MiddleCenter, true);
-            UITheme.Text(red, result.redScore + "  RED", 36, Color.white, TextAnchor.MiddleCenter, true);
+            UITheme.Text(blue, "SWAT  " + result.blueScore, 34, Color.white, TextAnchor.MiddleCenter, true);
+            UITheme.Text(red, result.redScore + "  SUSPECTS", 30, Color.white, TextAnchor.MiddleCenter, true);
             UITheme.Text(new Rect(blue.xMax, blue.y, red.x - blue.xMax, blue.height), "-", 36, UITheme.Dim, TextAnchor.MiddleCenter, true);
 
             // Scoreboards.
@@ -79,7 +79,7 @@ namespace Swat
         {
             UITheme.Panel(rect);
             var color = VersusHUD.SideColor(side);
-            UITheme.Text(new Rect(rect.x + 18f, rect.y + 10f, rect.width - 36f, 24f), side == 0 ? "BLUE TEAM" : "RED TEAM", 17, color, TextAnchor.UpperLeft, true);
+            UITheme.Text(new Rect(rect.x + 18f, rect.y + 10f, rect.width - 36f, 24f), side == 0 ? "SWAT" : "SUSPECTS", 17, color, TextAnchor.UpperLeft, true);
             float y = rect.y + 42f;
             bool flags = result.mode == GameMode.CaptureTheFlag;
             UITheme.Text(new Rect(rect.x + 18f, y, 200f, 20f), "Name", 13, UITheme.Dim, TextAnchor.UpperLeft, true);

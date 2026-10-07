@@ -114,10 +114,24 @@ namespace Swat
                 // Game-mode-only weapons are offered only when preparing a game-mode match.
                 var forMission = OfficerSelectionManager.Mission;
                 bool versus = forMission != null && forMission.IsVersus;
+                // The arcade guns only when the game-mode match allows them (they don't fit 1999 police work).
+                bool arcade = versus && SaveManager.Progress.versus.arcadeWeapons;
                 foreach (var weapon in GameData.AllWeapons)
+                {
+                    if (weapon.arcade && !arcade && !GameManager.Instance.BrowseMode) continue;
                     if (!weapon.versusOnly || versus || GameManager.Instance.BrowseMode) (weapon.isSidearm ? sidearms : primaries).Add(weapon);
+                }
                 changed |= WeaponGrid(ref y, x, cw, primaries, officer, loadout, true);
+                // SWAT 4-style ammunition for both guns, toggled from the sidearm header: full metal jacket goes
+                // through armor, doors and (rifles) thin walls; hollow points hit the unprotected harder.
+                float ammoY = y;
                 Section(ref y, x, cw, "SIDEARM");
+                string ammoLabel = loadout.ammoIndex == 0 ? "Ammo: FMJ (beats armor, goes through doors)" : "Ammo: JHP (hits harder unarmored, no penetration)";
+                if (UITheme.Button(new Rect(x + cw - 360f, ammoY - 2f, 360f, 24f), ammoLabel, true, false, 13))
+                {
+                    loadout.ammoIndex = 1 - Mathf.Clamp(loadout.ammoIndex, 0, 1);
+                    changed = true;
+                }
                 changed |= WeaponGrid(ref y, x, cw, sidearms, officer, loadout, false);
                 return changed;
             }

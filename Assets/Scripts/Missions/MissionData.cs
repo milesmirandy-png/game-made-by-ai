@@ -7,7 +7,7 @@ namespace Swat
     public enum MissionType { BuildingClearance, CivilianRescue, Investigation, Emergency, Training }
 
     // Mission = the normal SWAT operation; the others are team-versus-team exercises (game modes).
-    public enum GameMode { Mission, TeamDeathmatch, CaptureTheFlag, ZoneControl, GunGame, Elimination }
+    public enum GameMode { Mission, TeamDeathmatch, CaptureTheFlag, ZoneControl, GunGame, Elimination, VipEscort, RapidDeployment }
 
     public enum ObjectiveType
     {
@@ -110,6 +110,8 @@ namespace Swat
         [Tooltip("Game modes: a team exercise on this map instead of a mission")] public GameMode mode;
 
         public bool IsVersus { get { return mode != GameMode.Mission; } }
+        // Game modes: the arcade guns (rotary gun, drum shotgun, marker launcher...) are allowed too.
+        [HideInInspector] public bool arcadeWeapons;
 
         public TimeOfDay DefaultTime { get { return timeOfDay != TimeOfDay.Day ? timeOfDay : night ? TimeOfDay.Night : TimeOfDay.Day; } }
 

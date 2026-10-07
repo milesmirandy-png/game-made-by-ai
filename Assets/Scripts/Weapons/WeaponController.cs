@@ -348,6 +348,21 @@ namespace Swat
         }
 
         // Game modes: full ammunition again after a respawn.
+        // Back to the loadout's own guns (after a round as the VIP).
+        public void RestoreLoadout()
+        {
+            if (player.Loadout == null) return;
+            Inventory.RestoreGuns(player.Loadout);
+            reloadEnd = 0f;
+            bloom = 0f;
+            burstLeft = 0;
+            spin = 0f;
+            pumpAt = -1f;
+            switchEnd = Time.time + Current.Data.switchTime;
+            lowAmmoWarned = false;
+            ApplyWeaponModel();
+        }
+
         public void Resupply()
         {
             if (Inventory.Primary != null) Inventory.Primary.Refill();
@@ -369,7 +384,7 @@ namespace Swat
             bool firstPerson = player.FirstPerson;
             bool hitSomeone = false, tookDown = false;
             float boost = Overcharged && data.lessLethal ? 1.5f : 1f;
-            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player };
+            var damage = new DamageInfo { amount = data.damage, attacker = Team.Police, lessLethal = data.lessLethal, stun = data.stunDuration * boost, weapon = data, byPlayer = true, shooter = player, ammo = weapon.Ammo };
 
             var ends = NetSession.ShotEnds;
             ends.Clear();

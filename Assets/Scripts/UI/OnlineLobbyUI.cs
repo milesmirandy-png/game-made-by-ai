@@ -136,7 +136,7 @@ namespace Swat
                     if (UITheme.Button(new Rect(row.xMax - 120f, row.y + 2f, 120f, 24f), VersusMatch.SideName(player.side) + " team", true, false, 13))
                         session.SetSide(player, 1 - player.side);
                 }
-                else UITheme.Text(new Rect(row.xMax - 120f, row.y, 120f, 28f), "Blue team", 13, VersusHUD.SideColor(0), TextAnchor.MiddleCenter, true);
+                else UITheme.Text(new Rect(row.xMax - 120f, row.y, 120f, 28f), "SWAT team", 13, VersusHUD.SideColor(0), TextAnchor.MiddleCenter, true);
                 y += 31f;
                 if (y > bottom - 60f) break;
             }
@@ -230,8 +230,8 @@ namespace Swat
                 }
                 float by = panel.yMax - 60f;
                 UITheme.Text(new Rect(px + 18f, by - 30f, pw - 36f, 22f), "Your team:", 14, UITheme.Dim);
-                if (UITheme.Button(new Rect(px + 18f, by, 200f, 44f), "Blue team", true, session.LocalSide == 0, 17)) session.ChooseSide(0);
-                if (UITheme.Button(new Rect(px + 230f, by, 200f, 44f), "Red team", true, session.LocalSide == 1, 17)) session.ChooseSide(1);
+                if (UITheme.Button(new Rect(px + 18f, by, 200f, 44f), "SWAT team", true, session.LocalSide == 0, 17)) session.ChooseSide(0);
+                if (UITheme.Button(new Rect(px + 230f, by, 200f, 44f), "Suspect team", true, session.LocalSide == 1, 17)) session.ChooseSide(1);
             }
 
             UITheme.Text(new Rect(px, h - 128f, pw, 24f), connecting ? "" : session.Status ?? "Waiting for the host to start the match...", 16, session.StatusBad ? UITheme.Bad : UITheme.Accent, TextAnchor.UpperLeft, true);

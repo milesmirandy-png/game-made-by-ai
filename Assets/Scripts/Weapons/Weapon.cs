@@ -35,6 +35,7 @@ namespace Swat
             }
         }
         public bool UsesMagazines { get; private set; }
+        public AmmoType Ammo { get; set; }
         public IList<int> Spares { get { return spares; } }
         readonly List<int> spares = new List<int>();
         int looseRounds;
@@ -83,6 +84,7 @@ namespace Swat
                     if (attachment.laser) HasLaser = true;
                     if (attachment.slot == AttachmentSlot.Optic) Optic = attachment;
                 }
+            if (loadout != null) Ammo = (AmmoType)System.Math.Max(0, System.Math.Min(loadout.ammoIndex, 1));
             MagazineSize = System.Math.Max(1, (int)System.Math.Round(data.magazineSize * magazine));
             ReloadTime = data.reloadTime * reload;
             UsesMagazines = FedByMagazine(data);
@@ -94,6 +96,20 @@ namespace Swat
         public static string[] Ids(OfficerLoadout loadout)
         {
             return new[] { loadout.lightId, loadout.opticId, loadout.muzzleId, loadout.stockId, loadout.underbarrelId, loadout.magazineId };
+        }
+
+        // Guns that fire from a closed bolt keep a round in the chamber through a tactical reload
+        // (open-bolt submachine guns and machine guns don't).
+        public bool ClosedBolt
+        {
+            get
+            {
+                switch (Data.category)
+                {
+                    case WeaponCategory.CompactSMG: case WeaponCategory.LMG: case WeaponCategory.Rotary: case WeaponCategory.MachinePistol: return false;
+                    default: return true;
+                }
+            }
         }
 
         // Tube-fed shotguns, revolvers and launchers are loaded round by round.
@@ -173,9 +189,12 @@ namespace Swat
             if (best < 0) return;
             int incoming = spares[best];
             spares.RemoveAt(best);
-            // The magazine coming out keeps its rounds (an empty one is dropped).
-            if (Magazine > 0) spares.Add(Magazine);
-            Magazine = incoming;
+            // A tactical reload (rounds left) keeps one in the chamber: the new magazine plus one. The
+            // magazine coming out keeps the rest of its rounds (an empty one is dropped).
+            bool chambered = Magazine > 0 && ClosedBolt;
+            int keep = chambered ? Magazine - 1 : Magazine;
+            if (keep > 0) spares.Add(keep);
+            Magazine = incoming + (chambered ? 1 : 0);
         }
 
         // Automatic and burst weapons that allow it switch to semi-automatic and back.
@@ -224,23 +243,31 @@ namespace Swat
 
         public WeaponInventory(OfficerLoadout loadout, List<EquipmentCount> bonus)
         {
-            var primary = GameData.Weapon(loadout.primaryId);
-            var sidearm = GameData.Weapon(loadout.sidearmId) ?? GameData.Weapon("pistol_p17");
-            // Game-mode-only weapons stay at headquarters on real missions.
-            var mission = OfficerSelectionManager.Mission;
-            bool versus = mission != null && mission.IsVersus;
-            if (primary != null && primary.versusOnly && !versus) primary = GameData.Weapon("rifle_compact");
-            if (sidearm.versusOnly && !versus) sidearm = GameData.Weapon("pistol_p17");
-            if (primary != null) Primary = new Weapon(primary, loadout);
-            Sidearm = new Weapon(sidearm, loadout);
-            PrimaryBlocked = loadout.useShield || Primary == null;
-            CurrentIndex = PrimaryBlocked ? 1 : 0;
+            RestoreGuns(loadout);
 
             foreach (var entry in loadout.equipment) Add(entry.id, entry.count);
             if (bonus != null) foreach (var entry in bonus) Add(entry.id, entry.count);
         }
 
         // Gun Game: one gun and nothing else (no sidearm to swap to, no shield in the way).
+        // The loadout's guns (again: a game-mode VIP gets them back after the round).
+        public void RestoreGuns(OfficerLoadout loadout)
+        {
+            var primary = GameData.Weapon(loadout.primaryId);
+            var sidearm = GameData.Weapon(loadout.sidearmId) ?? GameData.Weapon("pistol_p17");
+            // Game-mode-only weapons stay at headquarters on real missions, and the arcade guns stay
+            // out of game modes too unless the match allows them.
+            var mission = OfficerSelectionManager.Mission;
+            bool versus = mission != null && mission.IsVersus;
+            bool arcade = versus && mission.arcadeWeapons;
+            if (primary != null && ((primary.versusOnly && !versus) || (primary.arcade && !arcade))) primary = GameData.Weapon("rifle_compact");
+            if ((sidearm.versusOnly && !versus) || (sidearm.arcade && !arcade)) sidearm = GameData.Weapon("pistol_p17");
+            Primary = primary != null ? new Weapon(primary, loadout) : null;
+            Sidearm = new Weapon(sidearm, loadout);
+            PrimaryBlocked = loadout.useShield || Primary == null;
+            CurrentIndex = PrimaryBlocked ? 1 : 0;
+        }
+
         public void SetOnly(Weapon weapon)
         {
             Primary = weapon;

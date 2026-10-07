@@ -57,6 +57,7 @@ namespace Swat
         public bool ejectsShells = true;
         [Tooltip("Furniture colour of the built-in model (stock, grip, magazine)")] public Color accent = new Color(0.16f, 0.16f, 0.17f);
         [Tooltip("Only offered in the game modes (not in SWAT missions)")] public bool versusOnly;
+        [Tooltip("An arcade gun that doesn't fit the 1999 setting: game modes only, and only with Arcade weapons on")] public bool arcade;
         [Tooltip("Seconds the trigger must be held before it fires (rotary guns)")] public float spinUp;
         [Tooltip("Marking-round burst radius in metres; 0 = a normal round")] public float blastRadius;
 

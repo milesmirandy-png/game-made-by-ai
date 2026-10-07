@@ -44,7 +44,7 @@ namespace Swat
         void SetVisible(bool visible);
     }
 
-    public enum MatchEventKind { Takedown, FlagTaken, FlagDropped, FlagReturned, FlagCaptured, ZoneTaken, PlayerLeft, RoundWon }
+    public enum MatchEventKind { Takedown, FlagTaken, FlagDropped, FlagReturned, FlagCaptured, ZoneTaken, PlayerLeft, RoundWon, VipChosen, BombDisarmed, Arrest }
 
     // Something worth a line in the feed (and maybe a banner). The host decides these and sends them
     // to everyone, and each player words them from their own side ("You", "your flag").
@@ -68,14 +68,14 @@ namespace Swat
     //   Zone Control: hold the zone alone to own it; the owner scores every second.
     //   Gun Game: every tag-out moves you up a ladder of weapons; finishing it wins for your team.
     //   Elimination: rounds with no respawns; the last team standing wins the round.
-    public class VersusMatch : MonoBehaviour
+    public partial class VersusMatch : MonoBehaviour
     {
         public static VersusMatch Instance { get; private set; }
         public static bool Active { get { return Instance != null && Instance.running; } }
 
         // ---- Options (shown on the Game Modes screen) ----
 
-        public static readonly string[] ModeNames = { "Mission", "Team Deathmatch", "Capture the Flag", "Zone Control", "Gun Game", "Elimination" };
+        public static readonly string[] ModeNames = { "Mission", "Team Deathmatch", "Capture the Flag", "Zone Control", "Gun Game", "Elimination", "VIP Escort", "Rapid Deployment" };
         public static readonly string[] ModeGoals =
         {
             "",
@@ -84,10 +84,12 @@ namespace Swat
             "Stand in the zone with no opponents inside to take it. Your team scores every second it's yours.",
             "Every tag-out swaps your gun for the next one on the ladder. Tag someone out with the last gun to win.",
             "No respawns until the round ends. Tag out the whole other team to win the round.",
+            "SWAT escorts an unarmed VIP to the extraction point; the suspects must stop them. The VIP doesn't respawn.",
+            "Suspects defend three devices; SWAT has to find and disarm them all (hold E) before the round clock runs out.",
         };
-        public const int LastMode = (int)GameMode.Elimination;
-        static readonly int[][] ScoreLimits = { new[] { 0 }, new[] { 15, 25, 40 }, new[] { 1, 3, 5 }, new[] { 60, 100, 200 }, new[] { 8, 12, 16 }, new[] { 3, 5, 7 } };
-        static readonly int[][] TimeLimits = { new[] { 0 }, new[] { 5, 10, 15 }, new[] { 8, 12, 20 }, new[] { 5, 8, 12 }, new[] { 8, 12, 15 }, new[] { 10, 15, 20 } };
+        public const int LastMode = (int)GameMode.RapidDeployment;
+        static readonly int[][] ScoreLimits = { new[] { 0 }, new[] { 15, 25, 40 }, new[] { 1, 3, 5 }, new[] { 60, 100, 200 }, new[] { 8, 12, 16 }, new[] { 3, 5, 7 }, new[] { 2, 3, 4 }, new[] { 2, 3, 4 } };
+        static readonly int[][] TimeLimits = { new[] { 0 }, new[] { 5, 10, 15 }, new[] { 8, 12, 20 }, new[] { 5, 8, 12 }, new[] { 8, 12, 15 }, new[] { 10, 15, 20 }, new[] { 12, 18, 25 }, new[] { 12, 18, 25 } };
         // Gun Game: the full ladder, from heavy hitters down to a small pistol. Shorter ladders skip rungs evenly.
         static readonly string[] LadderIds =
         {
@@ -123,12 +125,13 @@ namespace Swat
                 case GameMode.TeamDeathmatch: return "tag-outs";
                 case GameMode.CaptureTheFlag: return "captures";
                 case GameMode.GunGame: return "guns";
-                case GameMode.Elimination: return "rounds";
+                case GameMode.Elimination: case GameMode.VipEscort: case GameMode.RapidDeployment: return "rounds";
                 default: return "points";
             }
         }
 
-        public static string SideName(int side) { return side == 0 ? "Blue" : "Red"; }
+        // The sides: SWAT against the suspects (SWAT 4's multiplayer).
+        public static string SideName(int side) { return side == 0 ? "SWAT" : "Suspect"; }
 
         // The mission record the normal briefing-free flow deploys with (officer selection, loadout, deploy).
         public static MissionData CreateMission(VersusOptions options)
@@ -142,6 +145,7 @@ namespace Swat
             m.description = ModeGoals[(int)mode];
             m.mapId = map;
             m.mode = mode;
+            m.arcadeWeapons = options.arcadeWeapons;
             m.maxSquad = 3;
             m.timeOfDay = (TimeOfDay)Mathf.Clamp(options.timeOfDay, 0, 2);
             m.alarmArmedChance = m.camerasActiveChance = m.randomLockChance = m.powerOutageChance = 0f;
@@ -152,14 +156,22 @@ namespace Swat
             return m;
         }
 
-        // Gun Game: the weapons for a ladder of the given length (always ending on the last one).
-        public static List<WeaponData> BuildLadder(int length)
+        // Gun Game: the weapons for a ladder of the given length (always ending on the last one). The
+        // arcade guns are left out unless the match allows them.
+        public static List<WeaponData> BuildLadder(int length, bool arcade)
         {
+            var ids = new List<string>();
+            foreach (var id in LadderIds)
+            {
+                var weapon = GameData.Weapon(id);
+                if (weapon != null && (arcade || !weapon.arcade)) ids.Add(id);
+            }
+            if (ids.Count < 2) ids.AddRange(new[] { "rifle_compact", "pistol_bk6" });
             var ladder = new List<WeaponData>();
-            length = Mathf.Clamp(length, 2, LadderIds.Length);
+            length = Mathf.Clamp(length, 2, ids.Count);
             for (int i = 0; i < length; i++)
             {
-                var weapon = GameData.Weapon(LadderIds[Mathf.RoundToInt(i * (LadderIds.Length - 1) / (float)(length - 1))]);
+                var weapon = GameData.Weapon(ids[Mathf.RoundToInt(i * (ids.Count - 1) / (float)(length - 1))]);
                 ladder.Add(weapon ?? GameData.Weapon("rifle_compact"));
             }
             return ladder;
@@ -225,7 +237,11 @@ namespace Swat
         public int Round { get; private set; }                    // Elimination
         public bool RoundOver { get; private set; }
         public float RoundStart { get; private set; }             // match time the round began
-        public float RoundTimeLeft { get { return Mathf.Max(0f, RoundLength - (Elapsed - RoundStart)); } }
+        public float RoundTimeLeft { get { return Mathf.Max(0f, CurrentRoundLength - (Elapsed - RoundStart)); } }
+        // Modes played in rounds: Elimination, VIP Escort and Rapid Deployment.
+        public bool RoundMode { get { return Mode == GameMode.Elimination || Mode == GameMode.VipEscort || Mode == GameMode.RapidDeployment; } }
+        public float CurrentRoundLength { get { return Mode == GameMode.Elimination ? RoundLength : ObjectiveRoundLength; } }
+        public bool Arcade { get; private set; }
         public IVersusMember Spectating { get; private set; }     // the teammate the camera follows while you're out
 
         // A spot (or an opponent) a teammate pointed out.
@@ -284,6 +300,8 @@ namespace Swat
             foreach (var room in level.rooms)
                 if (room.Indoor || room.Bounds.size.x * room.Bounds.size.z > 30f) roamPoints.Add(OnNavMesh(room.Bounds.center));
             if (Mode == GameMode.ZoneControl) PickZone();
+            if (Mode == GameMode.VipEscort) PickVipExit();
+            if (Mode == GameMode.RapidDeployment) PlaceBombs();
             if (Mode == GameMode.CaptureTheFlag)
             {
                 Vector3 toBuilding = (Bases[1] - Bases[0]);
@@ -313,6 +331,7 @@ namespace Swat
             if (Mode == GameMode.GunGame) StartGunGame();
             UIManager.Banner(ModeNames[(int)Mode].ToUpperInvariant(), ModeGoals[(int)Mode], BannerKind.Info);
             if (NetSession.IsHost) NetSession.Instance.OnMatchBuilt(this);
+            if (Mode == GameMode.VipEscort) ChooseVip();
         }
 
         // Online, not hosting: shows the host's match. Bases, zone, flags and everyone else come from the host.
@@ -337,6 +356,8 @@ namespace Swat
             }
             if (Mode == GameMode.CaptureTheFlag)
                 for (int side = 0; side < 2; side++) Flags[side] = MakeFlag(side, setup.flagHomes[side]);
+            if (Mode == GameMode.VipEscort) SetVipExit(setup.objective);
+            if (Mode == GameMode.RapidDeployment) SetBombs(setup.bombs);
             members[MySide].Add(player);
             foreach (var entry in setup.roster)
                 if (entry.id != MyId) AddRemote(NetActor.CreatePuppet(actors, entry));
@@ -361,7 +382,8 @@ namespace Swat
             PlayerRespawnAt = -1f;
             ZoneControl = 0f;
             ZoneOwner = -1;
-            Ladder = Mode == GameMode.GunGame ? BuildLadder(ScoreLimit) : null;
+            Arcade = mission.arcadeWeapons;
+            Ladder = Mode == GameMode.GunGame ? BuildLadder(ScoreLimit, Arcade) : null;
             playerRung = -1;
             Round = 1;
             RoundOver = false;
@@ -369,6 +391,8 @@ namespace Swat
             Spectating = null;
             downSince = -1f;
             Pings.Clear();
+            VipId = -1;
+            vipDown = false;
             LocalName = NetSession.Online ? NetSession.Instance.LocalName : leader != null ? leader.Officer.callsign : "You";
         }
 
@@ -394,6 +418,12 @@ namespace Swat
             Feed.Clear();
             Flags[0] = Flags[1] = null;
             Pings.Clear();
+            Bombs.Clear();
+            botDisarm.Clear();
+            vipMarker = null;
+            vipBot = null;
+            vipBotGun = null;
+            VipId = -1;
             Spectating = null;
             if (GameManager.Instance != null && GameManager.Instance.CameraRig != null) GameManager.Instance.CameraRig.SpectateTarget = null;
             zoneEdges = null;
@@ -451,7 +481,8 @@ namespace Swat
             Vector3 face = Bases[0] - Bases[1];
             baseYaw[1] = Mathf.Atan2(face.x, face.z) * Mathf.Rad2Deg;
             BasePad(0, Bases[0]);
-            BasePad(1, Bases[1]);
+            // VIP Escort moves the suspects' base (the far room becomes the extraction point).
+            if (Mode != GameMode.VipEscort) BasePad(1, Bases[1]);
         }
 
         // The zone: the room whose walking distance to both bases is most even.
@@ -503,19 +534,19 @@ namespace Swat
                     var officer = officers[i];
                     var loadout = GameData.LoadoutFor(officer);
                     var weapon = GameData.Weapon(loadout.primaryId);
-                    if (weapon == null || weapon.lessLethal || loadout.useShield) weapon = GameData.Weapon("rifle_compact");
+                    if (weapon == null || weapon.lessLethal || loadout.useShield || (weapon.arcade && !Arcade)) weapon = GameData.Weapon("smg_v10");
                     var look = PlayerController.OfficerAppearance(officer, loadout, false);
                     look.shield = false;
                     AddBot(ArenaBot.Spawn(actors, 0, officer.callsign, look, weapon, loadout, point, baseYaw[0], skill), officer.id);
                 }
-                else AddBot(ArenaBot.Spawn(actors, 0, "Blue " + (i + 2), BlueLook(CharacterFactory.RandomSkin()), RandomWeapon(), null, point, baseYaw[0], skill), null);
+                else AddBot(ArenaBot.Spawn(actors, 0, "SWAT " + (i + 2), BlueLook(CharacterFactory.RandomSkin()), RandomWeapon(0, Arcade), null, point, baseYaw[0], skill), null);
             }
         }
 
         void SpawnRedTeam(Transform actors, int count)
         {
             for (int i = 0; i < count; i++)
-                AddBot(ArenaBot.Spawn(actors, 1, RedNames[i % RedNames.Length], RedLook(CharacterFactory.RandomSkin()), RandomWeapon(), null, NextSpawn(1), baseYaw[1], skill), null);
+                AddBot(ArenaBot.Spawn(actors, 1, RedNames[i % RedNames.Length], RedLook(CharacterFactory.RandomSkin()), RandomWeapon(1, Arcade), null, NextSpawn(1), baseYaw[1], skill), null);
         }
 
         void AddBot(ArenaBot bot, string officerId)
@@ -567,11 +598,22 @@ namespace Swat
             }
         }
 
-        static WeaponData RandomWeapon()
+        // What a bot carries: SWAT's issue weapons or the kind of guns suspects turn up with (plus the
+        // arcade guns when the match allows them).
+        static readonly string[] SwatGuns = { "smg_v10", "smg_v10", "rifle_service", "rifle_b4", "shotgun_ts8", "pdw_x4", "rifle_cx", "carbine_pc9" };
+        static readonly string[] SuspectGuns = { "rifle_compact", "rifle_compact", "smg_compact", "smg_compact", "shotgun_ts8", "shotgun_as12", "rifle_service", "lmg_lm8" };
+
+        static WeaponData RandomWeapon(int side, bool arcade)
         {
             var options = new List<WeaponData>();
-            foreach (var weapon in GameData.AllWeapons)
-                if (!weapon.isSidearm && !weapon.lessLethal) options.Add(weapon);
+            foreach (var id in side == 0 ? SwatGuns : SuspectGuns)
+            {
+                var weapon = GameData.Weapon(id);
+                if (weapon != null) options.Add(weapon);
+            }
+            if (arcade)
+                foreach (var weapon in GameData.AllWeapons)
+                    if (weapon.arcade && !weapon.isSidearm) options.Add(weapon);
             return options.Count > 0 ? options[Random.Range(0, options.Count)] : GameData.Weapon("rifle_compact");
         }
 
@@ -586,23 +628,32 @@ namespace Swat
             };
         }
 
+        // The suspects: street clothes and ski masks, 1999-style (a red marker shows the side).
+        static readonly Color[] StreetJackets =
+        {
+            new Color(0.3f, 0.2f, 0.13f), new Color(0.1f, 0.1f, 0.11f), new Color(0.2f, 0.25f, 0.16f), new Color(0.35f, 0.12f, 0.12f), new Color(0.32f, 0.32f, 0.34f), new Color(0.14f, 0.18f, 0.3f),
+        };
+
         public static Appearance RedLook(Color skin)
         {
+            var jacket = StreetJackets[Random.Range(0, StreetJackets.Length)];
             return new Appearance
             {
-                shirt = new Color(0.42f, 0.12f, 0.12f), pants = new Color(0.16f, 0.12f, 0.12f), skin = skin,
-                headwear = new Color(0.14f, 0.1f, 0.1f), head = HeadStyle.Helmet, vestOn = true, vest = new Color(0.22f, 0.18f, 0.18f),
-                ring = new Color(1f, 0.25f, 0.2f), armed = true, outfit = Outfit.Tactical, idMarker = true, idColor = new Color(0.95f, 0.3f, 0.25f),
-                width = 1.04f, holster = true, soldier = true,
+                shirt = jacket, pants = Random.value < 0.6f ? new Color(0.17f, 0.22f, 0.34f) : new Color(0.1f, 0.1f, 0.11f), skin = skin,
+                headwear = new Color(0.08f, 0.08f, 0.09f), head = Random.value < 0.65f ? HeadStyle.Balaclava : HeadStyle.Cap, vestOn = false,
+                ring = new Color(1f, 0.25f, 0.2f), armed = true, outfit = Random.value < 0.55f ? Outfit.Jacket : Outfit.Hoodie, accent = Color.Lerp(jacket, Color.black, 0.4f),
+                idMarker = true, idColor = new Color(0.95f, 0.3f, 0.25f), gloves = true, width = Random.Range(0.98f, 1.06f),
             };
         }
 
-        // An officer playing for the Red Team wears its colours.
+        // An officer playing for the suspects swaps the uniform for street clothes and loses the vest.
         public static Appearance TeamColours(Appearance look, int side)
         {
             if (side != 1) return look;
-            look.shirt = new Color(0.42f, 0.12f, 0.12f);
-            look.pants = new Color(0.16f, 0.12f, 0.12f);
+            look.shirt = new Color(0.3f, 0.2f, 0.13f);
+            look.pants = new Color(0.17f, 0.22f, 0.34f);
+            look.vestOn = false;
+            look.camo = 0;
             look.ring = new Color(1f, 0.25f, 0.2f);
             look.idColor = new Color(0.95f, 0.3f, 0.25f);
             look.shield = false;
@@ -702,6 +753,7 @@ namespace Swat
                 Elapsed += dt;
                 for (int side = 0; side < 2; side++) if (Flags[side] != null) PlaceFlagVisual(Flags[side]);
                 UpdateZoneColor();
+                UpdateObjectiveVisuals();
                 if (Mode == GameMode.GunGame) UpdateLadder();
                 UpdateSpectate();
                 UpdatePings();
@@ -736,7 +788,9 @@ namespace Swat
             if (Mode == GameMode.CaptureTheFlag) UpdateFlags(now);
             if (Mode == GameMode.ZoneControl) UpdateZone(dt);
             if (Mode == GameMode.GunGame) UpdateLadder();
-            if (Mode == GameMode.Elimination) UpdateRounds();
+            if (Mode == GameMode.RapidDeployment) UpdateBotDisarming(dt);
+            if (RoundMode) UpdateRounds();
+            UpdateObjectiveVisuals();
             UpdateSpectate();
             UpdatePings();
             if (now >= nextVisibility)
@@ -974,6 +1028,8 @@ namespace Swat
             switch (Mode)
             {
                 case GameMode.CaptureTheFlag: return FlagObjective(bot, out point, out run);
+                case GameMode.VipEscort: return VipObjective(bot, out point, out run);
+                case GameMode.RapidDeployment: return BombObjective(bot, out point, out run);
                 case GameMode.ZoneControl:
                     if (!InZone(bot.Position))
                     {
@@ -1075,8 +1131,8 @@ namespace Swat
         public void OnBotDown(ArenaBot bot, DamageInfo info)
         {
             if (!running) return;
-            // Elimination: out until the next round.
-            bot.RespawnAt = Mode == GameMode.Elimination ? float.MaxValue : Time.time + RespawnDelay;
+            // Elimination (and the VIP): out until the next round.
+            bot.RespawnAt = OutForRound(bot.NetId) ? float.MaxValue : Time.time + RespawnDelay;
             Credit(info, bot.Side, bot.NetId);
         }
 
@@ -1085,11 +1141,12 @@ namespace Swat
         {
             if (!running || player == null) return;
             PlayerDeaths++;
-            PlayerRespawnAt = Mode == GameMode.Elimination ? -1f : Time.time + RespawnDelay;
+            bool outForRound = OutForRound(MyId);
+            PlayerRespawnAt = outForRound ? -1f : Time.time + RespawnDelay;
             var hit = player.Health.LastHit;
             var shooter = hit.shooter as IVersusMember;
             PlayerTaggedBy = shooter != null ? shooter.Callsign + (hit.weapon != null ? "  (" + hit.weapon.displayName + ")" : "") : "the other team";
-            UIManager.Notify(Mode == GameMode.Elimination ? "Tagged out! You're out until the next round" : "Tagged out! Back in " + Mathf.RoundToInt(RespawnDelay) + " seconds", true);
+            UIManager.Notify(outForRound ? "Tagged out! You're out until the next round" : "Tagged out! Back in " + Mathf.RoundToInt(RespawnDelay) + " seconds", true);
             // Online the host keeps score: tell it who did it.
             if (Mirror) NetSession.Instance.SendDown(shooter != null ? shooter.NetId : -1, WeaponIndex(hit.weapon));
             else Credit(hit, MySide, MyId);
@@ -1101,7 +1158,7 @@ namespace Swat
             if (!running || Mirror || remote == null || remote.Down) return;
             remote.SetDown(true);
             remote.Deaths++;
-            remote.RespawnAt = Mode == GameMode.Elimination ? 0f : Time.time + RespawnDelay; // 0: not until the next round
+            remote.RespawnAt = OutForRound(remote.NetId) ? 0f : Time.time + RespawnDelay; // 0: not until the next round
             var info = new DamageInfo { weapon = WeaponAt(weaponIndex), shooter = Find(attackerId) as MonoBehaviour, byPlayer = attackerId == MyId };
             Credit(info, remote.Side, remote.NetId);
         }
@@ -1112,6 +1169,7 @@ namespace Swat
             if (member != null) member.Kills++;
             else if (info.byPlayer) PlayerKills++;
             if (Mode == GameMode.TeamDeathmatch) Score[1 - victimSide] += 1f;
+            if (Mode == GameMode.VipEscort && victimId == VipId) vipDown = true;
             int killer = member != null ? member.NetId : info.byPlayer ? MyId : -1;
             Post(new MatchEvent { kind = MatchEventKind.Takedown, a = killer, b = victimId, side = victimSide, weapon = WeaponIndex(info.weapon) });
         }
@@ -1197,17 +1255,22 @@ namespace Swat
                 else StartRound();
                 return;
             }
-            int blue = StillIn(0), red = StillIn(1);
-            int winner = -2;
-            if (blue == 0 && red == 0) winner = -1;
-            else if (red == 0) winner = 0;
-            else if (blue == 0) winner = 1;
-            else if (RoundTimeLeft <= 0f) winner = blue > red ? 0 : red > blue ? 1 : -1;
+            int winner = -2, reason = 0;
+            if (Mode == GameMode.VipEscort) winner = VipRoundOutcome(out reason);
+            else if (Mode == GameMode.RapidDeployment) winner = BombRoundOutcome(out reason);
+            else
+            {
+                int blue = StillIn(0), red = StillIn(1);
+                if (blue == 0 && red == 0) winner = -1;
+                else if (red == 0) winner = 0;
+                else if (blue == 0) winner = 1;
+                else if (RoundTimeLeft <= 0f) { winner = blue > red ? 0 : red > blue ? 1 : -1; reason = RoundReasonTime; }
+            }
             if (winner == -2) return;
             if (winner >= 0) Score[winner] += 1f;
             RoundOver = true;
             roundOverUntil = Elapsed + RoundBreak;
-            Post(new MatchEvent { kind = MatchEventKind.RoundWon, side = winner < 0 ? 2 : winner, a = -1, b = -1, weapon = -1 });
+            Post(new MatchEvent { kind = MatchEventKind.RoundWon, side = winner < 0 ? 2 : winner, a = -1, b = reason, weapon = -1 });
         }
 
         // Everyone back at their base, healthy and loaded, for the next round.
@@ -1219,19 +1282,23 @@ namespace Swat
             foreach (var bot in Bots) bot.Respawn(NextSpawn(bot.Side), baseYaw[bot.Side]);
             foreach (var remote in Remotes) RespawnRemote(remote);
             if (player != null) RespawnLocal(NextSpawn(MySide), baseYaw[MySide]);
+            if (Mode == GameMode.VipEscort) ChooseVip();
+            if (Mode == GameMode.RapidDeployment) ResetBombs();
             RoundBanner();
         }
 
         void RoundBanner()
         {
-            UIManager.Banner("ROUND " + Round, "Last team standing takes the round", BannerKind.Info);
+            string goal = Mode == GameMode.VipEscort ? "Get the VIP to the extraction point / stop the VIP"
+                : Mode == GameMode.RapidDeployment ? "Disarm every device / hold them until the clock runs out" : "Last team standing takes the round";
+            UIManager.Banner("ROUND " + Round, goal, BannerKind.Info);
             AudioManager.Play2D(Sound.RadioOrder, 0.5f, 1f, SoundCategory.Interface);
         }
 
         // Online, not hosting: the host's round state.
         public void ApplyRound(int round, bool over, float start)
         {
-            if (Mode != GameMode.Elimination) return;
+            if (!RoundMode) return;
             bool next = round > Round;
             Round = round;
             RoundOver = over;
@@ -1374,6 +1441,16 @@ namespace Swat
                     UIManager.Banner(e.side == MySide ? "ZONE TAKEN" : "ZONE LOST", e.side == MySide ? "Hold it to keep scoring" : "Get in there and take it back", e.side == MySide ? BannerKind.Good : BannerKind.Bad);
                     AudioManager.Play2D(e.side == MySide ? Sound.ObjectiveTone : Sound.Warning, 0.55f, 1f, SoundCategory.Interface);
                     break;
+                case MatchEventKind.VipChosen:
+                    ApplyVip(e.a);
+                    break;
+                case MatchEventKind.BombDisarmed:
+                    ApplyDisarm(e.b, e.a);
+                    break;
+                case MatchEventKind.Arrest:
+                    Announce(Name(e.a) + " ARRESTED " + Name(e.b), 1 - e.side);
+                    if (e.a == MyId) UIManager.Banner("ARREST", "Worth more than a tag-out", BannerKind.Good);
+                    break;
                 case MatchEventKind.PlayerLeft:
                     Announce((string.IsNullOrEmpty(e.name) ? "A player" : e.name) + " left the match", e.side);
                     break;
@@ -1384,8 +1461,8 @@ namespace Swat
                         UIManager.Banner("ROUND DRAWN", "Nobody takes this one", BannerKind.Info);
                         break;
                     }
-                    Announce(SideName(e.side) + " team won round " + Round, e.side);
-                    UIManager.Banner(e.side == MySide ? "ROUND WON" : "ROUND LOST",
+                    Announce(SideName(e.side) + " team won round " + Round + RoundReasonText(e.b), e.side);
+                    UIManager.Banner((e.side == MySide ? "ROUND WON" : "ROUND LOST") + RoundReasonBanner(e.b),
                         SideName(0) + " " + Mathf.FloorToInt(Score[0]) + "  -  " + Mathf.FloorToInt(Score[1]) + " " + SideName(1), e.side == MySide ? BannerKind.Good : BannerKind.Bad);
                     AudioManager.Play2D(e.side == MySide ? Sound.Complete : Sound.Warning, 0.6f, 1f, SoundCategory.Interface);
                     break;
@@ -1468,9 +1545,9 @@ namespace Swat
         {
             int winner = -2;
             string reason = null;
-            // Elimination: the round-won banner gets its moment before the results.
-            if (Mode == GameMode.Elimination && RoundOver) return;
-            string limitReason = Mode == GameMode.GunGame ? "Finished the gun ladder" : Mode == GameMode.Elimination ? "Won the last round" : "Score limit reached";
+            // Round modes: the round-won banner gets its moment before the results.
+            if (RoundMode && RoundOver) return;
+            string limitReason = Mode == GameMode.GunGame ? "Finished the gun ladder" : RoundMode ? "Won the last round" : "Score limit reached";
             if (Score[0] >= ScoreLimit) { winner = 0; reason = limitReason; }
             else if (Score[1] >= ScoreLimit) { winner = 1; reason = limitReason; }
             else if (Elapsed >= TimeLimit)

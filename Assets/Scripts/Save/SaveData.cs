@@ -128,6 +128,7 @@ namespace Swat
         public int timeIndex = 1;
         public int botSkill = 1;           // 0 easy, 1 normal, 2 hard
         public int timeOfDay;
+        public bool arcadeWeapons;         // allow the arcade guns that don't belong in 1999 police work
         public int matchesPlayed, matchesWon;
         public string onlineName = "";      // your name in online games (empty: your officer's callsign)
         public string joinAddress = "";     // the last host address you joined

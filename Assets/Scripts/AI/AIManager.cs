@@ -128,7 +128,7 @@ namespace Swat
                 Vector3 doorPosition = door.transform.position;
                 foreach (var enemy in Enemies)
                 {
-                    if (enemy.IsNeutralized || enemy.State == EnemyState.Surrendering || enemy.State == EnemyState.Stunned || enemy.State == EnemyState.Hiding) continue;
+                    if (enemy.Down || enemy.State == EnemyState.Surrendering || enemy.State == EnemyState.Stunned || enemy.State == EnemyState.Hiding) continue;
                     if (FlatDistance(enemy.Position, doorPosition) < 1.3f) { door.Open(enemy.Position); break; }
                 }
                 if (door.State != DoorState.Closed) continue;

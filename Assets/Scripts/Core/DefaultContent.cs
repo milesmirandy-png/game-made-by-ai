@@ -140,12 +140,13 @@ namespace Swat
                         break;
                     case "mp_m9": Feel(w, Polymer, 0.6f, 0.4f); break;
                     case "revolver_r6": Feel(w, Polymer, 1.9f, 0.6f); w.ejectsShells = false; break;
-                    case "rotary_rg6": Feel(w, Polymer, 0.7f, 0.7f); w.spinUp = 0.5f; w.versusOnly = true; w.crouchSpread = 0.6f; break;
-                    case "shotgun_d20": Feel(w, Polymer, 1.9f, 0.9f); w.tracerWidth = 0.035f; break;
-                    case "smg_kv": Feel(w, Amber, 0.45f, 0.45f); break;
+                    // The arcade guns don't belong in 1999 police work: game modes only, with Arcade weapons on.
+                    case "rotary_rg6": Feel(w, Polymer, 0.7f, 0.7f); w.spinUp = 0.5f; w.versusOnly = w.arcade = true; w.crouchSpread = 0.6f; break;
+                    case "shotgun_d20": Feel(w, Polymer, 1.9f, 0.9f); w.tracerWidth = 0.035f; w.versusOnly = w.arcade = true; break;
+                    case "smg_kv": Feel(w, Amber, 0.45f, 0.45f); w.versusOnly = w.arcade = true; break;
                     case "launcher_gl6":
                         Feel(w, Amber, 2.4f, 0.8f);
-                        w.blastRadius = 3.5f; w.versusOnly = true; w.ejectsShells = false; w.tracerWidth = 0.09f;
+                        w.blastRadius = 3.5f; w.versusOnly = w.arcade = true; w.ejectsShells = false; w.tracerWidth = 0.09f;
                         w.tracerColor = new Color(1f, 0.6f, 0.2f);
                         break;
                     case "stun_s2":

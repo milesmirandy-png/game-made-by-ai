@@ -210,11 +210,18 @@ namespace Swat
         {
             if (!Running) return;
             if (enemy.Data.archetype == EnemyArchetype.TrainingDummy) Tracker.CompleteType(ObjectiveType.TrainingRestrain);
+            else if (enemy.WasIncapacitated) UIManager.Notify("Incapacitated suspect restrained");
             else
             {
                 Stats.suspectsArrested++;
                 UIManager.Notify("Suspect arrested");
             }
+        }
+
+        public void OnSuspectIncapacitated(EnemyAI enemy)
+        {
+            if (!Running || enemy.Data.archetype == EnemyArchetype.TrainingDummy) return;
+            Stats.suspectsIncapacitated++;
         }
 
         public void OnSuspectDown(EnemyAI enemy, bool wasRestrained)
@@ -225,7 +232,8 @@ namespace Swat
                 Tracker.Fail(ObjectiveType.TrainingRestrain);
                 return;
             }
-            if (wasRestrained) Stats.suspectsArrested = Mathf.Max(0, Stats.suspectsArrested - 1);
+            if (enemy.WasIncapacitated) Stats.suspectsIncapacitated = Mathf.Max(0, Stats.suspectsIncapacitated - 1);
+            else if (wasRestrained) Stats.suspectsArrested = Mathf.Max(0, Stats.suspectsArrested - 1);
             Stats.suspectsKilled++;
             bool last = true;
             foreach (var other in AIManager.Instance.Enemies)

@@ -22,6 +22,8 @@ namespace Swat
         // Limb hits (missions only): a leg wound means limping (slower, no sprint), an arm wound a
         // shakier aim, until a medical kit treats it.
         public bool LegInjured { get; private set; }
+        // Wearing a helmet (set from the loadout's headgear): it takes most of a hit to the head.
+        public bool Helmet { get; set; }
         public bool ArmInjured { get; private set; }
         public Team Team { get { return Team.Police; } }
         public bool IsAlive { get { return !IsDown; } }
@@ -88,9 +90,18 @@ namespace Swat
             }
             amount *= 1f - ShieldCoverFor(this);
 
-            if (Armor != null)
+            bool torso = !info.zoned || info.zone == HitZone.Torso;
+            if (info.zoned && !info.lessLethal)
+            {
+                // Where it landed: the vest covers the torso, a helmet the head, nothing the arms and legs.
+                amount *= Ballistics.ZoneMultiplier(info.zone);
+                if (info.zone == HitZone.Head) amount *= Helmet ? 1f - Ballistics.ArmorStops(0.55f, info.ammo) : Ballistics.UnarmoredBonus(info.ammo);
+                else if (!torso || Armor == null) amount *= Ballistics.UnarmoredBonus(info.ammo);
+            }
+            if (Armor != null && torso)
             {
                 float reduction = Armor.damageReduction * Mathf.Lerp(0.5f, 1f, ArmorCondition);
+                if (info.zoned) reduction = Ballistics.ArmorStops(reduction, info.ammo);
                 amount *= 1f - Mathf.Clamp01(reduction + extraReduction);
                 armorPoints = Mathf.Max(0f, armorPoints - info.amount * 0.5f);
             }
@@ -130,6 +141,12 @@ namespace Swat
         // Where the round landed: below the hips is a leg, out to the side at chest height an arm.
         void Wound(DamageInfo info)
         {
+            if (info.zoned)
+            {
+                if (info.zone == HitZone.Leg && !LegInjured) { LegInjured = true; OnWounded(true); }
+                else if (info.zone == HitZone.Arm && !ArmInjured) { ArmInjured = true; OnWounded(false); }
+                return;
+            }
             if (info.point == Vector3.zero) return;
             Vector3 local = transform.InverseTransformPoint(info.point);
             if (local.y < 0.85f)

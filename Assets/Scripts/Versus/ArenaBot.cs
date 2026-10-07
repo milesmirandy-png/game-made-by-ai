@@ -10,7 +10,7 @@ namespace Swat
     // strafes while it shoots, reloads when empty, and otherwise plays the
     // objective VersusMatch gives it (hunt, take or defend a flag, hold the
     // zone). Taken down means "tagged out" until it respawns at its base.
-    public class ArenaBot : MonoBehaviour, IVersusMember, IDamageable
+    public class ArenaBot : MonoBehaviour, IVersusMember, IDamageable, IInteractable
     {
         static readonly float[] AimError = { 7f, 4.5f, 2.8f };   // degrees, by skill
         static readonly float[] Reaction = { 0.6f, 0.4f, 0.25f };  // seconds before the first shot at a new target
@@ -36,6 +36,34 @@ namespace Swat
         public string OfficerId { get; set; }     // a squadmate's officer, for its look on other players' screens
         public Appearance Look { get; private set; }
         public bool IsHuman { get { return false; } }
+        public bool Engaged { get { return target != null; } }
+        public bool Dazed { get { return IsAlive && Time.time < stunUntil; } }
+
+        // Arrests: a dazed opponent can be restrained by the player (offline or hosting).
+        public string Prompt { get { return "[E] Arrest (hold)"; } }
+        public Vector3 InteractPosition { get { return transform.position + Vector3.up; } }
+        public float InteractDuration(PlayerController player) { return 0.8f; }
+        public bool CanInteract(PlayerController player)
+        {
+            var match = VersusMatch.Instance;
+            return Dazed && match != null && VersusMatch.Active && !match.Mirror && match.MySide != Side;
+        }
+        public void Interact(PlayerController player)
+        {
+            if (CanInteract(player)) VersusMatch.Instance.ArrestBot(this);
+        }
+
+        // Restrained: out like a tag-out (no shots fired).
+        public void Arrested()
+        {
+            if (!IsAlive) return;
+            Health = 0f;
+            Deaths++;
+            target = null;
+            mover.Disable();
+            body.enabled = false;
+            animator.SetDown(true, -transform.forward);
+        }
 
         // Where VersusMatch currently wants this bot to wander (roaming, defending, holding the zone).
         public Vector3 RoamPoint;
@@ -249,7 +277,7 @@ namespace Swat
             float distance = Vector3.Distance(origin, aim);
             float error = AimError[skill] * (1f + distance / 18f) * (target.IsMoving ? 1.3f : 1f) * (IsMoving ? 1.2f : 1f) * (Time.time < staggerUntil ? 1.6f : 1f) + data.spread * 0.6f;
             Vector3 direction = (aim - origin).normalized;
-            var damage = new DamageInfo { amount = data.damage, attacker = Team, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, shooter = this };
+            var damage = new DamageInfo { amount = data.damage, attacker = Team, lessLethal = data.lessLethal, stun = data.stunDuration, weapon = data, shooter = this, ammo = Gun.Ammo };
             Vector3 muzzle = Parts.muzzle.position;
             var ends = NetSession.ShotEnds;
             ends.Clear();
@@ -339,6 +367,14 @@ namespace Swat
             if (!IsAlive || info.attacker == Team || info.attacker == Team.Civilian || info.attacker == Team.Environment) return;
             if (Time.time < ProtectedUntil) return;
             float amount = info.amount * 0.85f; // everyone wears the same vest in the exercises
+            if (info.zoned && !info.lessLethal)
+            {
+                // Head, torso, arm or leg: the vest covers the torso, SWAT's helmets the head.
+                amount = info.amount * Ballistics.ZoneMultiplier(info.zone);
+                if (info.zone == HitZone.Torso) amount *= 1f - Ballistics.ArmorStops(0.15f, info.ammo);
+                else if (info.zone == HitZone.Head && Side == 0) amount *= 1f - Ballistics.ArmorStops(0.45f, info.ammo);
+                else amount *= Ballistics.UnarmoredBonus(info.ammo);
+            }
             if (info.lessLethal && info.stun > 0f)
             {
                 // Less-lethal rounds slow and stop a bot from shooting for a moment.
